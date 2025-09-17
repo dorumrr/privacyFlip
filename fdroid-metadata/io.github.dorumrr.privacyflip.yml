@@ -1,0 +1,61 @@
+Categories:
+  - Security
+  - System
+License: GPL-3.0-or-later
+AuthorName: Doru Moraru
+AuthorWebSite: https://github.com/dorumrr
+WebSite: https://github.com/dorumrr/privacyflip
+SourceCode: https://github.com/dorumrr/privacyflip
+IssueTracker: https://github.com/dorumrr/privacyflip/issues
+Changelog: https://github.com/dorumrr/privacyflip/releases
+
+AutoName: PrivacyFlip
+Name: PrivacyFlip
+Summary: Automatic privacy control for rooted Android devices
+
+Description: |
+    PrivacyFlip automatically manages your device's privacy features based on screen lock/unlock state. 
+    When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. 
+    When you unlock, it intelligently restores the features you want back on.
+
+    '''Features:'''
+    * Automatic privacy control on screen lock/unlock
+    * Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location)
+    * Customizable timing delays (0-300 seconds for lock, 0-60 seconds for unlock)
+    * Background service for persistent monitoring
+    * Quick Settings tile integration
+    * Panic mode for instant privacy activation
+    * Material 3 design with dark theme support
+    * Comprehensive logging and debugging
+
+    '''Privacy Features Controlled:'''
+    * Wi-Fi - Disable/enable wireless connectivity
+    * Bluetooth - Control Bluetooth radio
+    * Mobile data - Manage cellular data connection
+    * Location services - Control GPS and location tracking
+
+    '''Requirements:'''
+    * Root access (Magisk, SuperSU, or similar)
+    * Android 5.0+ (API level 21)
+
+    The app requires root permissions to control system-level privacy features. 
+    All privacy actions are performed locally on the device with no data transmission.
+
+RepoType: git
+Repo: https://github.com/dorumrr/privacyflip.git
+
+Builds:
+  - versionName: '1.0.0'
+    versionCode: 1
+    commit: v1.0.0
+    subdir: app
+    gradle:
+      - release
+    prebuild: echo "Building PrivacyFlip for F-Droid"
+
+RequiresRoot: true
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: '1.0.0'
+CurrentVersionCode: 1

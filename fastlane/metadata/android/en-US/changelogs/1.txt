@@ -1,0 +1,21 @@
+Initial release of PrivacyFlip v1.0.0
+
+Features:
+• Automatic privacy control on screen lock/unlock
+• Background service for persistent monitoring
+• Material 3 design with dark theme support
+• Root-based system feature control
+• Quick Settings tile integration
+• Panic mode for emergency privacy
+• Configurable timing delays
+• No tracking or analytics
+
+Privacy Features:
+• Wi-Fi control
+• Bluetooth control
+• Mobile data control
+• Location services control
+
+Requirements:
+• Root access required
+• Android 5.0+ (API level 21)

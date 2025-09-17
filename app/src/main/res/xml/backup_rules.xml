@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Include user preferences -->
+    <include domain="sharedpref" path="." />
+    
+    <!-- Exclude sensitive data -->
+    <exclude domain="sharedpref" path="root_status.xml" />
+</full-backup-content>

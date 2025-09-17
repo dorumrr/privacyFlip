@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme colors (required by themes.xml) -->
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+
+    <!-- App icon colors -->
+    <color name="trust_blue">#FF1976D2</color>          <!-- Blue -->
+    <color name="icon_white">#FFFFFFFF</color>          <!-- Pure White -->
+    <color name="panic_mode">#FFD32F2F</color>          <!-- Dark Red -->
+</resources>

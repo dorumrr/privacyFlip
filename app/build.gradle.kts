@@ -53,11 +53,7 @@ android {
     }
     
     buildFeatures {
-        compose = true
-    }
-    
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.4"
+        viewBinding = true
     }
     
     packaging {
@@ -70,15 +66,29 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.activity:activity-ktx:1.8.2")
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+    // Pure Android Views (NO GOOGLE DEPENDENCIES)
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+
+    // Navigation (excluding Google Material library)
+    implementation("androidx.navigation:navigation-fragment-ktx:2.7.5") {
+        exclude(group = "com.google.android.material", module = "material")
+    }
+    implementation("androidx.navigation:navigation-ui-ktx:2.7.5") {
+        exclude(group = "com.google.android.material", module = "material")
+    }
+
+    // ViewBinding
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
 
     implementation("com.github.topjohnwu.libsu:core:5.0.4")
     implementation("com.github.topjohnwu.libsu:service:5.0.4")

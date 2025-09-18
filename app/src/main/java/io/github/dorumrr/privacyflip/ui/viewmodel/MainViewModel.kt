@@ -2,6 +2,8 @@ package io.github.dorumrr.privacyflip.ui.viewmodel
 
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dorumrr.privacyflip.data.*
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -39,17 +42,20 @@ class MainViewModel : ViewModel() {
     private lateinit var logManager: LogManager
     private lateinit var preferenceManager: PreferenceManager
     private var context: Context? = null
+    private var isInitialized = false
     
-    private val _uiState = MutableStateFlow(MainUiState())
-    val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableLiveData(UiState())
+    val uiState: LiveData<UiState> = _uiState
     
     private val _privacyConfig = MutableStateFlow(PrivacyConfig())
     val privacyConfig: StateFlow<PrivacyConfig> = _privacyConfig.asStateFlow()
     
-    private val _timerSettings = MutableStateFlow(TimerSettings())
-    val timerSettings: StateFlow<TimerSettings> = _timerSettings.asStateFlow()
-    
     fun initialize(context: Context) {
+        if (isInitialized) {
+            logManager.w(TAG, "ViewModel already initialized, skipping duplicate initialization")
+            return
+        }
+
         this.context = context
         rootManager.initialize(context)
         privacyManager = PrivacyManager.getInstance(context)
@@ -71,21 +77,30 @@ class MainViewModel : ViewModel() {
         checkRootStatus()
 
         loadPermissionStatus()
+
+        isInitialized = true
+        logManager.i(TAG, "ViewModel initialized successfully")
     }
     
+    // Helper function to safely update UI state
+    private fun updateUiState(update: (UiState) -> UiState) {
+        val currentState = _uiState.value ?: UiState()
+        _uiState.value = update(currentState)
+    }
+
     private fun checkRootStatus() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            updateUiState { it.copy(isLoading = true) }
 
             try {
                 val isRootAvailable = rootManager.isRootAvailable()
-                val currentState = _uiState.value
+                val currentState = _uiState.value ?: UiState()
 
                 val isRootGranted = if (isRootAvailable) {
                     val alreadyGranted = rootManager.isRootGranted()
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
                         val granted = rootManager.requestRootPermission()
-                        _uiState.value = currentState.copy(hasTriedAutoRootRequest = true)
+                        updateUiState { it.copy(hasTriedAutoRootRequest = true) }
                         granted
                     } else {
                         alreadyGranted
@@ -94,22 +109,26 @@ class MainViewModel : ViewModel() {
                     false
                 }
 
-                _uiState.value = _uiState.value.copy(
-                    isRootAvailable = isRootAvailable,
-                    isRootGranted = isRootGranted,
-                    isLoading = false,
-                    errorMessage = if (!isRootAvailable) "Root access not available" else null
-                )
+                updateUiState {
+                    it.copy(
+                        isRootAvailable = isRootAvailable,
+                        isRootGranted = isRootGranted,
+                        isLoading = false,
+                        errorMessage = if (!isRootAvailable) "Root access not available" else null
+                    )
+                }
 
                 if (isRootGranted) {
                     loadPrivacyStatus()
                     loadPermissionStatus()
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Error checking root status: ${e.message}"
-                )
+                updateUiState {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Error checking root status: ${e.message}"
+                    )
+                }
             }
         }
     }
@@ -121,15 +140,17 @@ class MainViewModel : ViewModel() {
             try {
                 val status = privacyManager.getPrivacyStatus()
                 val currentStates = privacyManager.getCurrentStatus()
-                
-                _uiState.value = _uiState.value.copy(
-                    privacyStatus = status,
-                    featureStates = currentStates
-                )
+
+                updateUiState {
+                    it.copy(
+                        privacyStatus = status,
+                        featureStates = currentStates
+                    )
+                }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Error loading privacy status: ${e.message}"
-                )
+                updateUiState {
+                    it.copy(errorMessage = "Error loading privacy status: ${e.message}")
+                }
             }
         }
     }
@@ -140,25 +161,32 @@ class MainViewModel : ViewModel() {
     
     fun updateTimerSettings(settings: TimerSettings) {
         if (settings.isValid()) {
-            _timerSettings.value = settings
+            // Update UiState for UI binding
+            updateUiState { it.copy(timerSettings = settings) }
 
             viewModelScope.launch {
                 try {
                     preferenceManager.updateTimerSettings(settings)
+                    logManager.d(TAG, "Timer settings updated: lock=${settings.lockDelaySeconds}s, unlock=${settings.unlockDelaySeconds}s")
                 } catch (e: Exception) {
                     logManager.e(TAG, "Failed to save timer settings: ${e.message}")
                 }
             }
+        } else {
+            logManager.w(TAG, "Invalid timer settings: lock=${settings.lockDelaySeconds}s, unlock=${settings.unlockDelaySeconds}s")
         }
     }
 
     private fun loadTimerSettings() {
         try {
-            _timerSettings.value = TimerSettings(
+            val settings = TimerSettings(
                 lockDelaySeconds = preferenceManager.lockDelaySeconds,
                 unlockDelaySeconds = preferenceManager.unlockDelaySeconds,
                 showCountdown = preferenceManager.showCountdown
             )
+
+            // Update UiState for UI binding
+            updateUiState { it.copy(timerSettings = settings) }
 
             logConfigLoaded("Timer settings", "lock=${preferenceManager.lockDelaySeconds}s, unlock=${preferenceManager.unlockDelaySeconds}s")
         } catch (e: Exception) {
@@ -189,36 +217,37 @@ class MainViewModel : ViewModel() {
     }
     
     fun executePanicMode() {
-        if (!_uiState.value.isGlobalPrivacyEnabled) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Enable global privacy protection first to use panic mode"
-            )
+        val currentState = _uiState.value ?: UiState()
+        if (!currentState.isGlobalPrivacyEnabled) {
+            updateUiState {
+                it.copy(errorMessage = "Enable global privacy protection first to use panic mode")
+            }
             return
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            updateUiState { it.copy(isLoading = true) }
 
             try {
                 privacyManager.executePanicMode()
 
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false
-                )
+                updateUiState { it.copy(isLoading = false) }
 
                 loadPrivacyStatus()
 
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Error executing panic mode: ${e.message}"
-                )
+                updateUiState {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Error executing panic mode: ${e.message}"
+                    )
+                }
             }
         }
     }
-    
+
     fun clearError() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
+        updateUiState { it.copy(errorMessage = null) }
     }
     
     private fun loadPermissionStatus() {
@@ -232,7 +261,7 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (ungrantedPermissions.isNotEmpty()) {
-                    val currentState = _uiState.value
+                    val currentState = _uiState.value ?: UiState()
 
                     if (!currentState.hasTriedAutoRequest) {
                         logManager.d(TAG, "Auto-requesting ${ungrantedPermissions.size} missing permissions...")
@@ -250,13 +279,16 @@ class MainViewModel : ViewModel() {
                         )
                     }
                 } else {
-                    _uiState.value = _uiState.value.copy(
-                        ungrantedPermissions = emptyList(),
-                        pendingPermissionRequest = null,
-                        hasTriedAutoRequest = false
-                    )
+                    updateUiState {
+                        it.copy(
+                            ungrantedPermissions = emptyList(),
+                            pendingPermissionRequest = null,
+                            hasTriedAutoRequest = false
+                        )
+                    }
                 }
-                logManager.d(TAG, "UI State updated - ungrantedPermissions.size = ${_uiState.value.ungrantedPermissions.size}")
+                val currentState = _uiState.value ?: UiState()
+                logManager.d(TAG, "UI State updated - ungrantedPermissions.size = ${currentState.ungrantedPermissions.size}")
             } catch (e: Exception) {
                 logManager.e(TAG, "Error loading permission status: ${e.message}")
             }
@@ -264,12 +296,12 @@ class MainViewModel : ViewModel() {
     }
 
     fun requestPermissions(@Suppress("UNUSED_PARAMETER") permissions: Array<String>) {
-        _uiState.value = _uiState.value.copy(hasTriedAutoRequest = true)
+        updateUiState { it.copy(hasTriedAutoRequest = true) }
         loadPermissionStatus()
     }
 
     fun clearPendingPermissionRequest() {
-        _uiState.value = _uiState.value.copy(pendingPermissionRequest = null)
+        updateUiState { it.copy(pendingPermissionRequest = null) }
     }
 
     fun updateScreenLockConfig(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean) {
@@ -277,7 +309,8 @@ class MainViewModel : ViewModel() {
             try {
                 preferenceManager.updateScreenLockConfig(feature, disableOnLock, enableOnUnlock)
 
-                val currentConfig = _uiState.value.screenLockConfig
+                val currentState = _uiState.value ?: UiState()
+                val currentConfig = currentState.screenLockConfig
                 val newConfig = when (feature) {
                     PrivacyFeature.WIFI -> currentConfig.copy(
                         wifiDisableOnLock = disableOnLock,
@@ -297,7 +330,10 @@ class MainViewModel : ViewModel() {
                     )
                 }
 
-                _uiState.value = _uiState.value.copy(screenLockConfig = newConfig)
+                updateUiState { it.copy(screenLockConfig = newConfig) }
+
+                // Update the convenience properties for UI binding
+                updateUiStateFromConfig(newConfig)
 
                 logManager.d(TAG, "Screen lock config updated for $feature: disable=$disableOnLock, enable=$enableOnUnlock")
 
@@ -309,28 +345,31 @@ class MainViewModel : ViewModel() {
 
     fun requestRootPermission() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            updateUiState { it.copy(isLoading = true) }
 
             try {
                 val isRootGranted = rootManager.forceRootPermissionRequest()
 
-                _uiState.value = _uiState.value.copy(
-                    isRootGranted = isRootGranted,
-                    isLoading = false,
-                    errorMessage = if (!isRootGranted) "Root permission denied or failed" else null
-                )
+                updateUiState {
+                    it.copy(
+                        isRootGranted = isRootGranted,
+                        isLoading = false,
+                        errorMessage = if (!isRootGranted) "Root permission denied or failed. If this persists, uninstall the app and install it again ensuring you grant root access when prompted." else null
+                    )
+                }
 
                 if (isRootGranted) {
                     loadPrivacyStatus()
-
                     loadPermissionStatus()
                 }
             } catch (e: Exception) {
                 logManager.e(TAG, "Error requesting root permission: ${e.message}")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Error requesting root permission: ${e.message}"
-                )
+                updateUiState {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Error requesting root permission: ${e.message}"
+                    )
+                }
             }
         }
     }
@@ -343,7 +382,7 @@ class MainViewModel : ViewModel() {
     
     private fun loadGlobalPrivacyStatus() {
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
-        _uiState.value = _uiState.value.copy(isGlobalPrivacyEnabled = isEnabled)
+        updateUiState { it.copy(isGlobalPrivacyEnabled = isEnabled) }
     }
 
     private fun loadScreenLockConfig(context: Context) {
@@ -361,7 +400,10 @@ class MainViewModel : ViewModel() {
                 locationEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("LOCATION"), Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK)
             )
 
-            _uiState.value = _uiState.value.copy(screenLockConfig = config)
+            updateUiState { it.copy(screenLockConfig = config) }
+
+            // Update the convenience properties for UI binding
+            updateUiStateFromConfig(config)
 
             logConfigLoaded("Screen lock config", config.toString())
         } catch (e: Exception) {
@@ -371,18 +413,35 @@ class MainViewModel : ViewModel() {
 
     private fun loadServiceSettings() {
         try {
-            _uiState.value = _uiState.value.copy(
-                backgroundServiceEnabled = preferenceManager.backgroundServiceEnabled
-            )
+            val isServiceRunning = isBackgroundServiceRunning()
+            updateUiState {
+                it.copy(
+                    backgroundServiceEnabled = preferenceManager.backgroundServiceEnabled,
+                    backgroundServicePermissionGranted = isServiceRunning
+                )
+            }
 
-            logConfigLoaded("Service settings", "backgroundService=${preferenceManager.backgroundServiceEnabled}")
+            logConfigLoaded("Service settings", "backgroundService=${preferenceManager.backgroundServiceEnabled}, running=$isServiceRunning")
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to load service settings: ${e.message}")
         }
     }
 
+    private fun isBackgroundServiceRunning(): Boolean {
+        val context = this.context ?: return false
+        return try {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val services = activityManager.getRunningServices(Integer.MAX_VALUE)
+            services.any { it.service.className == "io.github.dorumrr.privacyflip.service.PrivacyMonitorService" }
+        } catch (e: Exception) {
+            logManager.e(TAG, "Failed to check if background service is running: ${e.message}")
+            false
+        }
+    }
+
     private fun startBackgroundServiceIfEnabled(context: Context) {
-        if (_uiState.value.backgroundServiceEnabled) {
+        val currentState = _uiState.value ?: UiState()
+        if (currentState.backgroundServiceEnabled) {
             try {
                 PrivacyMonitorService.start(context)
                 logManager.i(TAG, "Background service started")
@@ -397,11 +456,15 @@ class MainViewModel : ViewModel() {
 
     private fun scheduleServiceHealthCheck(context: Context) {
         try {
+            // Cancel any existing health check workers first to prevent duplicates
+            WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
+
             val healthCheckRequest = PeriodicWorkRequestBuilder<ServiceHealthWorker>(15, TimeUnit.MINUTES)
+                .addTag("ServiceHealthWorker")
                 .build()
 
             WorkManager.getInstance(context).enqueue(healthCheckRequest)
-            logManager.d(TAG, "Service health check scheduled")
+            logManager.d(TAG, "Service health check scheduled (previous workers cancelled)")
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to schedule service health check: ${e.message}")
         }
@@ -410,7 +473,7 @@ class MainViewModel : ViewModel() {
     fun toggleGlobalPrivacy(enabled: Boolean) {
         preferenceManager.isGlobalPrivacyEnabled = enabled
 
-        _uiState.value = _uiState.value.copy(isGlobalPrivacyEnabled = enabled)
+        updateUiState { it.copy(isGlobalPrivacyEnabled = enabled) }
 
         if (!enabled) {
             viewModelScope.launch {
@@ -421,9 +484,9 @@ class MainViewModel : ViewModel() {
                     loadPrivacyStatus()
 
                 } catch (e: Exception) {
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Error disabling global privacy: ${e.message}"
-                    )
+                    updateUiState {
+                        it.copy(errorMessage = "Error disabling global privacy: ${e.message}")
+                    }
                 }
             }
         }
@@ -434,16 +497,33 @@ class MainViewModel : ViewModel() {
 
         preferenceManager.backgroundServiceEnabled = enabled
 
-        _uiState.value = _uiState.value.copy(backgroundServiceEnabled = enabled)
-
         if (enabled) {
             PrivacyMonitorService.start(context)
             scheduleServiceHealthCheck(context)
             logManager.i(TAG, "Background service started with health checks")
+
+            // Check if service is actually running after start attempt
+            viewModelScope.launch {
+                delay(1000) // Give service time to start
+                val isRunning = isBackgroundServiceRunning()
+                updateUiState {
+                    it.copy(
+                        backgroundServiceEnabled = enabled,
+                        backgroundServicePermissionGranted = isRunning
+                    )
+                }
+            }
         } else {
             PrivacyMonitorService.stop(context)
             WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
             logManager.i(TAG, "Background service stopped and health checks cancelled")
+
+            updateUiState {
+                it.copy(
+                    backgroundServiceEnabled = enabled,
+                    backgroundServicePermissionGranted = false
+                )
+            }
         }
 
         logManager.d(TAG, "Background service toggled: $enabled")
@@ -454,24 +534,28 @@ class MainViewModel : ViewModel() {
             try {
                 val logs = logManager.getLogs()
                 val sizeKB = logManager.getLogFileSizeKB()
-                _uiState.value = _uiState.value.copy(
-                    showLogViewer = true,
-                    logs = logs,
-                    logFileSizeKB = sizeKB
-                )
+                updateUiState {
+                    it.copy(
+                        showLogViewer = true,
+                        logs = logs,
+                        logFileSizeKB = sizeKB
+                    )
+                }
             } catch (e: Exception) {
                 logManager.e(TAG, "Error loading logs: ${e.message}")
-                _uiState.value = _uiState.value.copy(
-                    showLogViewer = true,
-                    logs = "Error loading logs: ${e.message}",
-                    logFileSizeKB = 0
-                )
+                updateUiState {
+                    it.copy(
+                        showLogViewer = true,
+                        logs = "Error loading logs: ${e.message}",
+                        logFileSizeKB = 0
+                    )
+                }
             }
         }
     }
 
     fun hideLogViewer() {
-        _uiState.value = _uiState.value.copy(showLogViewer = false)
+        updateUiState { it.copy(showLogViewer = false) }
     }
 
     fun clearLogs() {
@@ -480,10 +564,12 @@ class MainViewModel : ViewModel() {
                 logManager.clearLogs()
                 val logs = logManager.getLogs()
                 val sizeKB = logManager.getLogFileSizeKB()
-                _uiState.value = _uiState.value.copy(
-                    logs = logs,
-                    logFileSizeKB = sizeKB
-                )
+                updateUiState {
+                    it.copy(
+                        logs = logs,
+                        logFileSizeKB = sizeKB
+                    )
+                }
             } catch (e: Exception) {
                 logManager.e(TAG, "Error clearing logs: ${e.message}")
             }
@@ -492,6 +578,83 @@ class MainViewModel : ViewModel() {
 
     fun cleanup() {
         logManager.cleanup()
+    }
+
+    // Helper methods for traditional views
+    fun updateWifiSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        val currentState = _uiState.value ?: UiState()
+        val currentConfig = currentState.screenLockConfig
+        val newDisableOnLock = disableOnLock ?: currentConfig.wifiDisableOnLock
+        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.wifiEnableOnUnlock
+        updateScreenLockConfig(PrivacyFeature.WIFI, newDisableOnLock, newEnableOnUnlock)
+    }
+
+    fun updateBluetoothSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        val currentState = _uiState.value ?: UiState()
+        val currentConfig = currentState.screenLockConfig
+        val newDisableOnLock = disableOnLock ?: currentConfig.bluetoothDisableOnLock
+        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.bluetoothEnableOnUnlock
+        updateScreenLockConfig(PrivacyFeature.BLUETOOTH, newDisableOnLock, newEnableOnUnlock)
+    }
+
+    fun updateMobileDataSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        val currentState = _uiState.value ?: UiState()
+        val currentConfig = currentState.screenLockConfig
+        val newDisableOnLock = disableOnLock ?: currentConfig.mobileDataDisableOnLock
+        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.mobileDataEnableOnUnlock
+        updateScreenLockConfig(PrivacyFeature.MOBILE_DATA, newDisableOnLock, newEnableOnUnlock)
+    }
+
+    fun updateLocationSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        val currentState = _uiState.value ?: UiState()
+        val currentConfig = currentState.screenLockConfig
+        val newDisableOnLock = disableOnLock ?: currentConfig.locationDisableOnLock
+        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.locationEnableOnUnlock
+        updateScreenLockConfig(PrivacyFeature.LOCATION, newDisableOnLock, newEnableOnUnlock)
+    }
+
+    private fun updateUiStateFromConfig(config: ScreenLockConfig) {
+        updateUiState {
+            it.copy(
+                screenLockConfig = config,
+                wifiSettings = PrivacyFeatureSettings(
+                    disableOnLock = config.wifiDisableOnLock,
+                    enableOnUnlock = config.wifiEnableOnUnlock
+                ),
+                bluetoothSettings = PrivacyFeatureSettings(
+                    disableOnLock = config.bluetoothDisableOnLock,
+                    enableOnUnlock = config.bluetoothEnableOnUnlock
+                ),
+                mobileDataSettings = PrivacyFeatureSettings(
+                    disableOnLock = config.mobileDataDisableOnLock,
+                    enableOnUnlock = config.mobileDataEnableOnUnlock
+                ),
+                locationSettings = PrivacyFeatureSettings(
+                    disableOnLock = config.locationDisableOnLock,
+                    enableOnUnlock = config.locationEnableOnUnlock
+                )
+            )
+        }
+    }
+
+    fun checkRootAccess() {
+        checkRootStatus()
+    }
+
+    fun triggerPanicMode() {
+        viewModelScope.launch {
+            try {
+                val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
+                privacyManager.disableFeatures(allFeatures)
+                logManager.i(TAG, "Panic mode activated - all privacy features disabled")
+            } catch (e: Exception) {
+                logManager.e(TAG, "Error during panic mode: ${e.message}")
+            }
+        }
+    }
+
+    fun loadLogs() {
+        showLogViewer()
     }
 }
 
@@ -506,6 +669,57 @@ data class ScreenLockConfig(
     val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
 )
 
+// Traditional Views UiState
+data class UiState(
+    val isLoading: Boolean = false,
+    val isRootAvailable: Boolean = false,
+    val isRootGranted: Boolean = false,
+    val featureStates: Map<PrivacyFeature, FeatureState> = emptyMap(),
+    val privacyStatus: PrivacyStatus = PrivacyStatus(),
+    val isGlobalPrivacyEnabled: Boolean = true,
+    val ungrantedPermissions: List<PermissionChecker.PermissionStatus> = emptyList(),
+    val pendingPermissionRequest: Array<String>? = null,
+    val hasTriedAutoRequest: Boolean = false,
+    val hasTriedAutoRootRequest: Boolean = false,
+    val showLogViewer: Boolean = false,
+    val logs: String = "",
+    val logFileSizeKB: Int = 0,
+    val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
+    val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,
+    val backgroundServicePermissionGranted: Boolean = false,
+    val errorMessage: String? = null,
+    // Timer settings for UI binding
+    val timerSettings: TimerSettings = TimerSettings(
+        lockDelaySeconds = Constants.Defaults.LOCK_DELAY_SECONDS,
+        unlockDelaySeconds = Constants.Defaults.UNLOCK_DELAY_SECONDS,
+        showCountdown = Constants.Defaults.SHOW_COUNTDOWN
+    ),
+    // Convenience properties for traditional views - use proper defaults
+    val wifiSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
+        disableOnLock = Constants.Defaults.WIFI_DISABLE_ON_LOCK,
+        enableOnUnlock = Constants.Defaults.WIFI_ENABLE_ON_UNLOCK
+    ),
+    val bluetoothSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
+        disableOnLock = Constants.Defaults.BLUETOOTH_DISABLE_ON_LOCK,
+        enableOnUnlock = Constants.Defaults.BLUETOOTH_ENABLE_ON_UNLOCK
+    ),
+    val mobileDataSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
+        disableOnLock = Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK,
+        enableOnUnlock = Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK
+    ),
+    val locationSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
+        disableOnLock = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
+        enableOnUnlock = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
+    )
+)
+
+// Helper data class for individual privacy feature settings
+data class PrivacyFeatureSettings(
+    val disableOnLock: Boolean = false,
+    val enableOnUnlock: Boolean = false
+)
+
+// Keep the old MainUiState for compatibility (will be removed later)
 data class MainUiState(
     val isLoading: Boolean = false,
     val isRootAvailable: Boolean? = null,

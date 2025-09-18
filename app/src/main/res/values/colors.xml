@@ -1,12 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Theme colors (required by themes.xml) -->
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
+    <!-- Pure Android colors - NO GOOGLE MATERIAL DESIGN -->
 
-    <!-- App icon colors -->
-    <color name="trust_blue">#FF1976D2</color>          <!-- Blue -->
-    <color name="icon_white">#FFFFFFFF</color>          <!-- Pure White -->
-    <color name="panic_mode">#FFD32F2F</color>          <!-- Dark Red -->
+    <!-- Primary colors -->
+    <color name="trust_blue">#FF1976D2</color>          <!-- Primary Blue -->
+    <color name="trust_blue_dark">#FF1565C0</color>     <!-- Darker Blue -->
+    <color name="trust_blue_light">#FF42A5F5</color>    <!-- Lighter Blue -->
+
+    <!-- Background colors -->
+    <color name="background_light">#FFFFFFFF</color>    <!-- White background -->
+    <color name="background_card">#FFF5F5F5</color>     <!-- Light gray card -->
+    <color name="background_error">#FFFFEBEE</color>    <!-- Light red error -->
+
+    <!-- Text colors -->
+    <color name="text_primary">#FF212121</color>        <!-- Dark gray primary text -->
+    <color name="text_secondary">#FF757575</color>      <!-- Medium gray secondary text -->
+    <color name="text_hint">#FFBDBDBD</color>           <!-- Light gray hint text -->
+
+    <!-- State colors -->
+    <color name="success_green">#FF4CAF50</color>       <!-- Success green -->
+    <color name="error_red">#FFF44336</color>           <!-- Error red -->
+    <color name="warning_orange">#FFFF9800</color>      <!-- Warning orange -->
+
+    <!-- App specific -->
+    <color name="panic_mode">#FFD32F2F</color>          <!-- Panic mode red -->
+    <color name="icon_white">#FFFFFFFF</color>          <!-- Pure white icons -->
+
+    <!-- Divider and borders -->
+    <color name="divider_color">#FFE0E0E0</color>       <!-- Light gray divider -->
+    <color name="border_color">#FFCCCCCC</color>        <!-- Border color -->
 </resources>

@@ -23,13 +23,18 @@ class PrivacyMonitorService : Service() {
     
     companion object {
         private const val TAG = "PrivacyMonitorService"
-        
+
         fun start(context: Context) {
-            val intent = Intent(context, PrivacyMonitorService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, PrivacyMonitorService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+                Log.d(TAG, "Service start requested")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start service", e)
             }
         }
         

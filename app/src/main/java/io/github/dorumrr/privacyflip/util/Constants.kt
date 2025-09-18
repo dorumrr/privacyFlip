@@ -23,21 +23,23 @@ object Constants {
     }
     
     object Defaults {
-        const val LOCK_DELAY_SECONDS = 0
-        const val UNLOCK_DELAY_SECONDS = 0
+        const val LOCK_DELAY_SECONDS = 3
+        const val UNLOCK_DELAY_SECONDS = 3
         const val SHOW_COUNTDOWN = true
 
         const val BACKGROUND_SERVICE_ENABLED = true
 
+        // On Lock: Disable all privacy features for maximum privacy
         const val WIFI_DISABLE_ON_LOCK = true
         const val BLUETOOTH_DISABLE_ON_LOCK = true
         const val LOCATION_DISABLE_ON_LOCK = true
-        const val MOBILE_DATA_DISABLE_ON_LOCK = false
+        const val MOBILE_DATA_DISABLE_ON_LOCK = true
 
+        // On Unlock: Enable essential connectivity, keep Bluetooth and Location disabled for privacy
         const val WIFI_ENABLE_ON_UNLOCK = true
-        const val BLUETOOTH_ENABLE_ON_UNLOCK = true
+        const val BLUETOOTH_ENABLE_ON_UNLOCK = false
         const val LOCATION_ENABLE_ON_UNLOCK = false
-        const val MOBILE_DATA_ENABLE_ON_UNLOCK = false
+        const val MOBILE_DATA_ENABLE_ON_UNLOCK = true
     }
 
     object Logging {
@@ -52,7 +54,7 @@ object Constants {
         const val APP_NAME_VERSION = "PrivacyFlip v1.0.0"
         const val AUTHOR_NAME = "Doru Moraru"
         const val AUTHOR_URL = "https://github.com/dorumrr/privacyflip"
-        const val CREATED_BY_TEXT = "Created by "
+        const val CREATED_BY_TEXT = "Created by"
         const val APP_LOGS_TEXT = "App Logs"
 
         const val LOG_VIEWER_TITLE = "Application Logs"

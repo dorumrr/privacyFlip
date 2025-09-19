@@ -84,8 +84,6 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-
-
             <!-- Screen Lock Config Card -->
             <include
                 android:id="@+id/screenLockCard"
@@ -101,8 +99,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp" />
-
-
 
             <!-- Service Settings Card -->
             <include
@@ -124,8 +120,6 @@
                 android:padding="16dp"
                 android:textStyle="bold"
                 android:textSize="16sp" />
-
-
 
             <!-- Credits Footer -->
             <include
@@ -149,7 +143,7 @@
         <!-- Credits Footer (for non-root state) -->
         <include
             android:id="@+id/creditsFooterNoRoot"
-            layout="@layout/credits_footer"
+            layout="@layout/credits_footer_no_root"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

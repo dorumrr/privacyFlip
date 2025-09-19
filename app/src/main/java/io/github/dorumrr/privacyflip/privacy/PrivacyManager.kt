@@ -15,7 +15,7 @@ class PrivacyManager private constructor(
     companion object : SingletonHolder<PrivacyManager, Context>({ context ->
         PrivacyManager(
             context.applicationContext,
-            RootManager.getInstance()
+            RootManager.getInstance(Unit)
         )
     }) {
         private const val TAG = "PrivacyManager"

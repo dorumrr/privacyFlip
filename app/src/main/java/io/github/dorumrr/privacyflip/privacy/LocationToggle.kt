@@ -3,6 +3,7 @@ package io.github.dorumrr.privacyflip.privacy
 import android.os.Build
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.StatusParsingUtils
 
 class LocationToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
 
@@ -76,14 +77,6 @@ class LocationToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) 
     }
 
     override fun parseStatusOutput(output: String): FeatureState {
-        return when {
-            output.contains("3") || output.contains("gps") || output.contains("network") -> {
-                FeatureState.ENABLED
-            }
-            output.contains("0") || output.isEmpty() || output.contains("null") -> {
-                FeatureState.DISABLED
-            }
-            else -> FeatureState.UNKNOWN
-        }
+        return StatusParsingUtils.parseLocationOutput(output)
     }
 }

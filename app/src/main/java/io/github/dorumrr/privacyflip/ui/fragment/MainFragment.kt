@@ -50,18 +50,16 @@ class MainFragment : Fragment() {
             viewModel.triggerPanicMode()
         }
 
-        // Setup dual click listeners using DRY helper
-        setupDualClickListeners(
-            binding.creditsFooter.viewLogsButton,
-            binding.creditsFooterNoRoot.viewLogsButton
-        ) {
+        // Setup click listeners for footer elements
+        binding.creditsFooter.viewLogsButton.setOnClickListener {
             findNavController().navigate(R.id.action_main_to_logs)
         }
 
-        setupDualClickListeners(
-            binding.creditsFooter.createdByText,
-            binding.creditsFooterNoRoot.createdByText
-        ) {
+        binding.creditsFooter.createdByText.setOnClickListener {
+            openGitHubRepository()
+        }
+
+        binding.creditsFooterNoRoot.createdByText.setOnClickListener {
             openGitHubRepository()
         }
 
@@ -242,26 +240,26 @@ class MainFragment : Fragment() {
 
         // Update Wi-Fi settings
         with(binding.screenLockCard.wifiSettings) {
-            disableOnLockSwitch.isChecked = uiState.wifiSettings.disableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.wifiSettings.enableOnUnlock
+            disableOnLockSwitch.isChecked = uiState.screenLockConfig.wifiDisableOnLock
+            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.wifiEnableOnUnlock
         }
 
         // Update Bluetooth settings
         with(binding.screenLockCard.bluetoothSettings) {
-            disableOnLockSwitch.isChecked = uiState.bluetoothSettings.disableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.bluetoothSettings.enableOnUnlock
+            disableOnLockSwitch.isChecked = uiState.screenLockConfig.bluetoothDisableOnLock
+            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.bluetoothEnableOnUnlock
         }
 
         // Update Mobile Data settings
         with(binding.screenLockCard.mobileDataSettings) {
-            disableOnLockSwitch.isChecked = uiState.mobileDataSettings.disableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.mobileDataSettings.enableOnUnlock
+            disableOnLockSwitch.isChecked = uiState.screenLockConfig.mobileDataDisableOnLock
+            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.mobileDataEnableOnUnlock
         }
 
         // Update Location settings
         with(binding.screenLockCard.locationSettings) {
-            disableOnLockSwitch.isChecked = uiState.locationSettings.disableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.locationSettings.enableOnUnlock
+            disableOnLockSwitch.isChecked = uiState.screenLockConfig.locationDisableOnLock
+            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.locationEnableOnUnlock
         }
 
         // Clear flag
@@ -456,14 +454,7 @@ class MainFragment : Fragment() {
         }
     }
 
-    private fun setupDualClickListeners(
-        view1: View,
-        view2: View,
-        action: () -> Unit
-    ) {
-        view1.setOnClickListener { action() }
-        view2.setOnClickListener { action() }
-    }
+
 
     override fun onDestroyView() {
         super.onDestroyView()

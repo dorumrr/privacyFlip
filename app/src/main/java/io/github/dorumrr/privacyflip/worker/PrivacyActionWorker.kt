@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
+import io.github.dorumrr.privacyflip.data.PrivacyResult
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.FeatureConfigurationManager
@@ -55,22 +56,7 @@ class PrivacyActionWorker(
                     }
 
                     val results = privacyManager.disableFeatures(featuresToDisable.toSet())
-                    val successCount = results.count { it.success }
-
-                    results.forEach { result ->
-                        val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
-                        Log.i(TAG, "🔒 ${result.feature.displayName}: $status")
-                    }
-
-                    Log.i(TAG, "Lock action completed: $successCount/${featuresToDisable.size} features disabled")
-
-                    if (successCount > 0) {
-                        val successfulFeatures = results.filter { it.success }.map { result ->
-                            featuresToDisable.find { it.displayName == result.feature.displayName }?.displayName ?: result.feature.displayName
-                        }
-                        val toastMessage = "Disabled: ${successfulFeatures.joinToString(", ")}"
-                        showToast(toastMessage)
-                    }
+                    processResults(results, featuresToDisable, "🔒", "disabled", "Disabled")
 
 
                 }
@@ -88,24 +74,7 @@ class PrivacyActionWorker(
                     }
 
                     val results = privacyManager.enableFeatures(featuresToEnable.toSet())
-                    val successCount = results.count { it.success }
-
-                    results.forEach { result ->
-                        val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
-                        Log.i(TAG, "🔓 ${result.feature.displayName}: $status")
-                    }
-
-                    Log.i(TAG, "Unlock action completed: $successCount/${featuresToEnable.size} features enabled")
-
-                    if (successCount > 0) {
-                        val successfulFeatures = results.filter { it.success }.map { result ->
-                            featuresToEnable.find { it.displayName == result.feature.displayName }?.displayName ?: result.feature.displayName
-                        }
-                        val toastMessage = "Re-enabled: ${successfulFeatures.joinToString(", ")}"
-                        showToast(toastMessage)
-                    }
-
-
+                    processResults(results, featuresToEnable, "🔓", "enabled", "Re-enabled")
                 }
             }
             
@@ -115,6 +84,31 @@ class PrivacyActionWorker(
         } catch (e: Exception) {
             Log.e(TAG, "Privacy action worker failed", e)
             return Result.failure()
+        }
+    }
+
+    private fun processResults(
+        results: List<PrivacyResult>,
+        features: List<PrivacyFeature>,
+        logIcon: String,
+        actionPastTense: String,
+        toastPrefix: String
+    ) {
+        val successCount = results.count { it.success }
+
+        results.forEach { result ->
+            val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
+            Log.i(TAG, "$logIcon ${result.feature.displayName}: $status")
+        }
+
+        Log.i(TAG, "Lock action completed: $successCount/${features.size} features $actionPastTense")
+
+        if (successCount > 0) {
+            val successfulFeatures = results.filter { it.success }.map { result ->
+                features.find { it.displayName == result.feature.displayName }?.displayName ?: result.feature.displayName
+            }
+            val toastMessage = "$toastPrefix: ${successfulFeatures.joinToString(", ")}"
+            showToast(toastMessage)
         }
     }
 }

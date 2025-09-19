@@ -2,6 +2,7 @@ package io.github.dorumrr.privacyflip.privacy
 
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.StatusParsingUtils
 
 class WiFiToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
 
@@ -28,16 +29,6 @@ class WiFiToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
     )
 
     override fun parseStatusOutput(output: String): FeatureState {
-        return when {
-            output.contains("1") || output.contains("2") || output.contains("enabled") || output.contains("on") -> {
-                FeatureState.ENABLED
-            }
-            output.contains("0") || output.contains("disabled") || output.contains("off") -> {
-                FeatureState.DISABLED
-            }
-            else -> {
-                FeatureState.UNKNOWN
-            }
-        }
+        return StatusParsingUtils.parseStandardOutput(output)
     }
 }

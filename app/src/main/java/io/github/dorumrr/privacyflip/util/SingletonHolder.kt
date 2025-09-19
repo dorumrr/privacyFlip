@@ -26,28 +26,5 @@ open class SingletonHolder<out T : Any, in A>(creator: (A) -> T) {
     }
 }
 
-open class SingletonHolderNoArg<out T : Any>(creator: () -> T) {
-    private var creator: (() -> T)? = creator
-    
-    @Volatile
-    private var instance: T? = null
-
-    fun getInstance(): T {
-        val checkInstance = instance
-        if (checkInstance != null) {
-            return checkInstance
-        }
-
-        return synchronized(this) {
-            val checkInstanceAgain = instance
-            if (checkInstanceAgain != null) {
-                checkInstanceAgain
-            } else {
-                val created = creator!!()
-                instance = created
-                creator = null
-                created
-            }
-        }
-    }
-}
+// Consolidated singleton holder - use SingletonHolder<T, Unit> for no-arg singletons
+typealias SingletonHolderNoArg<T> = SingletonHolder<T, Unit>

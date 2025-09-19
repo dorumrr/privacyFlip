@@ -78,8 +78,8 @@ class PreferenceManager private constructor(private val context: Context) {
 
     fun updateScreenLockConfig(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean) {
         prefs.edit().apply {
-            putBoolean("${feature.name.lowercase()}_disable_on_lock", disableOnLock)
-            putBoolean("${feature.name.lowercase()}_enable_on_unlock", enableOnUnlock)
+            putBoolean(Constants.Preferences.getFeatureLockKey(feature.name), disableOnLock)
+            putBoolean(Constants.Preferences.getFeatureUnlockKey(feature.name), enableOnUnlock)
             apply()
         }
     }

@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import io.github.dorumrr.privacyflip.util.LogManager
-import io.github.dorumrr.privacyflip.util.SingletonHolderNoArg
+import io.github.dorumrr.privacyflip.util.SingletonHolder
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,7 +12,7 @@ import java.io.File
 
 class RootManager private constructor() {
 
-    companion object : SingletonHolderNoArg<RootManager>(::RootManager) {
+    companion object : SingletonHolder<RootManager, Unit>({ RootManager() }) {
         private const val TAG = "RootManager"
 
         @Volatile

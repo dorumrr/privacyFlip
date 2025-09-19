@@ -10,7 +10,6 @@ import android.widget.RemoteViews
 import io.github.dorumrr.privacyflip.MainActivity
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
-import io.github.dorumrr.privacyflip.root.RootManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,12 +44,7 @@ class PrivacyFlipWidget : AppWidgetProvider() {
                 try {
                     val privacyManager = PrivacyManager.getInstance(context)
                     
-                    val allFeatures = setOf(
-                        io.github.dorumrr.privacyflip.data.PrivacyFeature.WIFI,
-                        io.github.dorumrr.privacyflip.data.PrivacyFeature.BLUETOOTH,
-                        io.github.dorumrr.privacyflip.data.PrivacyFeature.MOBILE_DATA,
-                        io.github.dorumrr.privacyflip.data.PrivacyFeature.LOCATION
-                    )
+                    val allFeatures = io.github.dorumrr.privacyflip.data.PrivacyFeature.getConnectivityFeatures().toSet()
                     val results = privacyManager.disableFeatures(allFeatures)
                     val allSuccess = results.all { it.success }
                     

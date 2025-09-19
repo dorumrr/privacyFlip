@@ -35,7 +35,7 @@ class MainViewModel : ViewModel() {
         logManager.d(TAG, "$configType loaded: $details")
     }
 
-    private val rootManager = RootManager.getInstance()
+    private val rootManager = RootManager.getInstance(Unit)
     private lateinit var privacyManager: PrivacyManager
 
     private lateinit var permissionChecker: PermissionChecker
@@ -332,9 +332,6 @@ class MainViewModel : ViewModel() {
 
                 updateUiState { it.copy(screenLockConfig = newConfig) }
 
-                // Update the convenience properties for UI binding
-                updateUiStateFromConfig(newConfig)
-
                 logManager.d(TAG, "Screen lock config updated for $feature: disable=$disableOnLock, enable=$enableOnUnlock")
 
             } catch (e: Exception) {
@@ -401,9 +398,6 @@ class MainViewModel : ViewModel() {
             )
 
             updateUiState { it.copy(screenLockConfig = config) }
-
-            // Update the convenience properties for UI binding
-            updateUiStateFromConfig(config)
 
             logConfigLoaded("Screen lock config", config.toString())
         } catch (e: Exception) {
@@ -580,62 +574,42 @@ class MainViewModel : ViewModel() {
         logManager.cleanup()
     }
 
-    // Helper methods for traditional views
-    fun updateWifiSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+    // Helper methods for traditional views - DRY implementation
+    private fun updateFeatureSettings(
+        feature: PrivacyFeature,
+        disableOnLock: Boolean? = null,
+        enableOnUnlock: Boolean? = null,
+        getCurrentDisableOnLock: (ScreenLockConfig) -> Boolean,
+        getCurrentEnableOnUnlock: (ScreenLockConfig) -> Boolean
+    ) {
         val currentState = _uiState.value ?: UiState()
         val currentConfig = currentState.screenLockConfig
-        val newDisableOnLock = disableOnLock ?: currentConfig.wifiDisableOnLock
-        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.wifiEnableOnUnlock
-        updateScreenLockConfig(PrivacyFeature.WIFI, newDisableOnLock, newEnableOnUnlock)
+        val newDisableOnLock = disableOnLock ?: getCurrentDisableOnLock(currentConfig)
+        val newEnableOnUnlock = enableOnUnlock ?: getCurrentEnableOnUnlock(currentConfig)
+        updateScreenLockConfig(feature, newDisableOnLock, newEnableOnUnlock)
+    }
+
+    fun updateWifiSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.WIFI, disableOnLock, enableOnUnlock,
+            { it.wifiDisableOnLock }, { it.wifiEnableOnUnlock })
     }
 
     fun updateBluetoothSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        val currentState = _uiState.value ?: UiState()
-        val currentConfig = currentState.screenLockConfig
-        val newDisableOnLock = disableOnLock ?: currentConfig.bluetoothDisableOnLock
-        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.bluetoothEnableOnUnlock
-        updateScreenLockConfig(PrivacyFeature.BLUETOOTH, newDisableOnLock, newEnableOnUnlock)
+        updateFeatureSettings(PrivacyFeature.BLUETOOTH, disableOnLock, enableOnUnlock,
+            { it.bluetoothDisableOnLock }, { it.bluetoothEnableOnUnlock })
     }
 
     fun updateMobileDataSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        val currentState = _uiState.value ?: UiState()
-        val currentConfig = currentState.screenLockConfig
-        val newDisableOnLock = disableOnLock ?: currentConfig.mobileDataDisableOnLock
-        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.mobileDataEnableOnUnlock
-        updateScreenLockConfig(PrivacyFeature.MOBILE_DATA, newDisableOnLock, newEnableOnUnlock)
+        updateFeatureSettings(PrivacyFeature.MOBILE_DATA, disableOnLock, enableOnUnlock,
+            { it.mobileDataDisableOnLock }, { it.mobileDataEnableOnUnlock })
     }
 
     fun updateLocationSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        val currentState = _uiState.value ?: UiState()
-        val currentConfig = currentState.screenLockConfig
-        val newDisableOnLock = disableOnLock ?: currentConfig.locationDisableOnLock
-        val newEnableOnUnlock = enableOnUnlock ?: currentConfig.locationEnableOnUnlock
-        updateScreenLockConfig(PrivacyFeature.LOCATION, newDisableOnLock, newEnableOnUnlock)
+        updateFeatureSettings(PrivacyFeature.LOCATION, disableOnLock, enableOnUnlock,
+            { it.locationDisableOnLock }, { it.locationEnableOnUnlock })
     }
 
-    private fun updateUiStateFromConfig(config: ScreenLockConfig) {
-        updateUiState {
-            it.copy(
-                screenLockConfig = config,
-                wifiSettings = PrivacyFeatureSettings(
-                    disableOnLock = config.wifiDisableOnLock,
-                    enableOnUnlock = config.wifiEnableOnUnlock
-                ),
-                bluetoothSettings = PrivacyFeatureSettings(
-                    disableOnLock = config.bluetoothDisableOnLock,
-                    enableOnUnlock = config.bluetoothEnableOnUnlock
-                ),
-                mobileDataSettings = PrivacyFeatureSettings(
-                    disableOnLock = config.mobileDataDisableOnLock,
-                    enableOnUnlock = config.mobileDataEnableOnUnlock
-                ),
-                locationSettings = PrivacyFeatureSettings(
-                    disableOnLock = config.locationDisableOnLock,
-                    enableOnUnlock = config.locationEnableOnUnlock
-                )
-            )
-        }
-    }
+
 
     fun checkRootAccess() {
         checkRootStatus()
@@ -693,30 +667,5 @@ data class UiState(
         lockDelaySeconds = Constants.Defaults.LOCK_DELAY_SECONDS,
         unlockDelaySeconds = Constants.Defaults.UNLOCK_DELAY_SECONDS,
         showCountdown = Constants.Defaults.SHOW_COUNTDOWN
-    ),
-    // Convenience properties for traditional views - use proper defaults
-    val wifiSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
-        disableOnLock = Constants.Defaults.WIFI_DISABLE_ON_LOCK,
-        enableOnUnlock = Constants.Defaults.WIFI_ENABLE_ON_UNLOCK
-    ),
-    val bluetoothSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
-        disableOnLock = Constants.Defaults.BLUETOOTH_DISABLE_ON_LOCK,
-        enableOnUnlock = Constants.Defaults.BLUETOOTH_ENABLE_ON_UNLOCK
-    ),
-    val mobileDataSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
-        disableOnLock = Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK,
-        enableOnUnlock = Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK
-    ),
-    val locationSettings: PrivacyFeatureSettings = PrivacyFeatureSettings(
-        disableOnLock = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
-        enableOnUnlock = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
     )
 )
-
-// Helper data class for individual privacy feature settings
-data class PrivacyFeatureSettings(
-    val disableOnLock: Boolean = false,
-    val enableOnUnlock: Boolean = false
-)
-
-

@@ -6,7 +6,6 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
-import io.github.dorumrr.privacyflip.root.RootManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

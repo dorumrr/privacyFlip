@@ -1,1 +1,1 @@
-Automatic privacy control for rooted Android devices
+Manage your device privacy based on lock/unlock state

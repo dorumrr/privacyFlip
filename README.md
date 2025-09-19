@@ -4,14 +4,16 @@
 
 PrivacyFlip automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. When you unlock, it intelligently restores the features you want back on.
 
-[![F-Droid](https://img.shields.io/badge/F--Droid-Pending-orange)](https://f-droid.org)
+[![F-Droid](https://img.shields.io/badge/F--Droid-Submitted-orange)](https://f-droid.org)
 [![Android](https://img.shields.io/badge/Android-5.0%2B-blue)](https://developer.android.com)
 [![Root Required](https://img.shields.io/badge/Root-Required-red)](https://en.wikipedia.org/wiki/Rooting_(Android))
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
+[![Architecture](https://img.shields.io/badge/Architecture-Traditional%20Views-green)](https://developer.android.com/guide/topics/ui/declaring-layout)
+[![Dependencies](https://img.shields.io/badge/Google%20Dependencies-Zero-brightgreen)](https://f-droid.org/docs/Anti-Features/)
 
 <div align="center">
-  <img src="app_screenshot-1.png" alt="PrivacyFlip Main Screen" width="300" style="margin: 10px; border: 1px solid #222222"/>
-  <img src="app_screenshot-2.png" alt="PrivacyFlip Settings" width="300" style="margin: 10px; border: 1px solid #222222"/>
+  <img src="app_screenshot-1.png" alt="PrivacyFlip Main Screen - Traditional Android Views UI" width="300" style="margin: 10px; border: 1px solid #222222"/>
+  <img src="app_screenshot-2.png" alt="PrivacyFlip Configuration - Privacy Settings" width="300" style="margin: 10px; border: 1px solid #222222"/>
 </div>
 
 ## 🔒 Features
@@ -38,14 +40,31 @@ PrivacyFlip automatically manages your device's privacy features based on lock/u
 - **Root access** (Magisk, SuperSU, or similar)
 - **Rooted device** with su binary available
 
+## 🏗️ Architecture & Dependencies
+
+- **Zero Google Dependencies** - Complete F-Droid compliance
+- **Pure AndroidX** - Modern Android development without Google services
+- **Traditional Android Views** - Efficient UI with ViewBinding
+- **Navigation Component** - Fragment-based navigation
+- **MVVM Pattern** - Reactive architecture with LiveData
+
+### **Key Dependencies**
+- **[libsu](https://github.com/topjohnwu/libsu)** - Reliable root access management
+- **AndroidX Core Libraries** - Modern Android framework components
+- **Work Manager** - Background task scheduling
+- **Navigation Component** - Fragment navigation (Google Material excluded)
+- **ViewBinding** - Type-safe view references
+
 ## 🚀 Installation
 
-### From F-Droid (Recommended - Pending Approval)
-PrivacyFlip has been submitted to F-Droid and is awaiting approval. Once approved:
+### From F-Droid (Recommended - Under Review)
+PrivacyFlip has been submitted to F-Droid with complete metadata and is under review:
 
 1. Install [F-Droid](https://f-droid.org/) if you haven't already
-2. Search for "PrivacyFlip" in F-Droid
+2. Search for "PrivacyFlip" in F-Droid (once approved)
 3. Install directly from F-Droid for automatic updates
+
+**Status**: RFP (Request for Packaging) submitted with full compliance verification
 
 ### Manual Installation
 1. Download the latest APK from [Releases](https://github.com/dorumrr/privacyflip/releases)
@@ -54,6 +73,8 @@ PrivacyFlip has been submitted to F-Droid and is awaiting approval. Once approve
 4. Grant root permissions when prompted
 
 ### Build from source
+
+#### **Standard Gradle Build**
 ```bash
 git clone https://github.com/dorumrr/privacyflip.git
 cd privacyflip
@@ -61,8 +82,21 @@ cd privacyflip
 adb install app/build/outputs/apk/debug/PrivacyFlip-v1.0.0-debug.apk
 ```
 
+#### **Using Fastlane (Recommended)**
+```bash
+# Install Fastlane first: gem install fastlane
+fastlane build_debug    # Build debug APK
+fastlane build_release  # Build release APK
+```
+
+#### **Development Testing**
+```bash
+./test_dev.sh install   # Build and install on connected device
+./test_dev.sh fresh     # Clean build with fresh install
+```
+
 ### F-Droid Metadata
-This repository includes Fastlane metadata structure in `fastlane/metadata/`.
+This repository includes complete Fastlane metadata structure in `fastlane/metadata/` for F-Droid compliance.
 
 ## 🔧 Usage
 
@@ -72,15 +106,12 @@ This repository includes Fastlane metadata structure in `fastlane/metadata/`.
 3. Configure your preferred privacy settings
 4. Set lock/unlock delays if desired
 
-### **Configuration**
-- **Screen Lock Actions**: Configure which features to disable/enable
-- **Action Delays**: Adjust timing settings to your needs
-- **Panic Mode**: Tap the red button for emergency privacy
+**Panic Mode**: Tap the red button for emergency privacy
 
 ### **Automatic operation**
 Once configured, PrivacyFlip works automatically:
-- Lock your device → Privacy features disabled (with toast notification)
-- Unlock your device → Selected features restored (with toast notification)
+- Lock your device → Selected features will be disabled
+- Unlock your device → Selected features will be restored
 
 ## 🛡️ Privacy & Security
 
@@ -118,7 +149,9 @@ No contribution is too small - every improvement helps the privacy community! �
 git clone https://github.com/dorumrr/privacyflip.git
 cd privacyflip
 ./gradlew build
-./test_dev.sh install  # Test on device/emulator
+./test_dev.sh install    # Build and install on device/emulator
+./test_dev.sh fresh      # Clean build with fresh install
+fastlane build_debug     # Alternative: Use Fastlane for builds
 ```
 
 ## 📄 License

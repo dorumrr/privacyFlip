@@ -1,13 +1,13 @@
 PrivacyFlip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. When you unlock, it intelligently restores the features you want back on.
 
 <b>Features:</b>
-• Automatic privacy control on screen lock/unlock
+• Manage your device privacy based on lock/unlock state
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location)
-• Customizable timing delays (0-300 seconds for lock, 0-60 seconds for unlock)
+• Customizable timing delays (0-60 seconds for both lock and unlock)
 • Background service for persistent monitoring
 • Quick Settings tile integration
 • Panic mode for instant privacy activation
-• Material 3 design with dark theme support
+• Traditional Android Views with clean, efficient UI
 • Comprehensive logging and debugging
 
 <b>Privacy Features Controlled:</b>
@@ -35,5 +35,11 @@ The app requires root permissions to control system-level privacy features. All 
 4. The app works automatically in the background
 
 Once configured, PrivacyFlip works automatically:
-• Lock your device → Privacy features disabled (with notification)
-• Unlock your device → Selected features restored (with notification)
+• Lock your device → Selected features will be disabled
+• Unlock your device → Selected features will be restored
+
+<b>F-Droid Compliance:</b>
+• Zero Google dependencies - Pure AndroidX implementation
+• No tracking or telemetry - Complete privacy focus
+• Traditional Android Views - No Material Design dependencies
+• Open source transparency - Full code audit available

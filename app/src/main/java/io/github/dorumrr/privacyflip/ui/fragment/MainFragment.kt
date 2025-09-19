@@ -50,23 +50,18 @@ class MainFragment : Fragment() {
             viewModel.triggerPanicMode()
         }
 
-
-
-        // Navigation to logs
-        binding.creditsFooter.viewLogsButton.setOnClickListener {
+        // Setup dual click listeners using DRY helper
+        setupDualClickListeners(
+            binding.creditsFooter.viewLogsButton,
+            binding.creditsFooterNoRoot.viewLogsButton
+        ) {
             findNavController().navigate(R.id.action_main_to_logs)
         }
 
-        binding.creditsFooterNoRoot.viewLogsButton.setOnClickListener {
-            findNavController().navigate(R.id.action_main_to_logs)
-        }
-
-        // Created by link
-        binding.creditsFooter.createdByText.setOnClickListener {
-            openGitHubRepository()
-        }
-
-        binding.creditsFooterNoRoot.createdByText.setOnClickListener {
+        setupDualClickListeners(
+            binding.creditsFooter.createdByText,
+            binding.creditsFooterNoRoot.createdByText
+        ) {
             openGitHubRepository()
         }
 
@@ -80,69 +75,38 @@ class MainFragment : Fragment() {
 
     private fun setupScreenLockCard() {
         with(binding.screenLockCard) {
-            // Setup Wi-Fi settings
-            wifiSettings.apply {
-                featureIcon.setImageResource(R.drawable.ic_wifi)
-                featureName.text = "Wi-Fi"
-                disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateWifiSettings(disableOnLock = isChecked)
-                    }
-                }
-                enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateWifiSettings(enableOnUnlock = isChecked)
-                    }
-                }
-            }
+            // Setup privacy features using DRY helper
+            setupPrivacyFeature(
+                wifiSettings,
+                R.drawable.ic_wifi,
+                "Wi-Fi",
+                { viewModel.updateWifiSettings(disableOnLock = it) },
+                { viewModel.updateWifiSettings(enableOnUnlock = it) }
+            )
 
-            // Setup Bluetooth settings
-            bluetoothSettings.apply {
-                featureIcon.setImageResource(R.drawable.ic_bluetooth)
-                featureName.text = "Bluetooth"
-                disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateBluetoothSettings(disableOnLock = isChecked)
-                    }
-                }
-                enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateBluetoothSettings(enableOnUnlock = isChecked)
-                    }
-                }
-            }
+            setupPrivacyFeature(
+                bluetoothSettings,
+                R.drawable.ic_bluetooth,
+                "Bluetooth",
+                { viewModel.updateBluetoothSettings(disableOnLock = it) },
+                { viewModel.updateBluetoothSettings(enableOnUnlock = it) }
+            )
 
-            // Setup Mobile Data settings
-            mobileDataSettings.apply {
-                featureIcon.setImageResource(R.drawable.ic_signal_cellular)
-                featureName.text = "Mobile Data"
-                disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateMobileDataSettings(disableOnLock = isChecked)
-                    }
-                }
-                enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateMobileDataSettings(enableOnUnlock = isChecked)
-                    }
-                }
-            }
+            setupPrivacyFeature(
+                mobileDataSettings,
+                R.drawable.ic_signal_cellular,
+                "Mobile Data",
+                { viewModel.updateMobileDataSettings(disableOnLock = it) },
+                { viewModel.updateMobileDataSettings(enableOnUnlock = it) }
+            )
 
-            // Setup Location settings
-            locationSettings.apply {
-                featureIcon.setImageResource(R.drawable.ic_location)
-                featureName.text = "Location"
-                disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateLocationSettings(disableOnLock = isChecked)
-                    }
-                }
-                enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isUpdatingUI) {
-                        viewModel.updateLocationSettings(enableOnUnlock = isChecked)
-                    }
-                }
-            }
+            setupPrivacyFeature(
+                locationSettings,
+                R.drawable.ic_location,
+                "Location",
+                { viewModel.updateLocationSettings(disableOnLock = it) },
+                { viewModel.updateLocationSettings(enableOnUnlock = it) }
+            )
         }
     }
 
@@ -472,6 +436,33 @@ class MainFragment : Fragment() {
                 "Service status: Stopped"
             }
         }
+    }
+
+    // DRY Helper Functions
+    private fun setupPrivacyFeature(
+        featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
+        iconRes: Int,
+        name: String,
+        onDisableLockChange: (Boolean) -> Unit,
+        onEnableUnlockChange: (Boolean) -> Unit
+    ) {
+        featureBinding.featureIcon.setImageResource(iconRes)
+        featureBinding.featureName.text = name
+        featureBinding.disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) onDisableLockChange(isChecked)
+        }
+        featureBinding.enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) onEnableUnlockChange(isChecked)
+        }
+    }
+
+    private fun setupDualClickListeners(
+        view1: View,
+        view2: View,
+        action: () -> Unit
+    ) {
+        view1.setOnClickListener { action() }
+        view2.setOnClickListener { action() }
     }
 
     override fun onDestroyView() {

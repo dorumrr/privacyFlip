@@ -28,7 +28,7 @@ PrivacyFlip automatically manages your device's privacy features based on lock/u
 - 📍 **Location services** - Control GPS and location tracking
 
 ### **Customizable Timing**
-- **Lock Delay**: 0-300 seconds before privacy actions trigger
+- **Lock Delay**: 0-60 seconds before privacy actions trigger
 - **Unlock Delay**: 0-60 seconds before features are restored
 - **Instant Mode**: Set delays to 0 for immediate action
 
@@ -62,7 +62,7 @@ adb install app/build/outputs/apk/debug/PrivacyFlip-v1.0.0-debug.apk
 ```
 
 ### F-Droid Metadata
-This repository includes Fastlane metadata structure in `fastlane/metadata/` for F-Droid compatibility.
+This repository includes Fastlane metadata structure in `fastlane/metadata/`.
 
 ## 🔧 Usage
 
@@ -73,8 +73,8 @@ This repository includes Fastlane metadata structure in `fastlane/metadata/` for
 4. Set lock/unlock delays if desired
 
 ### **Configuration**
-- **Action Delays**: Click "Edit" to modify timing settings
 - **Screen Lock Actions**: Configure which features to disable/enable
+- **Action Delays**: Adjust timing settings to your needs
 - **Panic Mode**: Tap the red button for emergency privacy
 
 ### **Automatic operation**
@@ -98,7 +98,7 @@ Once configured, PrivacyFlip works automatically:
 
 ## 🤝 Contributing
 
-**Contributions are welcome!** Here's how you can help improve PrivacyFlip:
+No contribution is too small - every improvement helps the privacy community! 🚀
 
 - 🐛 **Found a bug?** Open an issue or submit a PR with the fix
 - 💡 **Have an idea?** Create an issue to discuss new features
@@ -121,24 +121,20 @@ cd privacyflip
 ./test_dev.sh install  # Test on device/emulator
 ```
 
-No contribution is too small - every improvement helps the privacy community! 🚀
-
 ## 📄 License
 
 This project is licensed under the GNU General Public License v3.0
 
 ## 👨‍💻 Author
 
-**Created by [Doru Moraru](https://github.com/dorumrr/privacyflip)**
+[Doru Moraru](https://github.com/dorumrr/privacyflip)
 
 ## 🙏 Acknowledgments
 
+- Degoogled Android community for inspiration and feedback
 - [libsu](https://github.com/topjohnwu/libsu) - Reliable root access library
 - Pure Android Views - No Google dependencies for F-Droid compliance
-<!-- NOT YET PUBLISHED
 - F-Droid community for privacy-focused app distribution
--->
-- Degoogled Android community for inspiration and feedback
 
 ## 📞 Support
 
@@ -146,7 +142,3 @@ This project is licensed under the GNU General Public License v3.0
 <!-- NOT YET PUBLISHED
 **F-Droid**: [App Page](https://f-droid.org/packages/io.github.dorumrr.privacyflip)
 -->
-
----
-
-**PrivacyFlip** - Flip your privacy on demand! 🔐📱✨

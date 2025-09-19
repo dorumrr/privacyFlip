@@ -2,6 +2,7 @@ package io.github.dorumrr.privacyflip.privacy
 
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.StatusParsingUtils
 
 class BluetoothToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
 
@@ -26,4 +27,8 @@ class BluetoothToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager)
         CommandSet("settings get global bluetooth_on", description = "Check Bluetooth status"),
         CommandSet("dumpsys bluetooth_manager | grep 'enabled'", description = "Dumpsys method")
     )
+
+    override fun parseStatusOutput(output: String): FeatureState {
+        return StatusParsingUtils.parseStandardOutput(output)
+    }
 }

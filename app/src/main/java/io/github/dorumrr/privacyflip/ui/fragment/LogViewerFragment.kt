@@ -32,12 +32,12 @@ class LogViewerFragment : Fragment() {
         observeViewModel()
         
         // Load logs when fragment is created
-        viewModel.loadLogs()
+        viewModel.showLogViewer()
     }
 
     private fun setupUI() {
         binding.refreshLogsButton.setOnClickListener {
-            viewModel.loadLogs()
+            viewModel.showLogViewer()
         }
 
         binding.shareLogsButton.setOnClickListener {

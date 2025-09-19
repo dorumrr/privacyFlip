@@ -35,6 +35,24 @@ class MainViewModel : ViewModel() {
         logManager.d(TAG, "$configType loaded: $details")
     }
 
+    // Helper methods to consolidate duplicate error handling patterns
+    private inline fun handleError(operation: String, action: () -> Unit) {
+        try {
+            action()
+        } catch (e: Exception) {
+            logManager.e(TAG, "Error $operation: ${e.message}")
+        }
+    }
+
+    private inline fun handleErrorWithUiUpdate(operation: String, action: () -> Unit) {
+        try {
+            action()
+        } catch (e: Exception) {
+            logManager.e(TAG, "Error $operation: ${e.message}")
+            updateUiState { it.copy(errorMessage = "Error $operation: ${e.message}") }
+        }
+    }
+
     private val rootManager = RootManager.getInstance(Unit)
     private lateinit var privacyManager: PrivacyManager
 
@@ -178,7 +196,7 @@ class MainViewModel : ViewModel() {
     }
 
     private fun loadTimerSettings() {
-        try {
+        handleError("loading timer settings") {
             val settings = TimerSettings(
                 lockDelaySeconds = preferenceManager.lockDelaySeconds,
                 unlockDelaySeconds = preferenceManager.unlockDelaySeconds,
@@ -189,8 +207,6 @@ class MainViewModel : ViewModel() {
             updateUiState { it.copy(timerSettings = settings) }
 
             logConfigLoaded("Timer settings", "lock=${preferenceManager.lockDelaySeconds}s, unlock=${preferenceManager.unlockDelaySeconds}s")
-        } catch (e: Exception) {
-            logManager.e(TAG, "Failed to load timer settings: ${e.message}")
         }
     }
 
@@ -406,7 +422,7 @@ class MainViewModel : ViewModel() {
     }
 
     private fun loadServiceSettings() {
-        try {
+        handleError("loading service settings") {
             val isServiceRunning = isBackgroundServiceRunning()
             updateUiState {
                 it.copy(
@@ -416,8 +432,6 @@ class MainViewModel : ViewModel() {
             }
 
             logConfigLoaded("Service settings", "backgroundService=${preferenceManager.backgroundServiceEnabled}, running=$isServiceRunning")
-        } catch (e: Exception) {
-            logManager.e(TAG, "Failed to load service settings: ${e.message}")
         }
     }
 
@@ -449,7 +463,7 @@ class MainViewModel : ViewModel() {
     }
 
     private fun scheduleServiceHealthCheck(context: Context) {
-        try {
+        handleError("scheduling service health check") {
             // Cancel any existing health check workers first to prevent duplicates
             WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
 
@@ -459,8 +473,6 @@ class MainViewModel : ViewModel() {
 
             WorkManager.getInstance(context).enqueue(healthCheckRequest)
             logManager.d(TAG, "Service health check scheduled (previous workers cancelled)")
-        } catch (e: Exception) {
-            logManager.e(TAG, "Failed to schedule service health check: ${e.message}")
         }
     }
 
@@ -611,9 +623,7 @@ class MainViewModel : ViewModel() {
 
 
 
-    fun checkRootAccess() {
-        checkRootStatus()
-    }
+
 
     fun triggerPanicMode() {
         viewModelScope.launch {
@@ -627,9 +637,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun loadLogs() {
-        showLogViewer()
-    }
+
 }
 
 data class ScreenLockConfig(

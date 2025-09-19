@@ -134,7 +134,7 @@ This project is licensed under the GNU General Public License v3.0
 ## 🙏 Acknowledgments
 
 - [libsu](https://github.com/topjohnwu/libsu) - Reliable root access library
-- [Material Design 3](https://m3.material.io/) - Modern UI components
+- Pure Android Views - No Google dependencies for F-Droid compliance
 <!-- NOT YET PUBLISHED
 - F-Droid community for privacy-focused app distribution
 -->

@@ -12,7 +12,6 @@ import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
-import io.github.dorumrr.privacyflip.util.BatteryOptimizationManager
 
 class MainFragment : Fragment() {
 

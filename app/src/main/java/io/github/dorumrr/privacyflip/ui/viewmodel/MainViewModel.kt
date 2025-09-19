@@ -719,22 +719,4 @@ data class PrivacyFeatureSettings(
     val enableOnUnlock: Boolean = false
 )
 
-// Keep the old MainUiState for compatibility (will be removed later)
-data class MainUiState(
-    val isLoading: Boolean = false,
-    val isRootAvailable: Boolean? = null,
-    val isRootGranted: Boolean = false,
-    val featureStates: Map<PrivacyFeature, FeatureState> = emptyMap(),
-    val privacyStatus: PrivacyStatus = PrivacyStatus(),
-    val isGlobalPrivacyEnabled: Boolean = true,
-    val ungrantedPermissions: List<PermissionChecker.PermissionStatus> = emptyList(),
-    val pendingPermissionRequest: Array<String>? = null,
-    val hasTriedAutoRequest: Boolean = false,
-    val hasTriedAutoRootRequest: Boolean = false,
-    val showLogViewer: Boolean = false,
-    val logs: String = "",
-    val logFileSizeKB: Int = 0,
-    val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
-    val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,
-    val errorMessage: String? = null
-)
+

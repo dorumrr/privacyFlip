@@ -59,10 +59,6 @@ class MainFragment : Fragment() {
             openGitHubRepository()
         }
 
-        binding.creditsFooterNoRoot.createdByText.setOnClickListener {
-            openGitHubRepository()
-        }
-
         // Setup privacy feature cards
         setupScreenLockCard()
         setupTimerCard()
@@ -195,15 +191,17 @@ class MainFragment : Fragment() {
             binding.globalPrivacyCard.root.visibility = View.VISIBLE
             binding.mainContentContainer.visibility = View.VISIBLE
             binding.systemRequirementsCard.root.visibility = View.GONE
-            binding.creditsFooter.root.visibility = View.VISIBLE
-            binding.creditsFooterNoRoot.root.visibility = View.GONE
+            // Show logs button in footer
+            binding.creditsFooter.viewLogsButton.visibility = View.VISIBLE
+            binding.creditsFooter.logsSeparator.visibility = View.VISIBLE
         } else {
             // Root not granted - hide Global Privacy card and main content, show System Requirements
             binding.globalPrivacyCard.root.visibility = View.GONE
             binding.mainContentContainer.visibility = View.GONE
             binding.systemRequirementsCard.root.visibility = View.VISIBLE
-            binding.creditsFooter.root.visibility = View.GONE
-            binding.creditsFooterNoRoot.root.visibility = View.VISIBLE
+            // Hide logs button in footer (no root = no logs)
+            binding.creditsFooter.viewLogsButton.visibility = View.GONE
+            binding.creditsFooter.logsSeparator.visibility = View.GONE
         }
 
 

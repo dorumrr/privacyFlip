@@ -20,9 +20,18 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="PrivacyFlip v1.0.0 •"
+            android:text="PrivacyFlip v1.0.0"
             android:textSize="12sp"
             android:textColor="@color/text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" • "
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:id="@+id/logsSeparator"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/viewLogsButton"
@@ -37,7 +46,8 @@
             android:paddingStart="2dp"
             android:paddingEnd="2dp"
             android:paddingTop="2dp"
-            android:paddingBottom="2dp" />
+            android:paddingBottom="2dp"
+            android:visibility="gone" />
 
     </LinearLayout>
 

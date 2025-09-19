@@ -121,14 +121,6 @@
                 android:textStyle="bold"
                 android:textSize="16sp" />
 
-            <!-- Credits Footer -->
-            <include
-                android:id="@+id/creditsFooter"
-                layout="@layout/credits_footer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
-
         </LinearLayout>
 
         <!-- System Requirements Card (shown when no root) -->
@@ -140,14 +132,13 @@
             android:layout_marginBottom="16dp"
             android:visibility="gone" />
 
-        <!-- Credits Footer (for non-root state) -->
+        <!-- Universal Credits Footer -->
         <include
-            android:id="@+id/creditsFooterNoRoot"
-            layout="@layout/credits_footer_no_root"
+            android:id="@+id/creditsFooter"
+            layout="@layout/credits_footer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone" />
+            android:layout_marginTop="16dp" />
 
     </LinearLayout>
 

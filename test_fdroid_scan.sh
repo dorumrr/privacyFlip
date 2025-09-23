@@ -82,12 +82,29 @@ scan_apk() {
     echo ""
     echo "Checking for tracking URLs..."
 
-    # Extract and scan APK contents more thoroughly
+    # Extract and scan APK contents thoroughly (fixed unzip hanging)
     local temp_dir=$(mktemp -d)
-    unzip -q "$apk_path" -d "$temp_dir" 2>/dev/null || true
+    echo "   Extracting APK contents..."
+
+    # Force overwrite without prompts (-o flag) and be quiet (-q flag)
+    if unzip -o -q "$apk_path" -d "$temp_dir" 2>/dev/null; then
+        echo "   ✅ APK extracted successfully"
+    else
+        echo "   ⚠️ APK extraction failed, using direct scan"
+    fi
 
     # Check for Google tracking URLs in all files
-    local google_urls=$(find "$temp_dir" -type f -exec strings {} \; 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -5)
+    echo "   Scanning extracted files..."
+    local google_urls=""
+    if [ -d "$temp_dir" ]; then
+        google_urls=$(find "$temp_dir" -type f \( -name "*.dex" -o -name "*.arsc" \) -exec strings {} \; 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -5)
+    fi
+
+    # Fallback to direct APK scan if extraction failed
+    if [ -z "$google_urls" ]; then
+        echo "   Fallback: Direct APK scan..."
+        google_urls=$(strings "$apk_path" 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -3)
+    fi
 
     if [ -n "$google_urls" ]; then
         echo -e "${RED}🚩 Found tracking URLs:${NC}"
@@ -101,6 +118,7 @@ scan_apk() {
 
     # Check classes.dex specifically (like GitLab bot)
     if [ -f "$temp_dir/classes.dex" ]; then
+        echo "   Scanning classes.dex..."
         local dex_urls=$(strings "$temp_dir/classes.dex" 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -3)
         if [ -n "$dex_urls" ]; then
             echo -e "${RED}🚩 Found URLs in classes.dex:${NC}"
@@ -113,6 +131,7 @@ scan_apk() {
 
     # Check resources.arsc
     if [ -f "$temp_dir/resources.arsc" ]; then
+        echo "   Scanning resources.arsc..."
         local resource_urls=$(strings "$temp_dir/resources.arsc" 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -3)
         if [ -n "$resource_urls" ]; then
             echo -e "${RED}🚩 Found URLs in resources.arsc:${NC}"

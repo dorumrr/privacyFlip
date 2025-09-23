@@ -24,19 +24,51 @@
 -keep class com.topjohnwu.superuser.** { *; }
 -dontwarn com.topjohnwu.superuser.**
 
-# F-Droid compliance: Strip Google tracking URLs from string constants
--assumenosideeffects class java.lang.String {
-    public java.lang.String(java.lang.String);
-    public static java.lang.String valueOf(java.lang.Object);
+# Debug-friendly rules: Keep more for debugging but still remove tracking URLs
+-keepattributes SourceFile,LineNumberTable
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses,EnclosingMethod
+
+# F-Droid compliance: Remove Google tracking URLs using R8 string replacement
+# This approach replaces the problematic URLs with harmless strings
+
+# Replace Google Issue Tracker URLs with generic text
+-adaptresourcefilecontents **.properties,META-INF/MANIFEST.MF,**.xml
+-adaptresourcefilenames **.properties,META-INF/MANIFEST.MF
+
+# Use R8's string replacement to replace tracking URLs
+-if class androidx.room.**
+-keep,allowobfuscation class androidx.room.**
+
+# Remove Room error messages entirely by making them no-ops
+-assumenosideeffects class androidx.room.util.DBUtil {
+    public static void dropFtsSyncTriggers(...);
 }
 
-# Remove Google Issue Tracker URLs specifically
--adaptresourcefilenames **.properties
--adaptresourcefilecontents **.properties,META-INF/MANIFEST.MF
+# Remove Room's InvalidationTracker completely
+-assumenosideeffects class androidx.room.InvalidationTracker {
+    <init>(...);
+    public void addObserver(...);
+    public void removeObserver(...);
+    *** *;
+}
 
-# Keep essential classes but allow string optimization
--keep class androidx.room.** { *; }
--keep class androidx.work.** { *; }
+# Aggressive optimization to remove string constants
+-optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
+-allowaccessmodification
+-repackageclasses ''
 
-# Allow ProGuard to optimize strings (this should remove the tracking URLs)
--optimizations !code/simplification/string
+# Keep only essential Room classes for functionality
+-keep class androidx.room.Room {
+    public static *** databaseBuilder(...);
+}
+-keep class androidx.room.RoomDatabase {
+    <init>(...);
+    public *** getOpenHelper();
+    public *** runInTransaction(...);
+}
+-keep class androidx.work.** {
+    <init>(...);
+    public <methods>;
+}

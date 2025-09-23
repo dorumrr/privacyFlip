@@ -21,8 +21,12 @@ android {
     }
 
     buildTypes {
-        release {
+        debug {
             isMinifyEnabled = false
+            isDebuggable = true
+        }
+        release {
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -62,6 +66,8 @@ android {
         }
     }
 }
+
+// No global exclusions - let dependencies work naturally
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")

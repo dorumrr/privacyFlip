@@ -69,10 +69,67 @@ scan_apk() {
     echo "   Size: $(du -h "$apk_path" | cut -f1)"
     echo ""
 
+    local has_issues=false
+
     # Run F-Droid scanner
     echo "Running F-Droid scanner..."
-    if fdroid scanner "$apk_path"; then
+    if ! fdroid scanner "$apk_path"; then
+        echo -e "${RED}❌ F-Droid scanner found issues!${NC}"
+        has_issues=true
+    fi
+
+    # Additional URL scanning (like GitLab F-Droid bot)
+    echo ""
+    echo "Checking for tracking URLs..."
+
+    # Extract and scan APK contents more thoroughly
+    local temp_dir=$(mktemp -d)
+    unzip -q "$apk_path" -d "$temp_dir" 2>/dev/null || true
+
+    # Check for Google tracking URLs in all files
+    local google_urls=$(find "$temp_dir" -type f -exec strings {} \; 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -5)
+
+    if [ -n "$google_urls" ]; then
+        echo -e "${RED}🚩 Found tracking URLs:${NC}"
+        echo "$google_urls" | while read -r url; do
+            echo -e "   ${RED}• $url${NC}"
+        done
+        has_issues=true
+    else
+        echo -e "${GREEN}✅ No tracking URLs found${NC}"
+    fi
+
+    # Check classes.dex specifically (like GitLab bot)
+    if [ -f "$temp_dir/classes.dex" ]; then
+        local dex_urls=$(strings "$temp_dir/classes.dex" 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -3)
+        if [ -n "$dex_urls" ]; then
+            echo -e "${RED}🚩 Found URLs in classes.dex:${NC}"
+            echo "$dex_urls" | while read -r url; do
+                echo -e "   ${RED}• $url${NC}"
+            done
+            has_issues=true
+        fi
+    fi
+
+    # Check resources.arsc
+    if [ -f "$temp_dir/resources.arsc" ]; then
+        local resource_urls=$(strings "$temp_dir/resources.arsc" 2>/dev/null | grep -E "(issuetracker\.google\.com|googleapis\.com|google\.com/.*track)" | head -3)
+        if [ -n "$resource_urls" ]; then
+            echo -e "${RED}🚩 Found URLs in resources.arsc:${NC}"
+            echo "$resource_urls" | while read -r url; do
+                echo -e "   ${RED}• $url${NC}"
+            done
+            has_issues=true
+        fi
+    fi
+
+    # Cleanup
+    rm -rf "$temp_dir"
+
+    echo ""
+    if [ "$has_issues" = false ]; then
         echo -e "${GREEN}✅ ${apk_name}: CLEAN - F-Droid compliant!${NC}"
+        return 0
     else
         echo -e "${RED}❌ ${apk_name}: Issues found!${NC}"
         return 1

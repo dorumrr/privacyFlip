@@ -12,23 +12,14 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
 
 # Keep libsu classes
 -keep class com.topjohnwu.superuser.** { *; }
 -dontwarn com.topjohnwu.superuser.**
 
-# Debug-friendly rules: Keep more for debugging but still remove tracking URLs
--keepattributes SourceFile,LineNumberTable
+# Production-ready rules for F-Droid compliance
 -keepattributes *Annotation*
--keepattributes Signature
--keepattributes InnerClasses,EnclosingMethod
 
 # F-Droid compliance: Remove Google tracking URLs using R8 string replacement
 # This approach replaces the problematic URLs with harmless strings

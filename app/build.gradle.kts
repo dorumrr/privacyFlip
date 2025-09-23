@@ -31,6 +31,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Use debug signing for GitHub releases (installable APKs)
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

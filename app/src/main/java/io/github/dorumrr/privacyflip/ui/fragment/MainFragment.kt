@@ -12,6 +12,7 @@ import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
+import io.github.dorumrr.privacyflip.util.Constants
 
 class MainFragment : Fragment() {
 
@@ -45,18 +46,15 @@ class MainFragment : Fragment() {
             binding.errorCard.visibility = View.GONE
         }
 
-        // Panic mode button
-        binding.panicModeButton.setOnClickListener {
-            viewModel.triggerPanicMode()
-        }
+
 
         // Setup click listeners for footer elements
-        binding.creditsFooter.viewLogsButton.setOnClickListener {
-            findNavController().navigate(R.id.action_main_to_logs)
-        }
-
         binding.creditsFooter.createdByText.setOnClickListener {
             openGitHubRepository()
+        }
+
+        binding.creditsFooter.donateButton.setOnClickListener {
+            openDonateLink()
         }
 
         // Setup privacy feature cards
@@ -191,17 +189,13 @@ class MainFragment : Fragment() {
             binding.globalPrivacyCard.root.visibility = View.VISIBLE
             binding.mainContentContainer.visibility = View.VISIBLE
             binding.systemRequirementsCard.root.visibility = View.GONE
-            // Show logs button in footer
-            binding.creditsFooter.viewLogsButton.visibility = View.VISIBLE
-            binding.creditsFooter.logsSeparator.visibility = View.VISIBLE
+
         } else {
             // Root not granted - hide Global Privacy card and main content, show System Requirements
             binding.globalPrivacyCard.root.visibility = View.GONE
             binding.mainContentContainer.visibility = View.GONE
             binding.systemRequirementsCard.root.visibility = View.VISIBLE
-            // Hide logs button in footer (no root = no logs)
-            binding.creditsFooter.viewLogsButton.visibility = View.GONE
-            binding.creditsFooter.logsSeparator.visibility = View.GONE
+
         }
 
 
@@ -294,6 +288,18 @@ class MainFragment : Fragment() {
         }
     }
 
+    private fun openDonateLink() {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse(Constants.UI.DONATE_URL)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Handle case where no browser is available
+            android.widget.Toast.makeText(requireContext(), "Unable to open donation page", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun requestBackgroundServicePermission() {
         try {
             // This will trigger the background service permission dialog
@@ -341,7 +347,7 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.success_green)
                 )
                 globalPrivacyIcon.setImageResource(R.drawable.ic_check_circle)
-                globalPrivacyTitle.text = "PrivacyFlip"
+                globalPrivacyTitle.text = "Privacy Flip"
                 globalPrivacyStatus.text = "Protection Active"
             } else {
                 // Red - Protection Inactive
@@ -349,7 +355,7 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.error_red)
                 )
                 globalPrivacyIcon.setImageResource(R.drawable.ic_error)
-                globalPrivacyTitle.text = "PrivacyFlip"
+                globalPrivacyTitle.text = "Privacy Flip"
                 globalPrivacyStatus.text = "Protection Inactive"
             }
         }

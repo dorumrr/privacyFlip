@@ -106,20 +106,7 @@
                 layout="@layout/card_service_settings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp" />
-
-            <!-- Panic Mode Button -->
-            <Button
-                android:id="@+id/panicModeButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:text="🚨 Panic Mode - Disable All"
-                android:textColor="@android:color/white"
-                android:background="@drawable/button_panic_red"
-                android:padding="16dp"
-                android:textStyle="bold"
-                android:textSize="16sp" />
+                android:layout_marginBottom="4dp" />
 
         </LinearLayout>
 
@@ -138,7 +125,7 @@
             layout="@layout/credits_footer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="4dp" />
 
     </LinearLayout>
 

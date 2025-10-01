@@ -6,6 +6,10 @@ object Constants {
         const val CHANNEL_ID = "privacy_monitor"
         const val NOTIFICATION_ID = 1000
     }
+
+    object BootReceiver {
+        const val DEBOUNCE_DELAY_MS = 300L
+    }
     
     object Preferences {
         const val PRIVACY_SWITCH_PREFS = "privacy_switch_prefs"
@@ -23,8 +27,8 @@ object Constants {
     }
     
     object Defaults {
-        const val LOCK_DELAY_SECONDS = 3
-        const val UNLOCK_DELAY_SECONDS = 3
+        const val LOCK_DELAY_SECONDS = 10
+        const val UNLOCK_DELAY_SECONDS = 1
         const val SHOW_COUNTDOWN = true
 
         const val BACKGROUND_SERVICE_ENABLED = true
@@ -51,25 +55,11 @@ object Constants {
     }
 
     object UI {
-        const val APP_NAME_VERSION = "PrivacyFlip v1.0.0"
         const val AUTHOR_NAME = "Doru Moraru"
         const val AUTHOR_URL = "https://github.com/dorumrr/privacyflip"
         const val CREATED_BY_TEXT = "Created by"
-        const val APP_LOGS_TEXT = "App Logs"
+        const val DONATE_URL = "https://buymeacoffee.com/ossdev"
 
-        const val LOG_VIEWER_TITLE = "Application Logs"
-        const val LOG_SIZE_FORMAT = "Size: %dKB / 500KB"
-        const val CLEAR_LOGS_TITLE = "Clear Logs"
-        const val CLEAR_LOGS_MESSAGE = "Are you sure you want to clear all logs? This action cannot be undone."
-        const val CLEAR_BUTTON = "Clear"
-        const val CANCEL_BUTTON = "Cancel"
-        const val BACK_BUTTON = "Back"
-        const val COPY_LOGS_BUTTON = "Copy Logs"
-        const val LOGS_COPIED_MESSAGE = "Logs copied to clipboard"
-        const val NO_LOGS_TITLE = "No logs available"
-        const val NO_LOGS_MESSAGE = "Logs will appear here as you use the app"
-
-        const val COPY_SNACKBAR_DURATION_MS = 2000L
         const val LOG_PROCESSING_INTERVAL_MS = 1000L
     }
 }

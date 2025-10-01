@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PrivacyFlip</string>
+    <string name="app_name">Privacy Flip</string>
 
     <!-- Quick Settings Tiles -->
-    <string name="tile_privacy_switch">PrivacyFlip</string>
-    <string name="tile_panic_mode">Panic Mode</string>
+    <string name="tile_privacy_switch">Privacy Flip</string>
 
     <!-- Widget -->
-    <string name="widget_name">PrivacyFlip</string>
+    <string name="widget_name">Privacy Flip</string>
     <string name="widget_description">Quick privacy toggle</string>
     <string name="widget_privacy_off">Privacy OFF</string>
 </resources>

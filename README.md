@@ -106,8 +106,6 @@ This repository includes complete Fastlane metadata structure in `fastlane/metad
 3. Configure your preferred privacy settings
 4. Set lock/unlock delays if desired
 
-**Panic Mode**: Tap the red button for emergency privacy
-
 ### **Automatic operation**
 Once configured, PrivacyFlip works automatically:
 - Lock your device → Selected features will be disabled

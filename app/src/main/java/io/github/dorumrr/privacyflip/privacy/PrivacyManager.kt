@@ -113,11 +113,7 @@ class PrivacyManager private constructor(
         return@withContext results
     }
     
-    suspend fun executePanicMode(): List<PrivacyResult> = withContext(Dispatchers.IO) {
-        Log.w(TAG, "Executing panic mode - disabling all connectivity")
 
-        return@withContext disableFeatures(PrivacyFeature.getConnectivityFeatures().toSet())
-    }
     
     suspend fun getPrivacyStatus(): PrivacyStatus = withContext(Dispatchers.IO) {
         val currentStatus = getCurrentStatus()

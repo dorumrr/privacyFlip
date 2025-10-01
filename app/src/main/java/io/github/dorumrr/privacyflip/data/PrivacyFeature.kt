@@ -45,8 +45,8 @@ data class PrivacyResult(
 )
 
 data class TimerSettings(
-    val lockDelaySeconds: Int = 3,
-    val unlockDelaySeconds: Int = 3,
+    val lockDelaySeconds: Int = 10,
+    val unlockDelaySeconds: Int = 1,
     val showCountdown: Boolean = true
 ) {
     fun isValid(): Boolean {

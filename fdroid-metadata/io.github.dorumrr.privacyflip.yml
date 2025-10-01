@@ -24,7 +24,6 @@ Description: |
     * Customizable timing delays (0-300 seconds for lock, 0-60 seconds for unlock)
     * Background service for persistent monitoring
     * Quick Settings tile integration
-    * Panic mode for instant privacy activation
     * Material 3 design with dark theme support
     * Comprehensive logging and debugging
 

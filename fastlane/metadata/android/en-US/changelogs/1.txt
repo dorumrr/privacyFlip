@@ -1,10 +1,9 @@
-Initial release of PrivacyFlip v1.0.0
+Initial release of Privacy Flip v1.0.0
 
 • Automatic privacy control on screen lock/unlock
 • Background service for persistent monitoring
 • Material 3 design with dark theme support
 • Quick Settings tile integration
-• Panic mode for emergency privacy
 • Controls Wi-Fi, Bluetooth, mobile data, and location
 • Configurable timing delays
 • No tracking or analytics

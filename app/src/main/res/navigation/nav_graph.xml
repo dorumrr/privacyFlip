@@ -8,23 +8,7 @@
     <fragment
         android:id="@+id/mainFragment"
         android:name="io.github.dorumrr.privacyflip.ui.fragment.MainFragment"
-        android:label="PrivacyFlip"
-        tools:layout="@layout/fragment_main">
-        
-        <action
-            android:id="@+id/action_main_to_logs"
-            app:destination="@id/logViewerFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/logViewerFragment"
-        android:name="io.github.dorumrr.privacyflip.ui.fragment.LogViewerFragment"
-        android:label="App Logs"
-        tools:layout="@layout/fragment_log_viewer">
-        
-        <action
-            android:id="@+id/action_logs_to_main"
-            app:destination="@id/mainFragment" />
-    </fragment>
+        android:label="Privacy Flip"
+        tools:layout="@layout/fragment_main" />
 
 </navigation>

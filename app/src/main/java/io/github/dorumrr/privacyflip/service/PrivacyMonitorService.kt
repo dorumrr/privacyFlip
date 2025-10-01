@@ -1,5 +1,6 @@
 package io.github.dorumrr.privacyflip.service
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,14 +11,21 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.MainActivity
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.receiver.ScreenStateReceiver
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.ScreenStateReceiverManager
+import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
 class PrivacyMonitorService : Service() {
     
@@ -58,6 +66,10 @@ class PrivacyMonitorService : Service() {
                 startForeground(Constants.ServiceNotification.NOTIFICATION_ID, createNotification())
             }
             registerScreenStateReceiver()
+
+            // Apply initial privacy state based on current screen lock status
+            applyInitialPrivacyState()
+
             Log.i(TAG, "✅ Privacy Monitor Service initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to initialize Privacy Monitor Service", e)
@@ -106,7 +118,7 @@ class PrivacyMonitorService : Service() {
         
         return NotificationCompat.Builder(this, Constants.ServiceNotification.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_privacy_shield)
-            .setContentTitle("PrivacyFlip Active")
+            .setContentTitle("Privacy Flip Active")
             .setContentText("Monitoring screen state for privacy actions")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -122,5 +134,77 @@ class PrivacyMonitorService : Service() {
     private fun unregisterScreenStateReceiver() {
         ScreenStateReceiverManager.unregisterReceiver(this, screenStateReceiver, TAG)
         screenStateReceiver = null
+    }
+
+    /**
+     * Applies initial privacy state based on current screen lock status.
+     * This is crucial for boot scenarios where the service starts but doesn't know
+     * the current screen state and needs to apply appropriate privacy actions.
+     */
+    private fun applyInitialPrivacyState() {
+        try {
+            // Delay slightly to ensure system services are ready
+            Handler(Looper.getMainLooper()).postDelayed({
+                val isScreenLocked = isScreenCurrentlyLocked()
+                val reason = "Service Initialization"
+
+                Log.i(TAG, "🔍 Checking initial screen state: ${if (isScreenLocked) "LOCKED" else "UNLOCKED"}")
+
+                // Apply appropriate privacy actions based on current screen state
+                triggerInitialPrivacyAction(!isScreenLocked, reason)
+
+            }, 1000L) // 1 second delay to ensure system is ready
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to apply initial privacy state", e)
+        }
+    }
+
+    /**
+     * Checks if the screen is currently locked using KeyguardManager and PowerManager.
+     * Returns true if screen is locked, false if unlocked.
+     */
+    private fun isScreenCurrentlyLocked(): Boolean {
+        return try {
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+
+            val isKeyguardLocked = keyguardManager.isKeyguardLocked
+            val isScreenOn = powerManager.isInteractive
+
+            Log.d(TAG, "Screen state check: keyguardLocked=$isKeyguardLocked, screenOn=$isScreenOn")
+
+            // Screen is considered locked if keyguard is active OR screen is off
+            isKeyguardLocked || !isScreenOn
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking screen lock state", e)
+            // Default to unlocked if we can't determine state
+            false
+        }
+    }
+
+    /**
+     * Triggers privacy action based on initial screen state.
+     * Uses the same WorkManager pattern as ScreenStateReceiver for consistency.
+     */
+    private fun triggerInitialPrivacyAction(isUnlocking: Boolean, reason: String) {
+        try {
+            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
+                .setInputData(
+                    workDataOf(
+                        "is_locking" to !isUnlocking,
+                        "trigger" to "service_init",
+                        "reason" to reason
+                    )
+                )
+                .build()
+
+            WorkManager.getInstance(this).enqueue(workRequest)
+            Log.i(TAG, "🔄 Initial privacy action enqueued: ${if (isUnlocking) "unlock" else "lock"} actions")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger initial privacy action", e)
+        }
     }
 }

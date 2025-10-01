@@ -23,7 +23,6 @@
     <color name="warning_orange">#FFFF9800</color>      <!-- Warning orange -->
 
     <!-- App specific -->
-    <color name="panic_mode">#FFD32F2F</color>          <!-- Panic mode red -->
     <color name="icon_white">#FFFFFFFF</color>          <!-- Pure white icons -->
 
     <!-- Divider and borders -->

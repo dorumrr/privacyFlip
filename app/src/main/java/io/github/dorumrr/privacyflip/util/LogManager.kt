@@ -64,39 +64,7 @@ class LogManager private constructor(private val context: Context) {
     fun w(tag: String, message: String) = log("W", tag, message)
     fun e(tag: String, message: String) = log("E", tag, message)
 
-    suspend fun getLogs(): String = withContext(Dispatchers.IO) {
-        try {
-            if (logFile.exists() && logFile.length() > 0) {
-                logFile.readText()
-            } else {
-                "No logs available yet.\n\nLogs will appear here as you use the app."
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to read log file", e)
-            "Error reading logs: ${e.message}"
-        }
-    }
 
-    suspend fun clearLogs() = withContext(Dispatchers.IO) {
-        try {
-            synchronized(logFile) {
-                logQueue.clear()
-                logFile.delete()
-                logFile.createNewFile()
-            }
-            Log.i(TAG, "Log file cleared")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to clear log file", e)
-        }
-    }
-
-    fun getLogFileSizeKB(): Int {
-        return try {
-            (logFile.length() / Constants.Logging.BYTES_PER_KB).toInt()
-        } catch (e: Exception) {
-            0
-        }
-    }
 
     private fun startLogProcessor() {
         scope.launch {

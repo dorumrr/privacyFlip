@@ -232,35 +232,7 @@ class MainViewModel : ViewModel() {
         _privacyConfig.value = currentConfig.copy(unlockFeatures = newUnlockFeatures)
     }
     
-    fun executePanicMode() {
-        val currentState = _uiState.value ?: UiState()
-        if (!currentState.isGlobalPrivacyEnabled) {
-            updateUiState {
-                it.copy(errorMessage = "Enable global privacy protection first to use panic mode")
-            }
-            return
-        }
 
-        viewModelScope.launch {
-            updateUiState { it.copy(isLoading = true) }
-
-            try {
-                privacyManager.executePanicMode()
-
-                updateUiState { it.copy(isLoading = false) }
-
-                loadPrivacyStatus()
-
-            } catch (e: Exception) {
-                updateUiState {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Error executing panic mode: ${e.message}"
-                    )
-                }
-            }
-        }
-    }
 
     fun clearError() {
         updateUiState { it.copy(errorMessage = null) }
@@ -535,56 +507,9 @@ class MainViewModel : ViewModel() {
         logManager.d(TAG, "Background service toggled: $enabled")
     }
 
-    fun showLogViewer() {
-        viewModelScope.launch {
-            try {
-                val logs = logManager.getLogs()
-                val sizeKB = logManager.getLogFileSizeKB()
-                updateUiState {
-                    it.copy(
-                        showLogViewer = true,
-                        logs = logs,
-                        logFileSizeKB = sizeKB
-                    )
-                }
-            } catch (e: Exception) {
-                logManager.e(TAG, "Error loading logs: ${e.message}")
-                updateUiState {
-                    it.copy(
-                        showLogViewer = true,
-                        logs = "Error loading logs: ${e.message}",
-                        logFileSizeKB = 0
-                    )
-                }
-            }
-        }
-    }
 
-    fun hideLogViewer() {
-        updateUiState { it.copy(showLogViewer = false) }
-    }
 
-    fun clearLogs() {
-        viewModelScope.launch {
-            try {
-                logManager.clearLogs()
-                val logs = logManager.getLogs()
-                val sizeKB = logManager.getLogFileSizeKB()
-                updateUiState {
-                    it.copy(
-                        logs = logs,
-                        logFileSizeKB = sizeKB
-                    )
-                }
-            } catch (e: Exception) {
-                logManager.e(TAG, "Error clearing logs: ${e.message}")
-            }
-        }
-    }
 
-    fun cleanup() {
-        logManager.cleanup()
-    }
 
     // Helper methods for traditional views - DRY implementation
     private fun updateFeatureSettings(
@@ -625,17 +550,7 @@ class MainViewModel : ViewModel() {
 
 
 
-    fun triggerPanicMode() {
-        viewModelScope.launch {
-            try {
-                val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
-                privacyManager.disableFeatures(allFeatures)
-                logManager.i(TAG, "Panic mode activated - all privacy features disabled")
-            } catch (e: Exception) {
-                logManager.e(TAG, "Error during panic mode: ${e.message}")
-            }
-        }
-    }
+
 
 
 }
@@ -663,9 +578,6 @@ data class UiState(
     val pendingPermissionRequest: Array<String>? = null,
     val hasTriedAutoRequest: Boolean = false,
     val hasTriedAutoRootRequest: Boolean = false,
-    val showLogViewer: Boolean = false,
-    val logs: String = "",
-    val logFileSizeKB: Int = 0,
     val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
     val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,
     val backgroundServicePermissionGranted: Boolean = false,

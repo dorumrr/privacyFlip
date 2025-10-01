@@ -52,14 +52,10 @@ object Constants {
         const val LOG_ROTATION_KEEP_RATIO = 0.8f
         const val BYTES_PER_KB = 1024
         const val MAX_BATCH_SIZE = 50
+        const val LOG_PROCESSING_INTERVAL_MS = 1000L
     }
 
     object UI {
-        const val AUTHOR_NAME = "Doru Moraru"
-        const val AUTHOR_URL = "https://github.com/dorumrr/privacyflip"
-        const val CREATED_BY_TEXT = "Created by"
         const val DONATE_URL = "https://buymeacoffee.com/ossdev"
-
-        const val LOG_PROCESSING_INTERVAL_MS = 1000L
     }
 }

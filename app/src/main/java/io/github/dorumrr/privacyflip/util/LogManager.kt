@@ -69,7 +69,7 @@ class LogManager private constructor(private val context: Context) {
     private fun startLogProcessor() {
         scope.launch {
             while (true) {
-                delay(Constants.UI.LOG_PROCESSING_INTERVAL_MS)
+                delay(Constants.Logging.LOG_PROCESSING_INTERVAL_MS)
                 if (logQueue.isNotEmpty()) {
                     processLogQueue()
                 }

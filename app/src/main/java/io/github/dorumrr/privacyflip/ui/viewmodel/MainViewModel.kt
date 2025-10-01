@@ -299,24 +299,7 @@ class MainViewModel : ViewModel() {
 
                 val currentState = _uiState.value ?: UiState()
                 val currentConfig = currentState.screenLockConfig
-                val newConfig = when (feature) {
-                    PrivacyFeature.WIFI -> currentConfig.copy(
-                        wifiDisableOnLock = disableOnLock,
-                        wifiEnableOnUnlock = enableOnUnlock
-                    )
-                    PrivacyFeature.BLUETOOTH -> currentConfig.copy(
-                        bluetoothDisableOnLock = disableOnLock,
-                        bluetoothEnableOnUnlock = enableOnUnlock
-                    )
-                    PrivacyFeature.MOBILE_DATA -> currentConfig.copy(
-                        mobileDataDisableOnLock = disableOnLock,
-                        mobileDataEnableOnUnlock = enableOnUnlock
-                    )
-                    PrivacyFeature.LOCATION -> currentConfig.copy(
-                        locationDisableOnLock = disableOnLock,
-                        locationEnableOnUnlock = enableOnUnlock
-                    )
-                }
+                val newConfig = currentConfig.updateFeature(feature, disableOnLock, enableOnUnlock)
 
                 updateUiState { it.copy(screenLockConfig = newConfig) }
 
@@ -529,6 +512,16 @@ class MainViewModel : ViewModel() {
             { it.locationDisableOnLock }, { it.locationEnableOnUnlock })
     }
 
+    // Generic method for updating any feature setting
+    fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        when (feature) {
+            PrivacyFeature.WIFI -> updateWifiSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.BLUETOOTH -> updateBluetoothSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.MOBILE_DATA -> updateMobileDataSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.LOCATION -> updateLocationSettings(disableOnLock, enableOnUnlock)
+        }
+    }
+
 
 
 
@@ -547,7 +540,29 @@ data class ScreenLockConfig(
     val mobileDataEnableOnUnlock: Boolean = Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK,
     val locationDisableOnLock: Boolean = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
     val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
-)
+) {
+    // DRY extension function to update any feature
+    fun updateFeature(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean): ScreenLockConfig {
+        return when (feature) {
+            PrivacyFeature.WIFI -> copy(
+                wifiDisableOnLock = disableOnLock,
+                wifiEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.BLUETOOTH -> copy(
+                bluetoothDisableOnLock = disableOnLock,
+                bluetoothEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.MOBILE_DATA -> copy(
+                mobileDataDisableOnLock = disableOnLock,
+                mobileDataEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.LOCATION -> copy(
+                locationDisableOnLock = disableOnLock,
+                locationEnableOnUnlock = enableOnUnlock
+            )
+        }
+    }
+}
 
 // Traditional Views UiState
 data class UiState(

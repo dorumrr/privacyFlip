@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import io.github.dorumrr.privacyflip.R
+import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
@@ -67,38 +68,23 @@ class MainFragment : Fragment() {
 
     private fun setupScreenLockCard() {
         with(binding.screenLockCard) {
-            // Setup privacy features using DRY helper
-            setupPrivacyFeature(
-                wifiSettings,
-                R.drawable.ic_wifi,
-                "Wi-Fi",
-                { viewModel.updateWifiSettings(disableOnLock = it) },
-                { viewModel.updateWifiSettings(enableOnUnlock = it) }
+            // Setup all privacy features using data-driven approach
+            val featureConfigs = listOf(
+                FeatureConfig(PrivacyFeature.WIFI, wifiSettings, R.drawable.ic_wifi, "Wi-Fi"),
+                FeatureConfig(PrivacyFeature.BLUETOOTH, bluetoothSettings, R.drawable.ic_bluetooth, "Bluetooth"),
+                FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
+                FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location")
             )
 
-            setupPrivacyFeature(
-                bluetoothSettings,
-                R.drawable.ic_bluetooth,
-                "Bluetooth",
-                { viewModel.updateBluetoothSettings(disableOnLock = it) },
-                { viewModel.updateBluetoothSettings(enableOnUnlock = it) }
-            )
-
-            setupPrivacyFeature(
-                mobileDataSettings,
-                R.drawable.ic_signal_cellular,
-                "Mobile Data",
-                { viewModel.updateMobileDataSettings(disableOnLock = it) },
-                { viewModel.updateMobileDataSettings(enableOnUnlock = it) }
-            )
-
-            setupPrivacyFeature(
-                locationSettings,
-                R.drawable.ic_location,
-                "Location",
-                { viewModel.updateLocationSettings(disableOnLock = it) },
-                { viewModel.updateLocationSettings(enableOnUnlock = it) }
-            )
+            featureConfigs.forEach { config ->
+                setupPrivacyFeature(
+                    config.binding,
+                    config.iconRes,
+                    config.displayName,
+                    { viewModel.updateFeatureSetting(config.feature, disableOnLock = it) },
+                    { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
+                )
+            }
         }
     }
 
@@ -138,33 +124,25 @@ class MainFragment : Fragment() {
 
     private fun setupTimerCard() {
         with(binding.timerCard) {
-            // Setup Lock Delay SeekBar
-            lockDelaySeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser && !isUpdatingUI) {
-                        lockDelayValue.text = progress.toString()
-                        val currentSettings = viewModel.uiState.value?.timerSettings ?: return
-                        val newSettings = currentSettings.copy(lockDelaySeconds = progress)
-                        viewModel.updateTimerSettings(newSettings)
-                    }
-                }
-                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            })
+            // Setup Lock Delay SeekBar using DRY helper
+            setupSeekBar(
+                lockDelaySeekBar,
+                lockDelayValue
+            ) { progress ->
+                val currentSettings = viewModel.uiState.value?.timerSettings ?: return@setupSeekBar
+                val newSettings = currentSettings.copy(lockDelaySeconds = progress)
+                viewModel.updateTimerSettings(newSettings)
+            }
 
-            // Setup Unlock Delay SeekBar
-            unlockDelaySeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser && !isUpdatingUI) {
-                        unlockDelayValue.text = progress.toString()
-                        val currentSettings = viewModel.uiState.value?.timerSettings ?: return
-                        val newSettings = currentSettings.copy(unlockDelaySeconds = progress)
-                        viewModel.updateTimerSettings(newSettings)
-                    }
-                }
-                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            })
+            // Setup Unlock Delay SeekBar using DRY helper
+            setupSeekBar(
+                unlockDelaySeekBar,
+                unlockDelayValue
+            ) { progress ->
+                val currentSettings = viewModel.uiState.value?.timerSettings ?: return@setupSeekBar
+                val newSettings = currentSettings.copy(unlockDelaySeconds = progress)
+                viewModel.updateTimerSettings(newSettings)
+            }
         }
     }
 
@@ -227,29 +205,30 @@ class MainFragment : Fragment() {
         // Set flag to prevent infinite loops
         isUpdatingUI = true
 
-        // Update Wi-Fi settings
-        with(binding.screenLockCard.wifiSettings) {
-            disableOnLockSwitch.isChecked = uiState.screenLockConfig.wifiDisableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.wifiEnableOnUnlock
-        }
+        // Update all privacy feature settings using DRY helper
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.wifiSettings,
+            uiState.screenLockConfig.wifiDisableOnLock,
+            uiState.screenLockConfig.wifiEnableOnUnlock
+        )
 
-        // Update Bluetooth settings
-        with(binding.screenLockCard.bluetoothSettings) {
-            disableOnLockSwitch.isChecked = uiState.screenLockConfig.bluetoothDisableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.bluetoothEnableOnUnlock
-        }
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.bluetoothSettings,
+            uiState.screenLockConfig.bluetoothDisableOnLock,
+            uiState.screenLockConfig.bluetoothEnableOnUnlock
+        )
 
-        // Update Mobile Data settings
-        with(binding.screenLockCard.mobileDataSettings) {
-            disableOnLockSwitch.isChecked = uiState.screenLockConfig.mobileDataDisableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.mobileDataEnableOnUnlock
-        }
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.mobileDataSettings,
+            uiState.screenLockConfig.mobileDataDisableOnLock,
+            uiState.screenLockConfig.mobileDataEnableOnUnlock
+        )
 
-        // Update Location settings
-        with(binding.screenLockCard.locationSettings) {
-            disableOnLockSwitch.isChecked = uiState.screenLockConfig.locationDisableOnLock
-            enableOnUnlockSwitch.isChecked = uiState.screenLockConfig.locationEnableOnUnlock
-        }
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.locationSettings,
+            uiState.screenLockConfig.locationDisableOnLock,
+            uiState.screenLockConfig.locationEnableOnUnlock
+        )
 
         // Clear flag
         isUpdatingUI = false
@@ -434,6 +413,32 @@ class MainFragment : Fragment() {
         }
     }
 
+    private fun updatePrivacyFeatureSetting(
+        featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
+        disableOnLock: Boolean,
+        enableOnUnlock: Boolean
+    ) {
+        featureBinding.disableOnLockSwitch.isChecked = disableOnLock
+        featureBinding.enableOnUnlockSwitch.isChecked = enableOnUnlock
+    }
+
+    private fun setupSeekBar(
+        seekBar: android.widget.SeekBar,
+        valueText: android.widget.TextView,
+        onProgressChanged: (Int) -> Unit
+    ) {
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser && !isUpdatingUI) {
+                    valueText.text = progress.toString()
+                    onProgressChanged(progress)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+    }
+
 
 
     override fun onDestroyView() {
@@ -441,3 +446,11 @@ class MainFragment : Fragment() {
         _binding = null
     }
 }
+
+// Data class for DRY feature configuration
+private data class FeatureConfig(
+    val feature: PrivacyFeature,
+    val binding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
+    val iconRes: Int,
+    val displayName: String
+)

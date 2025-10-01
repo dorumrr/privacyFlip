@@ -46,16 +46,13 @@ class BootReceiver : BroadcastReceiver() {
     private fun restartServiceIfEnabled(context: Context) {
         try {
             val preferenceManager = PreferenceManager.getInstance(context)
-            val backgroundServiceEnabled = preferenceManager.backgroundServiceEnabled
-            
-            if (backgroundServiceEnabled) {
-                Log.i(TAG, "✅ Background service was enabled - restarting PrivacyMonitorService")
-                PrivacyMonitorService.start(context)
-                Log.i(TAG, "🔄 Service restart requested after boot - will apply initial privacy state")
-            } else {
-                Log.d(TAG, "❌ Background service disabled by user - skipping restart")
-            }
-            
+            // Always ensure background service is enabled and start it
+            preferenceManager.backgroundServiceEnabled = true
+
+            Log.i(TAG, "✅ Background service always enabled - restarting PrivacyMonitorService")
+            PrivacyMonitorService.start(context)
+            Log.i(TAG, "🔄 Service restart requested after boot - will apply initial privacy state")
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restart service after boot", e)
         }

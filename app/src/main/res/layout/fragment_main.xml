@@ -100,13 +100,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp" />
 
-            <!-- Service Settings Card -->
+            <!-- Background Permission Error Card (shown only when permission missing) -->
             <include
-                android:id="@+id/serviceCard"
-                layout="@layout/card_service_settings"
+                android:id="@+id/backgroundPermissionErrorCard"
+                layout="@layout/card_background_permission_error"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
+                android:visibility="gone" />
 
         </LinearLayout>
 
@@ -125,7 +125,7 @@
             layout="@layout/credits_footer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="0dp" />
 
     </LinearLayout>
 

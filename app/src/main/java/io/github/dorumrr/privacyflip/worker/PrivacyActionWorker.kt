@@ -69,7 +69,14 @@ class PrivacyActionWorker(
             val privacyManager = PrivacyManager.getInstance(applicationContext)
             val preferenceManager = PreferenceManager.getInstance(applicationContext)
             val configManager = FeatureConfigurationManager(preferenceManager)
-            
+
+            // Check if global privacy is enabled - if not, skip all privacy actions
+            val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
+            if (!isGlobalPrivacyEnabled) {
+                Log.i(TAG, "🚫 Global privacy is disabled - skipping all privacy actions")
+                return Result.success()
+            }
+
             if (isLocking) {
                 val featuresToDisable = configManager.getFeaturesToDisableOnLock()
 

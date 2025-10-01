@@ -22,12 +22,8 @@ class ServiceHealthWorker(
             Log.d(TAG, "Checking service health...")
 
             val preferenceManager = PreferenceManager.getInstance(applicationContext)
-            val backgroundServiceEnabled = preferenceManager.backgroundServiceEnabled
-
-            if (!backgroundServiceEnabled) {
-                Log.d(TAG, "Background service disabled by user, skipping health check")
-                return Result.success()
-            }
+            // Always ensure background service is enabled
+            preferenceManager.backgroundServiceEnabled = true
 
             val isServiceRunning = isServiceRunning(PrivacyMonitorService::class.java.name)
 

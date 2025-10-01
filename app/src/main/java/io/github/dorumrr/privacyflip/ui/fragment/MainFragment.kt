@@ -60,7 +60,7 @@ class MainFragment : Fragment() {
         // Setup privacy feature cards
         setupScreenLockCard()
         setupTimerCard()
-        setupServiceCard()
+        setupBackgroundPermissionErrorCard()
         setupGlobalPrivacyCard()
         setupSystemRequirementsCard()
     }
@@ -117,10 +117,7 @@ class MainFragment : Fragment() {
                 viewModel.requestRootPermission()
             }
 
-            // Background service permission button
-            grantBackgroundServiceButton.setOnClickListener {
-                requestBackgroundServicePermission()
-            }
+
 
             // Battery optimization button
             batteryOptimizationButton.setOnClickListener {
@@ -133,9 +130,9 @@ class MainFragment : Fragment() {
 
 
 
-    private fun setupServiceCard() {
-        binding.serviceCard.backgroundServiceSwitch.setOnCheckedChangeListener { _, isChecked ->
-            viewModel.toggleBackgroundService(isChecked)
+    private fun setupBackgroundPermissionErrorCard() {
+        binding.backgroundPermissionErrorCard.grantBackgroundPermissionButton.setOnClickListener {
+            requestBackgroundServicePermission()
         }
     }
 
@@ -212,7 +209,7 @@ class MainFragment : Fragment() {
         // Update card states
         updateGlobalPrivacyCard(uiState)
         updateSystemRequirementsCard(uiState)
-        updateServiceCard(uiState)
+        updateBackgroundPermissionErrorCard(uiState)
     }
 
 
@@ -302,12 +299,12 @@ class MainFragment : Fragment() {
 
     private fun requestBackgroundServicePermission() {
         try {
-            // This will trigger the background service permission dialog
-            // The actual permission is handled automatically when the service starts
-            viewModel.toggleBackgroundService(true)
-            android.widget.Toast.makeText(requireContext(), "Background service permission requested", android.widget.Toast.LENGTH_SHORT).show()
+            // Open Android settings for background app restrictions
+            val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            startActivity(intent)
+            android.widget.Toast.makeText(requireContext(), "Please allow Privacy Flip to run in background", android.widget.Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            android.widget.Toast.makeText(requireContext(), "Unable to request background service permission", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(requireContext(), "Unable to open background settings", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -377,9 +374,7 @@ class MainFragment : Fragment() {
                 // Always show root actions when root is not granted
                 rootActionsContainer.visibility = View.VISIBLE
 
-                // Hide background service section when root is the main issue
-                backgroundServiceStatusText.text = "Requires root access first"
-                backgroundServiceActionsContainer.visibility = View.GONE
+
 
             } else {
                 // Root granted - show normal status
@@ -390,20 +385,6 @@ class MainFragment : Fragment() {
 
                 // Hide root actions when granted
                 rootActionsContainer.visibility = View.GONE
-
-                // Update background service status
-                backgroundServiceStatusText.text = if (uiState.backgroundServicePermissionGranted) {
-                    "Permission granted"
-                } else {
-                    "Permission required"
-                }
-                backgroundServiceStatusIcon.setImageResource(
-                    if (uiState.backgroundServicePermissionGranted) R.drawable.ic_check_circle else R.drawable.ic_error
-                )
-
-                // Show/hide background service actions
-                backgroundServiceActionsContainer.visibility =
-                    if (uiState.backgroundServicePermissionGranted) View.GONE else View.VISIBLE
             }
         }
     }
@@ -429,15 +410,10 @@ class MainFragment : Fragment() {
 
 
 
-    private fun updateServiceCard(uiState: UiState) {
-        with(binding.serviceCard) {
-            backgroundServiceSwitch.isChecked = uiState.backgroundServiceEnabled
-            serviceStatusText.text = if (uiState.backgroundServiceEnabled) {
-                "Service status: Running"
-            } else {
-                "Service status: Stopped"
-            }
-        }
+    private fun updateBackgroundPermissionErrorCard(uiState: UiState) {
+        // Show error card only when root is granted but background service permission is missing
+        val shouldShowError = uiState.isRootGranted && !uiState.backgroundServicePermissionGranted
+        binding.backgroundPermissionErrorCard.root.visibility = if (shouldShowError) View.VISIBLE else View.GONE
     }
 
     // DRY Helper Functions

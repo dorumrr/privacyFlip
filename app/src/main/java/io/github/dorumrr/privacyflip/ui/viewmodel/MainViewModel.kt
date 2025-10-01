@@ -90,7 +90,7 @@ class MainViewModel : ViewModel() {
 
         loadServiceSettings()
 
-        startBackgroundServiceIfEnabled(context)
+        startBackgroundServiceIfEnabled()
 
         checkRootStatus()
 
@@ -395,15 +395,17 @@ class MainViewModel : ViewModel() {
 
     private fun loadServiceSettings() {
         handleError("loading service settings") {
+            // Always ensure background service is enabled
+            preferenceManager.backgroundServiceEnabled = true
             val isServiceRunning = isBackgroundServiceRunning()
             updateUiState {
                 it.copy(
-                    backgroundServiceEnabled = preferenceManager.backgroundServiceEnabled,
+                    backgroundServiceEnabled = true,
                     backgroundServicePermissionGranted = isServiceRunning
                 )
             }
 
-            logConfigLoaded("Service settings", "backgroundService=${preferenceManager.backgroundServiceEnabled}, running=$isServiceRunning")
+            logConfigLoaded("Service settings", "backgroundService=true (always enabled), running=$isServiceRunning")
         }
     }
 
@@ -419,18 +421,11 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun startBackgroundServiceIfEnabled(context: Context) {
-        val currentState = _uiState.value ?: UiState()
-        if (currentState.backgroundServiceEnabled) {
-            try {
-                PrivacyMonitorService.start(context)
-                logManager.i(TAG, "Background service started")
-
-                scheduleServiceHealthCheck(context)
-
-            } catch (e: Exception) {
-                logManager.e(TAG, "Failed to start background service: ${e.message}")
-            }
+    private fun startBackgroundServiceIfEnabled() {
+        try {
+            ensureBackgroundServiceRunning()
+        } catch (e: Exception) {
+            logManager.e(TAG, "Failed to ensure background service running: ${e.message}")
         }
     }
 
@@ -470,41 +465,29 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun toggleBackgroundService(enabled: Boolean) {
+    private fun ensureBackgroundServiceRunning() {
         val context = this.context ?: return
 
-        preferenceManager.backgroundServiceEnabled = enabled
+        // Always ensure background service is enabled and running
+        preferenceManager.backgroundServiceEnabled = true
 
-        if (enabled) {
-            PrivacyMonitorService.start(context)
-            scheduleServiceHealthCheck(context)
-            logManager.i(TAG, "Background service started with health checks")
+        PrivacyMonitorService.start(context)
+        scheduleServiceHealthCheck(context)
+        logManager.i(TAG, "Background service ensured running with health checks")
 
-            // Check if service is actually running after start attempt
-            viewModelScope.launch {
-                delay(1000) // Give service time to start
-                val isRunning = isBackgroundServiceRunning()
-                updateUiState {
-                    it.copy(
-                        backgroundServiceEnabled = enabled,
-                        backgroundServicePermissionGranted = isRunning
-                    )
-                }
-            }
-        } else {
-            PrivacyMonitorService.stop(context)
-            WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
-            logManager.i(TAG, "Background service stopped and health checks cancelled")
-
+        // Check if service is actually running after start attempt
+        viewModelScope.launch {
+            delay(1000) // Give service time to start
+            val isRunning = isBackgroundServiceRunning()
             updateUiState {
                 it.copy(
-                    backgroundServiceEnabled = enabled,
-                    backgroundServicePermissionGranted = false
+                    backgroundServiceEnabled = true,
+                    backgroundServicePermissionGranted = isRunning
                 )
             }
         }
 
-        logManager.d(TAG, "Background service toggled: $enabled")
+        logManager.d(TAG, "Background service ensured running")
     }
 
 

@@ -1,4 +1,4 @@
-Version 1.0.1 - Icon Fix
+Version 1.0.1 - Improvements and fixes
 
 • Service persistence
 • Removed PanicMode

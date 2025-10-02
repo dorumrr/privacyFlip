@@ -1,4 +1,4 @@
-Version 1.0.2 - Maintenance Release
+Version 1.0.2 - Major refactor and performance improvements
 
 • Background service as always on
 • Refactor code structure

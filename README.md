@@ -4,7 +4,18 @@
 
 PrivacyFlip automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. When you unlock, it intelligently restores the features you want back on.
 
-[![F-Droid](https://img.shields.io/badge/F--Droid-Submitted-orange)](https://f-droid.org)
+<center>
+
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+     alt="Get it on F-Droid"
+     height="80">](https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/)
+
+</center>
+
+
+> 🎉 **Now available on F-Droid!** Get it from the official repository with automatic updates and verified builds.
+
+[![F-Droid](https://img.shields.io/badge/F--Droid-Available-brightgreen)](https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/)
 [![Android](https://img.shields.io/badge/Android-5.0%2B-blue)](https://developer.android.com)
 [![Root Required](https://img.shields.io/badge/Root-Required-red)](https://en.wikipedia.org/wiki/Rooting_(Android))
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
@@ -57,16 +68,24 @@ PrivacyFlip automatically manages your device's privacy features based on lock/u
 
 ## 🚀 Installation
 
-### From F-Droid (Recommended - Under Review)
-PrivacyFlip has been submitted to F-Droid with complete metadata and is under review:
+### From F-Droid (Recommended) ✅
+PrivacyFlip is now available on F-Droid!
+
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+     alt="Get it on F-Droid"
+     height="80">](https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/)
 
 1. Install [F-Droid](https://f-droid.org/) if you haven't already
-2. Search for "PrivacyFlip" in F-Droid (once approved)
-3. Install directly from F-Droid for automatic updates
+2. Search for "PrivacyFlip" in F-Droid or [open directly](https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/)
+3. Install and enjoy automatic updates
 
-**Status**: RFP (Request for Packaging) submitted with full compliance verification
+**Benefits of F-Droid:**
+- ✅ Automatic updates
+- ✅ Verified builds from source
+- ✅ No tracking or analytics
+- ✅ 100% FOSS (Free and Open Source Software)
 
-### Manual Installation
+### Manual Installation (Alternative)
 1. Download the latest APK from [Releases](https://github.com/dorumrr/privacyflip/releases)
 2. Enable "Unknown sources" in Android settings
 3. Install the APK
@@ -158,18 +177,16 @@ This project is licensed under the GNU General Public License v3.0
 
 ## 👨‍💻 Author
 
-[Doru Moraru](https://github.com/dorumrr/privacyflip)
+Giving Privacy its due, by [Doru Moraru](https://github.com/dorumrr/privacyflip)
 
 ## 🙏 Acknowledgments
 
 - Degoogled Android community for inspiration and feedback
 - [libsu](https://github.com/topjohnwu/libsu) - Reliable root access library
-- Pure Android Views - No Google dependencies for F-Droid compliance
+- Pure Android Views - No Google dependencies
 - F-Droid community for privacy-focused app distribution
 
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/dorumrr/privacyflip/issues)
-<!-- NOT YET PUBLISHED
-**F-Droid**: [App Page](https://f-droid.org/packages/io.github.dorumrr.privacyflip)
--->
+- **F-Droid**: [App Page](https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/)

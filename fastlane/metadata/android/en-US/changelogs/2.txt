@@ -1,0 +1,7 @@
+Version 1.0.1 - Icon Fix
+
+• Service persistence
+• Removed PanicMode
+• Adjusted defaults for lock and unlock delays.
+• Updated UI strings and colors for consistency.
+• Bug fixes and stability improvements

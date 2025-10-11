@@ -1,0 +1,6 @@
+Version 1.0.3 - Dark theme support and improvements
+
+• Full dark theme support - automatically adapts to system settings
+• Fixed all hardcoded colors for consistent theming
+• Improved visual consistency across light and dark modes
+• [More changes to be added]

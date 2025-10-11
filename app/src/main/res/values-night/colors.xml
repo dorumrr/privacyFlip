@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pure Android colors - NO GOOGLE MATERIAL DESIGN -->
+    <!-- Dark theme colors -->
+
+    <!-- Primary colors (same as light theme) -->
+    <color name="trust_blue">#FF1976D2</color>          <!-- Primary Blue -->
+    <color name="trust_blue_dark">#FF1565C0</color>     <!-- Darker Blue -->
+    <color name="trust_blue_light">#FF42A5F5</color>    <!-- Lighter Blue -->
+
+    <!-- Background colors (dark theme) -->
+    <color name="background_light">#FF121212</color>    <!-- Dark background -->
+    <color name="background_card">#FF1E1E1E</color>     <!-- Dark gray card -->
+    <color name="background_error">#FF3E1A1A</color>    <!-- Dark red error -->
+
+    <!-- Text colors (dark theme) -->
+    <color name="text_primary">#FFFFFFFF</color>        <!-- White primary text -->
+    <color name="text_secondary">#FFB0B0B0</color>      <!-- Light gray secondary text -->
+    <color name="text_hint">#FF6E6E6E</color>           <!-- Medium gray hint text -->
+
+    <!-- State colors (same as light theme) -->
+    <color name="success_green">#FF4CAF50</color>       <!-- Success green -->
+    <color name="error_red">#FFF44336</color>           <!-- Error red -->
+    <color name="warning_orange">#FFFF9800</color>      <!-- Warning orange -->
+
+    <!-- App specific -->
+    <color name="icon_white">#FFFFFFFF</color>          <!-- Pure white icons -->
+    <color name="icon_tint">#FFFFFFFF</color>           <!-- Icon tint (dark theme) -->
+
+    <!-- Divider and borders (dark theme) -->
+    <color name="divider_color">#FF3E3E3E</color>       <!-- Dark gray divider -->
+    <color name="border_color">#FF4E4E4E</color>        <!-- Dark border color -->
+
+    <!-- Donate button (adjusted for dark theme) -->
+    <color name="donate_button_bg">#FFD700</color>      <!-- Gold background (same) -->
+    <color name="donate_button_text">#FF000000</color>  <!-- Black text (same - good contrast) -->
+
+    <!-- Widget colors (dark theme) -->
+    <color name="widget_background">#80FFFFFF</color>   <!-- Semi-transparent white -->
+    <color name="widget_stroke">#40000000</color>       <!-- Semi-transparent black -->
+</resources>
+

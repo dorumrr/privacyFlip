@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Pure Android theme - NO GOOGLE DEPENDENCIES -->
-    <style name="Theme.PrivacyFlip" parent="Theme.AppCompat.Light.NoActionBar">
+    <!-- DayNight theme automatically switches between light and dark based on system settings -->
+    <style name="Theme.PrivacyFlip" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Pure Android colors -->
         <item name="android:colorPrimary">@color/trust_blue</item>
         <item name="android:colorPrimaryDark">@color/trust_blue_dark</item>
@@ -9,5 +10,10 @@
         <item name="android:windowBackground">@color/background_light</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
+
+        <!-- AppCompat color attributes for better compatibility -->
+        <item name="colorPrimary">@color/trust_blue</item>
+        <item name="colorPrimaryDark">@color/trust_blue_dark</item>
+        <item name="colorAccent">@color/trust_blue</item>
     </style>
 </resources>

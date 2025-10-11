@@ -1,6 +1,5 @@
-Version 1.0.3 - Dark theme support and improvements
+Version 1.0.3 - Android 15 compatibility and Dark theme support
 
-• Full dark theme support - automatically adapts to system settings
-• Fixed all hardcoded colors for consistent theming
-• Improved visual consistency across light and dark modes
+• Full Android 15 (API 35) support
+• Dark theme support, automatically adapts to system settings
 • [More changes to be added]

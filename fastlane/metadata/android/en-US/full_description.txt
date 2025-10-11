@@ -1,4 +1,4 @@
-Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. When you unlock, it intelligently restores the features you want back on.
+Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, location services, and NFC. When you unlock, it intelligently restores the features you want back on.
 
 <b>Features:</b>
 • Manage your device privacy based on lock/unlock state

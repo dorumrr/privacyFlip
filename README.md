@@ -2,7 +2,7 @@
 
 **Automatic lock/unlock privacy control for rooted Android devices 🔐📱✨**
 
-PrivacyFlip automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, and location services. When you unlock, it intelligently restores the features you want back on.
+PrivacyFlip automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, location services, and NFC. When you unlock, it intelligently restores the features you want back on.
 
 <center>
 
@@ -39,6 +39,7 @@ PrivacyFlip automatically manages your device's privacy features based on lock/u
 - 📱 **Bluetooth** - Control Bluetooth radio
 - 📡 **Mobile data** - Manage cellular data connection
 - 📍 **Location services** - Control GPS and location tracking
+- 📳 **NFC** - Control Near Field Communication sensor
 
 ### **Customizable Timing**
 - **Lock Delay**: 0-60 seconds before privacy actions trigger

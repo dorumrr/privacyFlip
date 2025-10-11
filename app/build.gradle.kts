@@ -11,7 +11,7 @@ android {
         applicationId = "io.github.dorumrr.privacyflip"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6
+        versionCode = 4
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

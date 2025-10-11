@@ -2,7 +2,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 
 <b>Features:</b>
 • Manage your device privacy based on lock/unlock state
-• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location)
+• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC)
 • Customizable timing delays (0-60 seconds for both lock and unlock)
 • Background service for persistent monitoring
 • Quick Settings tile integration
@@ -14,6 +14,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Bluetooth - Control Bluetooth radio
 • Mobile data - Manage cellular data connection
 • Location services - Control GPS and location tracking
+• NFC - Control NFC sensor
 
 <b>Requirements:</b>
 • Root access (Magisk, SuperSU, or similar)

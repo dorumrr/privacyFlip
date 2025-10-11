@@ -7,11 +7,12 @@ enum class PrivacyFeature(
     WIFI("WiFi", "Wireless network connectivity"),
     BLUETOOTH("Bluetooth", "Short-range wireless connectivity"),
     MOBILE_DATA("Mobile Data", "Cellular data connectivity"),
-    LOCATION("Location Services", "GPS and location tracking");
+    LOCATION("Location Services", "GPS and location tracking"),
+    NFC("NFC", "Near Field Communication");
 
     companion object {
         fun getConnectivityFeatures(): List<PrivacyFeature> {
-            return listOf(WIFI, BLUETOOTH, MOBILE_DATA, LOCATION)
+            return listOf(WIFI, BLUETOOTH, MOBILE_DATA, LOCATION, NFC)
         }
     }
 }
@@ -20,6 +21,7 @@ enum class FeatureState {
     ENABLED,
     DISABLED,
     UNKNOWN,
+    UNAVAILABLE,
     ERROR
 }
 

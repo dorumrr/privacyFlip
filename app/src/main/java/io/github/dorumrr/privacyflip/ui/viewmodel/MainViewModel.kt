@@ -512,6 +512,11 @@ class MainViewModel : ViewModel() {
             { it.locationDisableOnLock }, { it.locationEnableOnUnlock })
     }
 
+    fun updateNFCSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.NFC, disableOnLock, enableOnUnlock,
+            { it.nfcDisableOnLock }, { it.nfcEnableOnUnlock })
+    }
+
     // Generic method for updating any feature setting
     fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
         when (feature) {
@@ -519,6 +524,7 @@ class MainViewModel : ViewModel() {
             PrivacyFeature.BLUETOOTH -> updateBluetoothSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.MOBILE_DATA -> updateMobileDataSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.LOCATION -> updateLocationSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.NFC -> updateNFCSettings(disableOnLock, enableOnUnlock)
         }
     }
 
@@ -539,9 +545,10 @@ data class ScreenLockConfig(
     val mobileDataDisableOnLock: Boolean = Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK,
     val mobileDataEnableOnUnlock: Boolean = Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK,
     val locationDisableOnLock: Boolean = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
-    val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
+    val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK,
+    val nfcDisableOnLock: Boolean = Constants.Defaults.NFC_DISABLE_ON_LOCK,
+    val nfcEnableOnUnlock: Boolean = Constants.Defaults.NFC_ENABLE_ON_UNLOCK
 ) {
-    // DRY extension function to update any feature
     fun updateFeature(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean): ScreenLockConfig {
         return when (feature) {
             PrivacyFeature.WIFI -> copy(
@@ -560,11 +567,14 @@ data class ScreenLockConfig(
                 locationDisableOnLock = disableOnLock,
                 locationEnableOnUnlock = enableOnUnlock
             )
+            PrivacyFeature.NFC -> copy(
+                nfcDisableOnLock = disableOnLock,
+                nfcEnableOnUnlock = enableOnUnlock
+            )
         }
     }
 }
 
-// Traditional Views UiState
 data class UiState(
     val isLoading: Boolean = false,
     val isRootAvailable: Boolean = false,

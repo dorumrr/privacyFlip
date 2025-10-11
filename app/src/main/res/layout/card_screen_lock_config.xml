@@ -96,6 +96,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/divider_color" />
+
+        <!-- NFC Settings -->
+        <include
+            android:id="@+id/nfcSettings"
+            layout="@layout/privacy_feature_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
     </LinearLayout>
 
 </androidx.cardview.widget.CardView>

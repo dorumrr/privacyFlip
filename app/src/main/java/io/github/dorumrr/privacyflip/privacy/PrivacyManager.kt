@@ -32,6 +32,7 @@ class PrivacyManager private constructor(
         toggles[PrivacyFeature.BLUETOOTH] = BluetoothToggle(rootManager)
         toggles[PrivacyFeature.MOBILE_DATA] = MobileDataToggle(rootManager)
         toggles[PrivacyFeature.LOCATION] = LocationToggle(rootManager)
+        toggles[PrivacyFeature.NFC] = NFCToggle(rootManager, context)
     }
     
     fun getAvailableToggles(): Map<PrivacyFeature, PrivacyToggle> {

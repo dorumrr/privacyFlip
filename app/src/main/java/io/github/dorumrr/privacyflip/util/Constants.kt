@@ -33,17 +33,17 @@ object Constants {
 
         const val BACKGROUND_SERVICE_ENABLED = true
 
-        // On Lock: Disable all privacy features for maximum privacy
         const val WIFI_DISABLE_ON_LOCK = true
         const val BLUETOOTH_DISABLE_ON_LOCK = true
         const val LOCATION_DISABLE_ON_LOCK = true
         const val MOBILE_DATA_DISABLE_ON_LOCK = true
+        const val NFC_DISABLE_ON_LOCK = true
 
-        // On Unlock: Enable essential connectivity, keep Bluetooth and Location disabled for privacy
         const val WIFI_ENABLE_ON_UNLOCK = true
         const val BLUETOOTH_ENABLE_ON_UNLOCK = false
         const val LOCATION_ENABLE_ON_UNLOCK = false
         const val MOBILE_DATA_ENABLE_ON_UNLOCK = true
+        const val NFC_ENABLE_ON_UNLOCK = false
     }
 
     object Logging {

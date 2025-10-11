@@ -68,12 +68,12 @@ class MainFragment : Fragment() {
 
     private fun setupScreenLockCard() {
         with(binding.screenLockCard) {
-            // Setup all privacy features using data-driven approach
             val featureConfigs = listOf(
                 FeatureConfig(PrivacyFeature.WIFI, wifiSettings, R.drawable.ic_wifi, "Wi-Fi"),
                 FeatureConfig(PrivacyFeature.BLUETOOTH, bluetoothSettings, R.drawable.ic_bluetooth, "Bluetooth"),
                 FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
-                FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location")
+                FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location"),
+                FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC")
             )
 
             featureConfigs.forEach { config ->
@@ -228,6 +228,12 @@ class MainFragment : Fragment() {
             binding.screenLockCard.locationSettings,
             uiState.screenLockConfig.locationDisableOnLock,
             uiState.screenLockConfig.locationEnableOnUnlock
+        )
+
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.nfcSettings,
+            uiState.screenLockConfig.nfcDisableOnLock,
+            uiState.screenLockConfig.nfcEnableOnUnlock
         )
 
         // Clear flag

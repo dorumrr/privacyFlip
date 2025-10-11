@@ -23,8 +23,8 @@ PrivacyFlip automatically manages your device's privacy features based on lock/u
 [![Dependencies](https://img.shields.io/badge/Google%20Dependencies-Zero-brightgreen)](https://f-droid.org/docs/Anti-Features/)
 
 <div align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="PrivacyFlip Main Screen - Traditional Android Views UI" width="300" style="margin: 10px; border: 1px solid #222222"/>
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="PrivacyFlip Configuration - Privacy Settings" width="300" style="margin: 10px; border: 1px solid #222222"/>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="PrivacyFlip by Doru Moraru" width="300" style="margin: 10px; border: 1px solid #222222"/>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="PrivacyFlip by Doru Moraru" width="300" style="margin: 10px; border: 1px solid #222222"/>
 </div>
 
 ## 🔒 Features

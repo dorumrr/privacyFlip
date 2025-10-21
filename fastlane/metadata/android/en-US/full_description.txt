@@ -1,6 +1,7 @@
 Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, location services, and NFC. When you unlock, it intelligently restores the features you want back on.
 
 <b>Features:</b>
+
 • Manage your device privacy based on lock/unlock state
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC)
 • Customizable timing delays (0-60 seconds for both lock and unlock)
@@ -10,6 +11,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Comprehensive logging and debugging
 
 <b>Privacy Features Controlled:</b>
+
 • Wi-Fi - Disable/enable wireless connectivity
 • Bluetooth - Control Bluetooth radio
 • Mobile data - Manage cellular data connection
@@ -17,28 +19,33 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • NFC - Control NFC sensor
 
 <b>Requirements:</b>
+
 • Root access (Magisk, SuperSU, or similar)
 • Android 5.0+ (API level 21)
 
 The app requires root permissions to control system-level privacy features. All privacy actions are performed locally on the device with no data transmission.
 
 <b>Privacy & Security:</b>
+
 • Zero telemetry - No data sent to external servers
 • Local storage only - All settings stored on device
 • No network permissions - App cannot access internet
 • Open source - Full code transparency
 
 <b>Usage:</b>
+
 1. Open PrivacyFlip and grant root permissions
 2. Configure your preferred privacy settings
 3. Set lock/unlock delays if desired
 4. The app works automatically in the background
 
 Once configured, PrivacyFlip works automatically:
+
 • Lock your device → Selected features will be disabled
 • Unlock your device → Selected features will be restored
 
 <b>F-Droid Compliance:</b>
+
 • Zero Google dependencies - Pure AndroidX implementation
 • No tracking or telemetry - Complete privacy focus
 • Traditional Android Views - No Material Design dependencies

@@ -1,0 +1,6 @@
+Version 1.2.0 - UI fixes and performance improvements
+
+• Fixed status bar overlap issue on non-rooted devices
+• Added proper dark mode support for status bar
+• Improved service reliability with better state tracking
+• Removed deprecated APIs for future Android compatibility

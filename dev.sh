@@ -150,11 +150,11 @@ case "${1:-menu}" in
             echo "   ✅ Found Pixel 9a AVD: $target_avd"
         fi
 
-        # Start emulator with graphics acceleration options
+        # Start emulator with graphics acceleration options (redirect output to suppress logs)
         echo "   Starting emulator..."
-        $EMULATOR_PATH -avd "$target_avd" -gpu swiftshader_indirect -no-snapshot-load &
+        $EMULATOR_PATH -avd "$target_avd" -gpu swiftshader_indirect -no-snapshot-load > /dev/null 2>&1 &
         echo "   Emulator starting in background..."
-        echo "   Wait 1-2 minutes for it to fully boot, then run: ./test_dev.sh install"
+        echo "   Wait 1-2 minutes for it to fully boot, then run: ./dev.sh install"
         ;;
     
     "install")
@@ -195,7 +195,7 @@ case "${1:-menu}" in
             fi
 
             echo "   Starting emulator: $target_avd"
-            $EMULATOR_PATH -avd "$target_avd" -gpu swiftshader_indirect -no-snapshot-load &
+            $EMULATOR_PATH -avd "$target_avd" -gpu swiftshader_indirect -no-snapshot-load > /dev/null 2>&1 &
             echo "   Waiting for emulator to boot..."
             sleep 30
         fi

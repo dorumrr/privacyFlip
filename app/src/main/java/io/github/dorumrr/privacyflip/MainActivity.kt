@@ -5,6 +5,9 @@ import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import io.github.dorumrr.privacyflip.databinding.ActivityMainBinding
@@ -30,6 +33,24 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Enable edge-to-edge display (draw behind status bar)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Handle window insets to respect safe areas (status bar, navigation bar)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+
+            // Apply padding to the root view to avoid content going behind system bars
+            view.setPadding(
+                insets.left,
+                insets.top,
+                insets.right,
+                insets.bottom
+            )
+
+            WindowInsetsCompat.CONSUMED
+        }
 
         // No ActionBar setup needed for NoActionBar theme
 

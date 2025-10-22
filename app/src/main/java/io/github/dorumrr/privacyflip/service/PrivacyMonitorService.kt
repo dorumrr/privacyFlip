@@ -28,9 +28,15 @@ import io.github.dorumrr.privacyflip.util.ScreenStateReceiverManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
 class PrivacyMonitorService : Service() {
-    
+
     companion object {
         private const val TAG = "PrivacyMonitorService"
+
+        // Track service running state
+        @Volatile
+        private var isServiceRunning = false
+
+        fun isRunning(): Boolean = isServiceRunning
 
         fun start(context: Context) {
             try {
@@ -45,7 +51,7 @@ class PrivacyMonitorService : Service() {
                 Log.e(TAG, "Failed to start service", e)
             }
         }
-        
+
         fun stop(context: Context) {
             val intent = Intent(context, PrivacyMonitorService::class.java)
             context.stopService(intent)
@@ -56,6 +62,7 @@ class PrivacyMonitorService : Service() {
     
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         Log.i(TAG, "🚀 Privacy Monitor Service created")
 
         try {
@@ -73,6 +80,7 @@ class PrivacyMonitorService : Service() {
             Log.i(TAG, "✅ Privacy Monitor Service initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to initialize Privacy Monitor Service", e)
+            isServiceRunning = false
             stopSelf()
         }
     }
@@ -84,8 +92,9 @@ class PrivacyMonitorService : Service() {
     
     override fun onDestroy() {
         super.onDestroy()
+        isServiceRunning = false
         Log.d(TAG, "Privacy Monitor Service destroyed")
-        
+
         unregisterScreenStateReceiver()
     }
     

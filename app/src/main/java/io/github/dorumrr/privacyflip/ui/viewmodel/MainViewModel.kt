@@ -393,11 +393,9 @@ class MainViewModel : ViewModel() {
     }
 
     private fun isBackgroundServiceRunning(): Boolean {
-        val context = this.context ?: return false
         return try {
-            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val services = activityManager.getRunningServices(Integer.MAX_VALUE)
-            services.any { it.service.className == "io.github.dorumrr.privacyflip.service.PrivacyMonitorService" }
+            // Use the service's own running state tracker
+            PrivacyMonitorService.isRunning()
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to check if background service is running: ${e.message}")
             false

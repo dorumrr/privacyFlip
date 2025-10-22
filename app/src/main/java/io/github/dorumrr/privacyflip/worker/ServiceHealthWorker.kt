@@ -1,6 +1,5 @@
 package io.github.dorumrr.privacyflip.worker
 
-import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
@@ -25,7 +24,7 @@ class ServiceHealthWorker(
             // Always ensure background service is enabled
             preferenceManager.backgroundServiceEnabled = true
 
-            val isServiceRunning = isServiceRunning(PrivacyMonitorService::class.java.name)
+            val isServiceRunning = isServiceRunning()
 
             if (!isServiceRunning) {
                 Log.w(TAG, "PrivacyMonitorService not running, attempting restart...")
@@ -42,15 +41,10 @@ class ServiceHealthWorker(
         }
     }
 
-    private fun isServiceRunning(serviceName: String): Boolean {
+    private fun isServiceRunning(): Boolean {
         return try {
-            val activityManager = applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            @Suppress("DEPRECATION")
-            val runningServices = activityManager.getRunningServices(Integer.MAX_VALUE)
-            
-            runningServices.any { serviceInfo ->
-                serviceInfo.service.className == serviceName
-            }
+            // Use the service's own running state tracker
+            PrivacyMonitorService.isRunning()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking if service is running", e)
             false

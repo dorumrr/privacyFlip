@@ -3,141 +3,100 @@ package io.github.dorumrr.privacyflip.root
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import io.github.dorumrr.privacyflip.privilege.PrivilegeManager
+import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.SingletonHolder
-import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
+/**
+ * RootManager - Backward compatibility wrapper around PrivilegeManager
+ * This class maintains the existing API while delegating to the new privilege abstraction layer
+ * that supports Root, Shizuku, and Sui
+ */
 class RootManager private constructor() {
 
     companion object : SingletonHolder<RootManager, Unit>({ RootManager() }) {
         private const val TAG = "RootManager"
-
-        @Volatile
-        private var isShellInitialized = false
     }
 
-    private var _isRootAvailable: Boolean? = null
-    private var _rootPermissionGranted: Boolean? = null
     private var logManager: LogManager? = null
+    private var privilegeManager: PrivilegeManager? = null
+    private var context: Context? = null
 
-    fun initialize(context: Context) {
+    suspend fun initialize(context: Context) {
+        this.context = context
         logManager = LogManager.getInstance(context)
-        synchronized(this) {
-            if (!isShellInitialized) {
-                try {
-                    Shell.enableVerboseLogging = false
-                    Shell.setDefaultBuilder(
-                        Shell.Builder.create()
-                            .setFlags(Shell.FLAG_REDIRECT_STDERR)
-                            .setTimeout(10)
-                    )
-                    isShellInitialized = true
-                } catch (e: Exception) {
-                    logManager?.w(TAG, "Shell already initialized or failed to initialize: ${e.message}")
-                    isShellInitialized = true
-                }
-            }
-        }
+
+        // Initialize the new privilege manager
+        privilegeManager = PrivilegeManager.getInstance(context)
+        val method = privilegeManager?.initialize()
+
+        logManager?.i(TAG, "Initialized with privilege method: ${method?.getDisplayName()}")
     }
-    
+
+    /**
+     * Check if any privilege method is available (Root, Shizuku, or Sui)
+     */
     suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
-        if (_isRootAvailable != null) {
-            return@withContext _isRootAvailable!!
-        }
-        
         try {
-            val suPaths = listOf(
-                "/system/bin/su",
-                "/system/xbin/su",
-                "/sbin/su",
-                "/vendor/bin/su",
-                "/system/app/Superuser.apk",
-                "/system/app/SuperSU.apk"
-            )
-
-            val rootExists = suPaths.any { File(it).exists() } || Shell.isAppGrantedRoot() == true
-            
-            _isRootAvailable = rootExists
-            
-            return@withContext rootExists
+            return@withContext privilegeManager?.isPrivilegeAvailable() ?: false
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking root availability: ${e.message}")
-            _isRootAvailable = false
+            logManager?.e(TAG, "Error checking privilege availability: ${e.message}")
             return@withContext false
         }
     }
 
+    /**
+     * Check if permission has been granted for the current privilege method
+     */
     suspend fun isRootGranted(): Boolean = withContext(Dispatchers.IO) {
-        if (_rootPermissionGranted != null) {
-            return@withContext _rootPermissionGranted!!
-        }
-
         try {
-            val hasRoot = Shell.isAppGrantedRoot() == true
-            _rootPermissionGranted = hasRoot
-            logManager?.d(TAG, "Root permission check (no dialog): granted=$hasRoot")
-            return@withContext hasRoot
+            return@withContext privilegeManager?.isPermissionGranted() ?: false
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking root permission: ${e.message}")
-            _rootPermissionGranted = false
+            logManager?.e(TAG, "Error checking permission: ${e.message}")
             return@withContext false
         }
     }
 
+    /**
+     * Request permission from the user for the current privilege method
+     */
     suspend fun requestRootPermission(): Boolean = withContext(Dispatchers.IO) {
-        if (_rootPermissionGranted == true) {
-            return@withContext true
-        }
-
         try {
-            val testResult = Shell.cmd("echo 'Root permission test'").exec()
-
-            val hasRoot = Shell.getShell().isRoot
-
-            val granted = hasRoot && testResult.isSuccess
-            _rootPermissionGranted = granted
-
+            val granted = privilegeManager?.requestPermission() ?: false
             if (!granted) {
-                logManager?.w(TAG, "Root permission denied or test command failed")
+                logManager?.w(TAG, "Permission denied")
             }
-
             return@withContext granted
         } catch (e: Exception) {
-            Log.e(TAG, "Error requesting root permission", e)
-            _rootPermissionGranted = false
+            Log.e(TAG, "Error requesting permission", e)
             return@withContext false
         }
     }
-    
+
+    /**
+     * Execute a single command with the current privilege method
+     */
     suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         try {
-            if (!isRootPermissionGranted()) {
+            val result = privilegeManager?.executeCommand(command)
+            if (result != null) {
+                // Convert privilege.CommandResult to root.CommandResult
                 return@withContext CommandResult(
-                    success = false,
-                    output = emptyList(),
-                    error = "Root permission not granted"
+                    success = result.success,
+                    output = result.output,
+                    error = result.error,
+                    exitCode = result.exitCode
                 )
             }
-            
-            logManager?.d(TAG, "Executing command: $command")
-            val result = Shell.cmd(command).exec()
 
-            val commandResult = CommandResult(
-                success = result.isSuccess,
-                output = result.out,
-                error = if (result.err.isNotEmpty()) result.err.joinToString("\n") else null,
-                exitCode = result.code
+            return@withContext CommandResult(
+                success = false,
+                output = emptyList(),
+                error = "Privilege manager not initialized"
             )
-
-            logManager?.d(TAG, "Command result: success=${commandResult.success}, exitCode=${commandResult.exitCode}")
-            if (!commandResult.success) {
-                logManager?.w(TAG, "Command failed: ${commandResult.error}")
-            }
-            
-            return@withContext commandResult
         } catch (e: Exception) {
             Log.e(TAG, "Error executing command: $command", e)
             return@withContext CommandResult(
@@ -147,53 +106,75 @@ class RootManager private constructor() {
             )
         }
     }
-    
+
+    /**
+     * Execute multiple commands sequentially
+     */
     suspend fun executeCommands(commands: List<String>): List<CommandResult> = withContext(Dispatchers.IO) {
         commands.map { executeCommand(it) }
     }
-    
+
+    /**
+     * Execute commands with fallback support - tries each command until one succeeds
+     */
     suspend fun executeWithFallbacks(commands: List<String>): CommandResult = withContext(Dispatchers.IO) {
-        for (command in commands) {
-            val result = executeCommand(command)
-            if (result.success) {
-                return@withContext result
-            }
-        }
-        
-        return@withContext CommandResult(
-            success = false,
-            output = emptyList(),
-            error = "All fallback commands failed"
-        )
-    }
-    
-    fun isRootPermissionGranted(): Boolean {
-        return _rootPermissionGranted == true
-    }
-
-    suspend fun forceRootPermissionRequest(): Boolean = withContext(Dispatchers.IO) {
-        _rootPermissionGranted = null
-
         try {
-            val testResult = Shell.cmd("id").exec()
-
-            val hasRoot = Shell.getShell().isRoot
-
-            val granted = hasRoot && testResult.isSuccess
-            _rootPermissionGranted = granted
-
-            if (!testResult.isSuccess) {
-                Log.w(TAG, "Test command failed: ${testResult.err.joinToString()}")
+            val result = privilegeManager?.executeWithFallbacks(commands)
+            if (result != null) {
+                // Convert privilege.CommandResult to root.CommandResult
+                return@withContext CommandResult(
+                    success = result.success,
+                    output = result.output,
+                    error = result.error,
+                    exitCode = result.exitCode
+                )
             }
 
-            return@withContext granted
+            return@withContext CommandResult(
+                success = false,
+                output = emptyList(),
+                error = "Privilege manager not initialized"
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Error in force root permission request", e)
-            _rootPermissionGranted = false
+            Log.e(TAG, "Error executing commands with fallbacks", e)
+            return@withContext CommandResult(
+                success = false,
+                output = emptyList(),
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * Force re-request of permission
+     */
+    suspend fun forceRootPermissionRequest(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            return@withContext privilegeManager?.requestPermission() ?: false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in force permission request", e)
             return@withContext false
         }
     }
-    
+
+    /**
+     * Get the current privilege method being used
+     */
+    fun getPrivilegeMethod(): PrivilegeMethod {
+        return privilegeManager?.getCurrentMethod() ?: PrivilegeMethod.NONE
+    }
+
+    /**
+     * Force re-detection of privilege method
+     * Useful after user installs Shizuku or roots device
+     */
+    suspend fun redetectPrivilegeMethod(): PrivilegeMethod {
+        return privilegeManager?.redetectPrivilegeMethod() ?: PrivilegeMethod.NONE
+    }
+
+    /**
+     * Get device information
+     */
     fun getDeviceInfo(): DeviceInfo {
         return DeviceInfo(
             apiLevel = Build.VERSION.SDK_INT,
@@ -202,10 +183,12 @@ class RootManager private constructor() {
             buildId = Build.ID
         )
     }
-    
-
 }
 
+/**
+ * Result of executing a command
+ * Kept for backward compatibility - delegates to privilege.CommandResult
+ */
 data class CommandResult(
     val success: Boolean,
     val output: List<String>,
@@ -213,6 +196,9 @@ data class CommandResult(
     val exitCode: Int = -1
 )
 
+/**
+ * Device information
+ */
 data class DeviceInfo(
     val apiLevel: Int,
     val manufacturer: String,

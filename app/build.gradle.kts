@@ -49,6 +49,21 @@ android {
         }
     }
 
+    // Build variants for testing Shizuku without actual installation
+    flavorDimensions += "shizuku"
+    productFlavors {
+        create("real") {
+            dimension = "shizuku"
+            // Uses real Shizuku API
+        }
+        create("mock") {
+            dimension = "shizuku"
+            // Uses mock Shizuku implementation for testing
+            applicationIdSuffix = ".mock"
+            versionNameSuffix = "-mock"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -126,6 +141,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
 
+    // Root access library
     implementation("com.github.topjohnwu.libsu:core:5.0.4")
     implementation("com.github.topjohnwu.libsu:service:5.0.4")
-    }
+
+    // Shizuku API (only for 'real' flavor)
+    "realImplementation"("dev.rikka.shizuku:api:13.1.5")
+    "realImplementation"("dev.rikka.shizuku:provider:13.1.5")
+}

@@ -10,6 +10,7 @@ import io.github.dorumrr.privacyflip.data.*
 
 import io.github.dorumrr.privacyflip.permission.PermissionChecker
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
+import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.Constants
@@ -75,12 +76,18 @@ class MainViewModel : ViewModel() {
         }
 
         this.context = context
-        rootManager.initialize(context)
         privacyManager = PrivacyManager.getInstance(context)
-
         permissionChecker = PermissionChecker(context)
         logManager = LogManager.getInstance(context)
         preferenceManager = PreferenceManager.getInstance(context)
+
+        // Initialize root manager in coroutine since it's now suspend
+        // This must complete before checkRootStatus() is called
+        viewModelScope.launch {
+            rootManager.initialize(context)
+            // After initialization, check root status
+            checkRootStatus()
+        }
 
         loadTimerSettings()
 
@@ -92,7 +99,8 @@ class MainViewModel : ViewModel() {
 
         startBackgroundServiceIfEnabled()
 
-        checkRootStatus()
+        // checkRootStatus() is now called inside the coroutine after rootManager.initialize()
+        // See line 89 above
 
         loadPermissionStatus()
 
@@ -111,10 +119,12 @@ class MainViewModel : ViewModel() {
             updateUiState { it.copy(isLoading = true) }
 
             try {
-                val isRootAvailable = rootManager.isRootAvailable()
+                // Get the privilege method (Root, Sui, Shizuku, or None)
+                val privilegeMethod = rootManager.getPrivilegeMethod()
+                val isPrivilegeAvailable = rootManager.isRootAvailable()
                 val currentState = _uiState.value ?: UiState()
 
-                val isRootGranted = if (isRootAvailable) {
+                val isPrivilegeGranted = if (isPrivilegeAvailable) {
                     val alreadyGranted = rootManager.isRootGranted()
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
                         val granted = rootManager.requestRootPermission()
@@ -129,14 +139,19 @@ class MainViewModel : ViewModel() {
 
                 updateUiState {
                     it.copy(
-                        isRootAvailable = isRootAvailable,
-                        isRootGranted = isRootGranted,
+                        isRootAvailable = isPrivilegeAvailable,
+                        isRootGranted = isPrivilegeGranted,
+                        privilegeMethod = privilegeMethod,
+                        privilegeMethodName = privilegeMethod.getDisplayName(),
+                        privilegeMethodDescription = privilegeMethod.getDescription(),
                         isLoading = false,
-                        errorMessage = if (!isRootAvailable) "Root access not available" else null
+                        errorMessage = if (!isPrivilegeAvailable) {
+                            "Root or Shizuku required - Please install Shizuku or root your device"
+                        } else null
                     )
                 }
 
-                if (isRootGranted) {
+                if (isPrivilegeGranted) {
                     loadPrivacyStatus()
                     loadPermissionStatus()
                 }
@@ -144,7 +159,7 @@ class MainViewModel : ViewModel() {
                 updateUiState {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Error checking root status: ${e.message}"
+                        errorMessage = "Error checking privilege status: ${e.message}"
                     )
                 }
             }
@@ -577,6 +592,10 @@ data class UiState(
     val isLoading: Boolean = false,
     val isRootAvailable: Boolean = false,
     val isRootGranted: Boolean = false,
+    // New: Privilege method information
+    val privilegeMethod: PrivilegeMethod = PrivilegeMethod.NONE,
+    val privilegeMethodName: String = "None",
+    val privilegeMethodDescription: String = "Root or Shizuku required",
     val featureStates: Map<PrivacyFeature, FeatureState> = emptyMap(),
     val privacyStatus: PrivacyStatus = PrivacyStatus(),
     val isGlobalPrivacyEnabled: Boolean = true,

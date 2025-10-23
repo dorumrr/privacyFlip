@@ -45,13 +45,14 @@ class PrivacyActionWorker(
                 delay(2000L)
             }
 
-            val hasRoot = rootManager.isRootPermissionGranted()
+            // Check if privilege is granted (works for Root, Shizuku, and Sui)
+            val hasPrivilege = rootManager.isRootGranted()
 
-            if (!hasRoot) {
-                Log.w(TAG, "Root permission not granted - attempting to request")
-                val rootGranted = rootManager.requestRootPermission()
-                if (!rootGranted) {
-                    Log.e(TAG, "Failed to obtain root permission - privacy actions will fail")
+            if (!hasPrivilege) {
+                Log.w(TAG, "Privilege permission not granted - attempting to request")
+                val privilegeGranted = rootManager.requestRootPermission()
+                if (!privilegeGranted) {
+                    Log.e(TAG, "Failed to obtain privilege permission - privacy actions will fail")
                     return Result.failure()
                 }
             }

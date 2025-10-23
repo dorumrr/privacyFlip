@@ -4,7 +4,10 @@
 
 **PrivacyFlip** automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, and **NFC**. When you unlock, it intelligently restores the features you want back on.
 
-<!-- <a hreh="https://apt.izzysoft.de/packages/io.github.dorumrr.de1984" target="_blank"><img height="50" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"></a> --> <a hreh="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a>
+<div>
+  <a href="https://apt.izzysoft.de/fdroid/index/apk/io.github.dorumrr.privacyflip" target="_blank" rel="noopener"><img height="50" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"></a> <a href="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank" rel="noopener"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a> <a href="https://www.buymeacoffee.com/ossdev"><img height="50" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" /></a>
+</div>
+
 
 <!-- [![SUPPORT DEVELOPMENT](https://img.shields.io/badge/SUPPORT%20DEVELOPMENT-DONATE-2E2E2E?style=for-the-badge&color=FFD700)](https://buymeacoffee.com/ossdev) -->
 

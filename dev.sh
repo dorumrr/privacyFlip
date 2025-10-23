@@ -39,19 +39,28 @@ else
     exit 1
 fi
 
-# Function to find the most recent APK (debug or release)
+# Function to find the most recent APK (debug or release, any flavor)
 find_apk() {
-    # Look for release APK first (more recent builds)
+    # Find all APKs (handles product flavors like mock/real)
+    # Prefer release over debug, and real over mock
+    REAL_RELEASE_APK=$(find app/build/outputs/apk/real/release -name "*.apk" -type f 2>/dev/null | head -1)
+    MOCK_RELEASE_APK=$(find app/build/outputs/apk/mock/release -name "*.apk" -type f 2>/dev/null | head -1)
+    REAL_DEBUG_APK=$(find app/build/outputs/apk/real/debug -name "*.apk" -type f 2>/dev/null | head -1)
+    MOCK_DEBUG_APK=$(find app/build/outputs/apk/mock/debug -name "*.apk" -type f 2>/dev/null | head -1)
+
+    # Also check for non-flavored builds (backward compatibility)
     RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
     DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f 2>/dev/null | head -1)
 
-    if [ -f "$RELEASE_APK" ] && [ -f "$DEBUG_APK" ]; then
-        # Both exist, use the newer one
-        if [ "$RELEASE_APK" -nt "$DEBUG_APK" ]; then
-            echo "$RELEASE_APK"
-        else
-            echo "$DEBUG_APK"
-        fi
+    # Priority order: real release > mock release > real debug > mock debug > release > debug
+    if [ -f "$REAL_RELEASE_APK" ]; then
+        echo "$REAL_RELEASE_APK"
+    elif [ -f "$MOCK_RELEASE_APK" ]; then
+        echo "$MOCK_RELEASE_APK"
+    elif [ -f "$REAL_DEBUG_APK" ]; then
+        echo "$REAL_DEBUG_APK"
+    elif [ -f "$MOCK_DEBUG_APK" ]; then
+        echo "$MOCK_DEBUG_APK"
     elif [ -f "$RELEASE_APK" ]; then
         echo "$RELEASE_APK"
     elif [ -f "$DEBUG_APK" ]; then

@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -62,7 +64,10 @@ class MainViewModel : ViewModel() {
     private lateinit var preferenceManager: PreferenceManager
     private var context: Context? = null
     private var isInitialized = false
-    
+
+    // Job for tracking global privacy toggle operations
+    private var globalPrivacyToggleJob: Job? = null
+
     private val _uiState = MutableLiveData(UiState())
     val uiState: LiveData<UiState> = _uiState
     
@@ -107,9 +112,16 @@ class MainViewModel : ViewModel() {
         isInitialized = true
         logManager.i(TAG, "ViewModel initialized successfully")
     }
-    
+
+    override fun onCleared() {
+        super.onCleared()
+        // Cancel any pending global privacy toggle operation to prevent memory leaks
+        globalPrivacyToggleJob?.cancel()
+        globalPrivacyToggleJob = null
+    }
+
     // Helper function to safely update UI state
-    private fun updateUiState(update: (UiState) -> UiState) {
+    fun updateUiState(update: (UiState) -> UiState) {
         val currentState = _uiState.value ?: UiState()
         _uiState.value = update(currentState)
     }
@@ -124,9 +136,13 @@ class MainViewModel : ViewModel() {
                 val isPrivilegeAvailable = rootManager.isRootAvailable()
                 val currentState = _uiState.value ?: UiState()
 
+                // Track if we attempted auto-request in this call
+                var didAttemptAutoRequest = false
+
                 val isPrivilegeGranted = if (isPrivilegeAvailable) {
                     val alreadyGranted = rootManager.isRootGranted()
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
+                        didAttemptAutoRequest = true
                         val granted = rootManager.requestRootPermission()
                         updateUiState { it.copy(hasTriedAutoRootRequest = true) }
                         granted
@@ -146,7 +162,25 @@ class MainViewModel : ViewModel() {
                         privilegeMethodDescription = privilegeMethod.getDescription(),
                         isLoading = false,
                         errorMessage = if (!isPrivilegeAvailable) {
-                            "Root or Shizuku required - Please install Shizuku or root your device"
+                            "Root or Shizuku required - Install Shizuku from Play Store (for non-rooted devices) or root your device with Magisk"
+                        } else if (isPrivilegeAvailable && !isPrivilegeGranted) {
+                            // If we just attempted auto-request and it failed, show "denied" message
+                            // Otherwise show "required" message
+                            if (didAttemptAutoRequest) {
+                                when (privilegeMethod) {
+                                    PrivilegeMethod.SHIZUKU -> "Shizuku permission denied. Click 'Grant Shizuku Permission' button to try again."
+                                    PrivilegeMethod.ROOT -> "Root permission denied. Click 'Grant Root Permission' button to try again."
+                                    PrivilegeMethod.SUI -> "Sui permission denied. Click 'Grant Sui Permission' button to try again."
+                                    PrivilegeMethod.NONE -> "No privilege method available. Please install Shizuku or root your device."
+                                }
+                            } else {
+                                when (privilegeMethod) {
+                                    PrivilegeMethod.SHIZUKU -> "Shizuku permission required. Click 'Grant Shizuku Permission' button below to request permission."
+                                    PrivilegeMethod.ROOT -> "Root permission required. Click 'Grant Root Permission' button below to request permission."
+                                    PrivilegeMethod.SUI -> "Sui permission required. Click 'Grant Sui Permission' button below to request permission."
+                                    PrivilegeMethod.NONE -> "No privilege method available. Please install Shizuku or root your device."
+                                }
+                            }
                         } else null
                     )
                 }
@@ -331,13 +365,27 @@ class MainViewModel : ViewModel() {
             updateUiState { it.copy(isLoading = true) }
 
             try {
+                val privilegeMethod = rootManager.getPrivilegeMethod()
                 val isRootGranted = rootManager.forceRootPermissionRequest()
+
+                val errorMsg = if (!isRootGranted) {
+                    when (privilegeMethod) {
+                        PrivilegeMethod.SHIZUKU ->
+                            "Shizuku permission denied. Please ensure Shizuku app is running and wireless debugging is enabled. Try again or restart Shizuku."
+                        PrivilegeMethod.ROOT ->
+                            "Root permission denied. Please grant root access when prompted by Magisk/SuperSU. If this persists, check your root manager settings."
+                        PrivilegeMethod.SUI ->
+                            "Sui permission denied. Please grant permission when prompted. If this persists, check Sui module settings in Magisk."
+                        else ->
+                            "Permission denied or failed. Please try again."
+                    }
+                } else null
 
                 updateUiState {
                     it.copy(
                         isRootGranted = isRootGranted,
                         isLoading = false,
-                        errorMessage = if (!isRootGranted) "Root permission denied or failed. If this persists, uninstall the app and install it again ensuring you grant root access when prompted." else null
+                        errorMessage = errorMsg
                     )
                 }
 
@@ -346,11 +394,11 @@ class MainViewModel : ViewModel() {
                     loadPermissionStatus()
                 }
             } catch (e: Exception) {
-                logManager.e(TAG, "Error requesting root permission: ${e.message}")
+                logManager.e(TAG, "Error requesting permission: ${e.message}")
                 updateUiState {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Error requesting root permission: ${e.message}"
+                        errorMessage = "Error requesting permission: ${e.message}"
                     )
                 }
             }
@@ -440,22 +488,35 @@ class MainViewModel : ViewModel() {
     }
 
     fun toggleGlobalPrivacy(enabled: Boolean) {
+        // Cancel any pending global privacy toggle operation
+        globalPrivacyToggleJob?.cancel()
+        globalPrivacyToggleJob = null
+
         preferenceManager.isGlobalPrivacyEnabled = enabled
 
         updateUiState { it.copy(isGlobalPrivacyEnabled = enabled) }
 
         if (!enabled) {
-            viewModelScope.launch {
+            globalPrivacyToggleJob = viewModelScope.launch {
                 try {
-                    val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
-                    privacyManager.enableFeatures(allFeatures)
+                    // Double-check preference before executing commands
+                    // (in case user toggled back while coroutine was starting)
+                    if (!preferenceManager.isGlobalPrivacyEnabled) {
+                        val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
+                        privacyManager.enableFeatures(allFeatures)
 
-                    loadPrivacyStatus()
+                        loadPrivacyStatus()
+                    }
 
+                } catch (e: CancellationException) {
+                    // Re-throw CancellationException to allow proper coroutine cancellation
+                    throw e
                 } catch (e: Exception) {
                     updateUiState {
                         it.copy(errorMessage = "Error disabling global privacy: ${e.message}")
                     }
+                } finally {
+                    globalPrivacyToggleJob = null
                 }
             }
         }

@@ -44,7 +44,7 @@ class MainFragment : Fragment() {
     private fun setupUI() {
         // Error card dismiss button
         binding.dismissErrorButton.setOnClickListener {
-            binding.errorCard.visibility = View.GONE
+            viewModel.clearError()
         }
 
 
@@ -91,7 +91,23 @@ class MainFragment : Fragment() {
     private fun setupGlobalPrivacyCard() {
         binding.globalPrivacyCard.globalPrivacySwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) {
-                viewModel.toggleGlobalPrivacy(isChecked)
+                // Check if permission is required for this action
+                val currentState = viewModel.uiState.value
+                val requiresPermission = !isChecked // Turning OFF requires permission (to enable features)
+
+                if (requiresPermission && currentState?.isRootGranted == false) {
+                    // Revert the switch state
+                    isUpdatingUI = true
+                    binding.globalPrivacyCard.globalPrivacySwitch.isChecked = !isChecked
+                    isUpdatingUI = false
+
+                    // Show error message
+                    viewModel.updateUiState {
+                        it.copy(errorMessage = "Permission required to disable global privacy. Please grant ${currentState.privilegeMethod.getDisplayName()} permission first.")
+                    }
+                } else {
+                    viewModel.toggleGlobalPrivacy(isChecked)
+                }
             }
         }
     }
@@ -319,6 +335,8 @@ class MainFragment : Fragment() {
             // Update master switch
             globalPrivacySwitch.isChecked = uiState.isGlobalPrivacyEnabled
 
+            // Switch is always enabled - permission check happens in listener
+
             // Clear flag
             isUpdatingUI = false
 
@@ -346,11 +364,27 @@ class MainFragment : Fragment() {
     private fun updateSystemRequirementsCard(uiState: UiState) {
         with(binding.systemRequirementsCard) {
             if (!uiState.isRootGranted) {
-                // Root not granted - show prominent message and grant button
-                systemRequirementsDescription.text = "Root access is required to control privacy features. Please grant root access to continue."
+                // Privilege not granted - show appropriate message based on privilege method
+                val privilegeMethod = uiState.privilegeMethod
+
+                systemRequirementsDescription.text = when (privilegeMethod) {
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU ->
+                        "Shizuku detected! Please grant Shizuku permission to control privacy features."
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT ->
+                        "Root access detected! Please grant root permission to control privacy features."
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI ->
+                        "Sui detected! Please grant permission to control privacy features."
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE ->
+                        "Root or Shizuku required. Please install Shizuku (for non-rooted devices) or root your device with Magisk."
+                }
 
                 rootStatusText.text = if (uiState.isRootAvailable) {
-                    "Available - Grant Required"
+                    when (privilegeMethod) {
+                        io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "Shizuku Available"
+                        io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "Root Available"
+                        io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "Sui Available"
+                        else -> "Available - Grant Required"
+                    }
                 } else {
                     "Not Available"
                 }
@@ -359,13 +393,29 @@ class MainFragment : Fragment() {
                 // Always show root actions when root is not granted
                 rootActionsContainer.visibility = View.VISIBLE
 
+                // Update button text and enabled state based on privilege method
+                grantRootButton.text = when (privilegeMethod) {
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "Grant Shizuku Permission"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "Grant Root Permission"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "Grant Sui Permission"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "Install Shizuku or Root Device"
+                }
 
+                // Disable button if no privilege method is available
+                grantRootButton.isEnabled = privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE
+                grantRootButton.alpha = if (privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE) 1.0f else 0.5f
 
             } else {
-                // Root granted - show normal status
+                // Privilege granted - show normal status
+                val privilegeMethod = uiState.privilegeMethod
                 systemRequirementsDescription.text = "System requirements status"
 
-                rootStatusText.text = "Available & Granted"
+                rootStatusText.text = when (privilegeMethod) {
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "Shizuku Granted"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "Root Granted"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "Sui Granted"
+                    else -> "Available & Granted"
+                }
                 rootStatusIcon.setImageResource(R.drawable.ic_check_circle)
 
                 // Hide root actions when granted

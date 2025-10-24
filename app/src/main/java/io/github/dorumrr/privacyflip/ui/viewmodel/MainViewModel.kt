@@ -34,11 +34,6 @@ class MainViewModel : ViewModel() {
         private const val TAG = "MainViewModel"
     }
 
-    private fun logConfigLoaded(configType: String, details: String) {
-        logManager.d(TAG, "$configType loaded: $details")
-    }
-
-    // Helper methods to consolidate duplicate error handling patterns
     private inline fun handleError(operation: String, action: () -> Unit) {
         try {
             action()
@@ -47,25 +42,13 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private inline fun handleErrorWithUiUpdate(operation: String, action: () -> Unit) {
-        try {
-            action()
-        } catch (e: Exception) {
-            logManager.e(TAG, "Error $operation: ${e.message}")
-            updateUiState { it.copy(errorMessage = "Error $operation: ${e.message}") }
-        }
-    }
-
     private val rootManager = RootManager.getInstance(Unit)
     private lateinit var privacyManager: PrivacyManager
-
     private lateinit var permissionChecker: PermissionChecker
     private lateinit var logManager: LogManager
     private lateinit var preferenceManager: PreferenceManager
     private var context: Context? = null
     private var isInitialized = false
-
-    // Job for tracking global privacy toggle operations
     private var globalPrivacyToggleJob: Job? = null
 
     private val _uiState = MutableLiveData(UiState())
@@ -76,7 +59,6 @@ class MainViewModel : ViewModel() {
     
     fun initialize(context: Context) {
         if (isInitialized) {
-            logManager.w(TAG, "ViewModel already initialized, skipping duplicate initialization")
             return
         }
 
@@ -86,41 +68,27 @@ class MainViewModel : ViewModel() {
         logManager = LogManager.getInstance(context)
         preferenceManager = PreferenceManager.getInstance(context)
 
-        // Initialize root manager in coroutine since it's now suspend
-        // This must complete before checkRootStatus() is called
         viewModelScope.launch {
             rootManager.initialize(context)
-            // After initialization, check root status
             checkRootStatus()
         }
 
         loadTimerSettings()
-
         loadGlobalPrivacyStatus()
-
         loadScreenLockConfig(context)
-
         loadServiceSettings()
-
         startBackgroundServiceIfEnabled()
-
-        // checkRootStatus() is now called inside the coroutine after rootManager.initialize()
-        // See line 89 above
-
         loadPermissionStatus()
 
         isInitialized = true
-        logManager.i(TAG, "ViewModel initialized successfully")
     }
 
     override fun onCleared() {
         super.onCleared()
-        // Cancel any pending global privacy toggle operation to prevent memory leaks
         globalPrivacyToggleJob?.cancel()
         globalPrivacyToggleJob = null
     }
 
-    // Helper function to safely update UI state
     fun updateUiState(update: (UiState) -> UiState) {
         val currentState = _uiState.value ?: UiState()
         _uiState.value = update(currentState)
@@ -131,12 +99,10 @@ class MainViewModel : ViewModel() {
             updateUiState { it.copy(isLoading = true) }
 
             try {
-                // Get the privilege method (Root, Sui, Shizuku, or None)
                 val privilegeMethod = rootManager.getPrivilegeMethod()
                 val isPrivilegeAvailable = rootManager.isRootAvailable()
                 val currentState = _uiState.value ?: UiState()
 
-                // Track if we attempted auto-request in this call
                 var didAttemptAutoRequest = false
 
                 val isPrivilegeGranted = if (isPrivilegeAvailable) {
@@ -164,8 +130,6 @@ class MainViewModel : ViewModel() {
                         errorMessage = if (!isPrivilegeAvailable) {
                             "Root or Shizuku required - Install Shizuku from Play Store (for non-rooted devices) or root your device with Magisk"
                         } else if (isPrivilegeAvailable && !isPrivilegeGranted) {
-                            // If we just attempted auto-request and it failed, show "denied" message
-                            // Otherwise show "required" message
                             if (didAttemptAutoRequest) {
                                 when (privilegeMethod) {
                                     PrivilegeMethod.SHIZUKU -> "Shizuku permission denied. Click 'Grant Shizuku Permission' button to try again."
@@ -251,11 +215,7 @@ class MainViewModel : ViewModel() {
                 unlockDelaySeconds = preferenceManager.unlockDelaySeconds,
                 showCountdown = preferenceManager.showCountdown
             )
-
-            // Update UiState for UI binding
             updateUiState { it.copy(timerSettings = settings) }
-
-            logConfigLoaded("Timer settings", "lock=${preferenceManager.lockDelaySeconds}s, unlock=${preferenceManager.unlockDelaySeconds}s")
         }
     }
 
@@ -290,18 +250,12 @@ class MainViewModel : ViewModel() {
     private fun loadPermissionStatus() {
         viewModelScope.launch {
             try {
-                logManager.d(TAG, "Loading permission status...")
                 val ungrantedPermissions = permissionChecker.getUngrantedPermissions()
-                logManager.d(TAG, "Found ${ungrantedPermissions.size} ungranted permissions")
-                ungrantedPermissions.forEach { perm ->
-                    logManager.d(TAG, "Ungranted permission: ${perm.displayName} (${perm.permission})")
-                }
 
                 if (ungrantedPermissions.isNotEmpty()) {
                     val currentState = _uiState.value ?: UiState()
 
                     if (!currentState.hasTriedAutoRequest) {
-                        logManager.d(TAG, "Auto-requesting ${ungrantedPermissions.size} missing permissions...")
                         val permissionsToRequest = ungrantedPermissions.map { it.permission }.toTypedArray()
                         _uiState.value = currentState.copy(
                             ungrantedPermissions = emptyList(),
@@ -309,7 +263,6 @@ class MainViewModel : ViewModel() {
                             hasTriedAutoRequest = true
                         )
                     } else {
-                        logManager.d(TAG, "User declined permissions, showing red warning card")
                         _uiState.value = currentState.copy(
                             ungrantedPermissions = ungrantedPermissions,
                             pendingPermissionRequest = null
@@ -324,8 +277,6 @@ class MainViewModel : ViewModel() {
                         )
                     }
                 }
-                val currentState = _uiState.value ?: UiState()
-                logManager.d(TAG, "UI State updated - ungrantedPermissions.size = ${currentState.ungrantedPermissions.size}")
             } catch (e: Exception) {
                 logManager.e(TAG, "Error loading permission status: ${e.message}")
             }
@@ -432,8 +383,6 @@ class MainViewModel : ViewModel() {
             )
 
             updateUiState { it.copy(screenLockConfig = config) }
-
-            logConfigLoaded("Screen lock config", config.toString())
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to load screen lock config: ${e.message}")
         }
@@ -441,7 +390,6 @@ class MainViewModel : ViewModel() {
 
     private fun loadServiceSettings() {
         handleError("loading service settings") {
-            // Always ensure background service is enabled
             preferenceManager.backgroundServiceEnabled = true
             val isServiceRunning = isBackgroundServiceRunning()
             updateUiState {
@@ -450,8 +398,6 @@ class MainViewModel : ViewModel() {
                     backgroundServicePermissionGranted = isServiceRunning
                 )
             }
-
-            logConfigLoaded("Service settings", "backgroundService=true (always enabled), running=$isServiceRunning")
         }
     }
 
@@ -475,7 +421,6 @@ class MainViewModel : ViewModel() {
 
     private fun scheduleServiceHealthCheck(context: Context) {
         handleError("scheduling service health check") {
-            // Cancel any existing health check workers first to prevent duplicates
             WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
 
             val healthCheckRequest = PeriodicWorkRequestBuilder<ServiceHealthWorker>(15, TimeUnit.MINUTES)
@@ -483,33 +428,26 @@ class MainViewModel : ViewModel() {
                 .build()
 
             WorkManager.getInstance(context).enqueue(healthCheckRequest)
-            logManager.d(TAG, "Service health check scheduled (previous workers cancelled)")
         }
     }
 
     fun toggleGlobalPrivacy(enabled: Boolean) {
-        // Cancel any pending global privacy toggle operation
         globalPrivacyToggleJob?.cancel()
         globalPrivacyToggleJob = null
 
         preferenceManager.isGlobalPrivacyEnabled = enabled
-
         updateUiState { it.copy(isGlobalPrivacyEnabled = enabled) }
 
         if (!enabled) {
             globalPrivacyToggleJob = viewModelScope.launch {
                 try {
-                    // Double-check preference before executing commands
-                    // (in case user toggled back while coroutine was starting)
+                    // Recheck preference in case user toggled back while coroutine was starting
                     if (!preferenceManager.isGlobalPrivacyEnabled) {
                         val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
                         privacyManager.enableFeatures(allFeatures)
-
                         loadPrivacyStatus()
                     }
-
                 } catch (e: CancellationException) {
-                    // Re-throw CancellationException to allow proper coroutine cancellation
                     throw e
                 } catch (e: Exception) {
                     updateUiState {
@@ -525,16 +463,12 @@ class MainViewModel : ViewModel() {
     private fun ensureBackgroundServiceRunning() {
         val context = this.context ?: return
 
-        // Always ensure background service is enabled and running
         preferenceManager.backgroundServiceEnabled = true
-
         PrivacyMonitorService.start(context)
         scheduleServiceHealthCheck(context)
-        logManager.i(TAG, "Background service ensured running with health checks")
 
-        // Check if service is actually running after start attempt
         viewModelScope.launch {
-            delay(1000) // Give service time to start
+            delay(1000)
             val isRunning = isBackgroundServiceRunning()
             updateUiState {
                 it.copy(
@@ -543,15 +477,12 @@ class MainViewModel : ViewModel() {
                 )
             }
         }
-
-        logManager.d(TAG, "Background service ensured running")
     }
 
 
 
 
 
-    // Helper methods for traditional views - DRY implementation
     private fun updateFeatureSettings(
         feature: PrivacyFeature,
         disableOnLock: Boolean? = null,
@@ -591,7 +522,6 @@ class MainViewModel : ViewModel() {
             { it.nfcDisableOnLock }, { it.nfcEnableOnUnlock })
     }
 
-    // Generic method for updating any feature setting
     fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
         when (feature) {
             PrivacyFeature.WIFI -> updateWifiSettings(disableOnLock, enableOnUnlock)

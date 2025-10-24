@@ -15,34 +15,27 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import kotlin.coroutines.resume
 
-/**
- * Executor that uses Shizuku API for ADB-level privileges
- * This class is only compiled in the "real" flavor
- */
 class ShizukuExecutor : PrivilegeExecutor {
-    
+
     companion object {
         private const val TAG = "ShizukuExecutor"
         private const val PERMISSION_REQUEST_CODE = 1001
     }
-    
+
     private var logManager: LogManager? = null
     private var context: Context? = null
 
     @Volatile
     private var permissionGranted: Boolean? = null
 
-    // Continuation for waiting for permission result
     @Volatile
     private var permissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
-        logManager?.i(TAG, "Shizuku binder received - service available")
         onBinderReceived()
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        logManager?.w(TAG, "Shizuku binder dead - service unavailable")
         onBinderDead()
     }
 
@@ -50,9 +43,6 @@ class ShizukuExecutor : PrivilegeExecutor {
         if (requestCode == PERMISSION_REQUEST_CODE) {
             val granted = grantResult == PackageManager.PERMISSION_GRANTED
             permissionGranted = granted
-            logManager?.i(TAG, "Permission result: ${if (granted) "granted" else "denied"}")
-
-            // Resume the waiting coroutine
             permissionContinuation?.resume(granted)
             permissionContinuation = null
         }
@@ -61,48 +51,38 @@ class ShizukuExecutor : PrivilegeExecutor {
     override suspend fun initialize(context: Context) {
         this.context = context
         logManager = LogManager.getInstance(context)
-        
+
         try {
-            // Register listeners
             Shizuku.addBinderReceivedListener(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
             Shizuku.addRequestPermissionResultListener(permissionResultListener)
-            
-            logManager?.i(TAG, "Shizuku executor initialized")
         } catch (e: Exception) {
             logManager?.e(TAG, "Error initializing Shizuku: ${e.message}")
         }
     }
-    
+
     override suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Check if Shizuku is running
-            val binderAlive = Shizuku.pingBinder()
-            logManager?.i(TAG, "Shizuku availability check: $binderAlive")
-            return@withContext binderAlive
+            return@withContext Shizuku.pingBinder()
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking Shizuku availability: ${e.message}")
             return@withContext false
         }
     }
-    
+
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
         if (permissionGranted != null) {
             return@withContext permissionGranted!!
         }
-        
+
         try {
             if (Shizuku.isPreV11()) {
-                logManager?.w(TAG, "Shizuku pre-v11 is not supported")
                 return@withContext false
             }
-            
+
             val granted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
             permissionGranted = granted
-            logManager?.i(TAG, "Permission check: $granted")
             return@withContext granted
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking permission: ${e.message}")
             permissionGranted = false
             return@withContext false
         }
@@ -111,40 +91,25 @@ class ShizukuExecutor : PrivilegeExecutor {
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
         try {
             if (Shizuku.isPreV11()) {
-                logManager?.w(TAG, "Shizuku pre-v11 is not supported")
                 return@withContext false
             }
 
-            // Check if already granted
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                logManager?.i(TAG, "Permission already granted")
                 permissionGranted = true
                 return@withContext true
             }
 
-            if (Shizuku.shouldShowRequestPermissionRationale()) {
-                logManager?.w(TAG, "User previously denied permission")
-                // Still try to request
-            }
-
-            logManager?.i(TAG, "Requesting Shizuku permission...")
-
-            // Wait for permission result with timeout (30 seconds)
+            // 30-second timeout to match root permission timeout
             val granted = withTimeoutOrNull(30000) {
                 suspendCancellableCoroutine { continuation ->
                     permissionContinuation = continuation
-
-                    // Request permission - this will show the dialog
                     Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
-
-                    // If cancelled, clean up
                     continuation.invokeOnCancellation {
                         permissionContinuation = null
                     }
                 }
-            } ?: false // Timeout returns null, convert to false
+            } ?: false
 
-            logManager?.i(TAG, "Permission request completed: $granted")
             return@withContext granted
 
         } catch (e: Exception) {
@@ -164,10 +129,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         }
 
         try {
-            logManager?.d(TAG, "Executing command: $command")
-
-            // Use reflection to access Shizuku.newProcess() since it's private in API 13.1.5
-            // This is a temporary workaround until we implement UserService
+            // Use reflection to access Shizuku.newProcess() - private in API 13.1.5
             val newProcessMethod = Shizuku::class.java.getDeclaredMethod(
                 "newProcess",
                 Array<String>::class.java,
@@ -181,14 +143,12 @@ class ShizukuExecutor : PrivilegeExecutor {
             val output = mutableListOf<String>()
             val error = mutableListOf<String>()
 
-            // Read output
             BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
                 reader.lineSequence().forEach { line ->
                     output.add(line)
                 }
             }
 
-            // Read error
             BufferedReader(InputStreamReader(process.errorStream)).use { reader ->
                 reader.lineSequence().forEach { line ->
                     error.add(line)
@@ -196,24 +156,14 @@ class ShizukuExecutor : PrivilegeExecutor {
             }
 
             val exitCode = process.waitFor()
-            val success = exitCode == 0
 
-            val result = CommandResult(
-                success = success,
+            return@withContext CommandResult(
+                success = exitCode == 0,
                 output = output,
                 error = if (error.isNotEmpty()) error.joinToString("\n") else null,
                 exitCode = exitCode
             )
-
-            if (success) {
-                logManager?.d(TAG, "Command succeeded: ${output.size} lines of output")
-            } else {
-                logManager?.w(TAG, "Command failed with exit code $exitCode: ${result.error}")
-            }
-
-            return@withContext result
         } catch (e: Exception) {
-            logManager?.e(TAG, "Exception executing command: ${e.message}")
             return@withContext CommandResult.failure("Exception: ${e.message}")
         }
     }
@@ -222,62 +172,47 @@ class ShizukuExecutor : PrivilegeExecutor {
         if (commands.isEmpty()) {
             return CommandResult.failure("No commands provided")
         }
-        
+
         var lastResult: CommandResult? = null
-        
-        for ((index, command) in commands.withIndex()) {
-            logManager?.d(TAG, "Trying command ${index + 1}/${commands.size}: $command")
+
+        for (command in commands) {
             val result = executeCommand(command)
-            
             if (result.success) {
-                logManager?.i(TAG, "Command succeeded on attempt ${index + 1}")
                 return result
             }
-            
             lastResult = result
         }
-        
-        logManager?.w(TAG, "All ${commands.size} commands failed")
+
         return lastResult ?: CommandResult.failure("All commands failed")
     }
-    
+
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.SHIZUKU
-    
+
     override suspend fun getUid(): Int = withContext(Dispatchers.IO) {
         try {
-            val uid = Shizuku.getUid()
-            logManager?.i(TAG, "Shizuku UID: $uid")
-            return@withContext uid
+            return@withContext Shizuku.getUid()
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error getting UID: ${e.message}")
             return@withContext -1
         }
     }
-    
+
     override fun cleanup() {
         try {
             Shizuku.removeBinderReceivedListener(binderReceivedListener)
             Shizuku.removeBinderDeadListener(binderDeadListener)
             Shizuku.removeRequestPermissionResultListener(permissionResultListener)
-            logManager?.i(TAG, "Shizuku executor cleaned up")
         } catch (e: Exception) {
             logManager?.e(TAG, "Error cleaning up: ${e.message}")
         }
     }
-    
+
     private fun onBinderReceived() {
-        // Binder is now available - could trigger UI update
-        context?.let {
-            // Notify that Shizuku is now available
-        }
+        // Could trigger UI update when Shizuku becomes available
     }
-    
+
     private fun onBinderDead() {
-        // Binder died - should notify user
         permissionGranted = null
-        context?.let {
-            // Show notification that Shizuku service stopped
-        }
+        // Could show notification that Shizuku service stopped
     }
 }
 

@@ -10,11 +10,6 @@ import io.github.dorumrr.privacyflip.util.SingletonHolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * RootManager - Backward compatibility wrapper around PrivilegeManager
- * This class maintains the existing API while delegating to the new privilege abstraction layer
- * that supports Root, Shizuku, and Sui
- */
 class RootManager private constructor() {
 
     companion object : SingletonHolder<RootManager, Unit>({ RootManager() }) {
@@ -28,62 +23,39 @@ class RootManager private constructor() {
     suspend fun initialize(context: Context) {
         this.context = context
         logManager = LogManager.getInstance(context)
-
-        // Initialize the new privilege manager
         privilegeManager = PrivilegeManager.getInstance(context)
-        val method = privilegeManager?.initialize()
-
-        logManager?.i(TAG, "Initialized with privilege method: ${method?.getDisplayName()}")
+        privilegeManager?.initialize()
     }
 
-    /**
-     * Check if any privilege method is available (Root, Shizuku, or Sui)
-     */
     suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
         try {
             return@withContext privilegeManager?.isPrivilegeAvailable() ?: false
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking privilege availability: ${e.message}")
             return@withContext false
         }
     }
 
-    /**
-     * Check if permission has been granted for the current privilege method
-     */
     suspend fun isRootGranted(): Boolean = withContext(Dispatchers.IO) {
         try {
             return@withContext privilegeManager?.isPermissionGranted() ?: false
         } catch (e: Exception) {
-            logManager?.e(TAG, "Error checking permission: ${e.message}")
             return@withContext false
         }
     }
 
-    /**
-     * Request permission from the user for the current privilege method
-     */
     suspend fun requestRootPermission(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val granted = privilegeManager?.requestPermission() ?: false
-            if (!granted) {
-                logManager?.w(TAG, "Permission denied")
-            }
-            return@withContext granted
+            return@withContext privilegeManager?.requestPermission() ?: false
         } catch (e: Exception) {
             Log.e(TAG, "Error requesting permission", e)
             return@withContext false
         }
     }
 
-    /**
-     * Execute a single command with the current privilege method
-     */
     suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         try {
             val result = privilegeManager?.executeCommand(command)
             if (result != null) {
-                // Convert privilege.CommandResult to root.CommandResult
                 return@withContext CommandResult(
                     success = result.success,
                     output = result.output,
@@ -107,21 +79,14 @@ class RootManager private constructor() {
         }
     }
 
-    /**
-     * Execute multiple commands sequentially
-     */
     suspend fun executeCommands(commands: List<String>): List<CommandResult> = withContext(Dispatchers.IO) {
         commands.map { executeCommand(it) }
     }
 
-    /**
-     * Execute commands with fallback support - tries each command until one succeeds
-     */
     suspend fun executeWithFallbacks(commands: List<String>): CommandResult = withContext(Dispatchers.IO) {
         try {
             val result = privilegeManager?.executeWithFallbacks(commands)
             if (result != null) {
-                // Convert privilege.CommandResult to root.CommandResult
                 return@withContext CommandResult(
                     success = result.success,
                     output = result.output,
@@ -145,9 +110,6 @@ class RootManager private constructor() {
         }
     }
 
-    /**
-     * Force re-request of permission
-     */
     suspend fun forceRootPermissionRequest(): Boolean = withContext(Dispatchers.IO) {
         try {
             return@withContext privilegeManager?.requestPermission() ?: false
@@ -157,24 +119,14 @@ class RootManager private constructor() {
         }
     }
 
-    /**
-     * Get the current privilege method being used
-     */
     fun getPrivilegeMethod(): PrivilegeMethod {
         return privilegeManager?.getCurrentMethod() ?: PrivilegeMethod.NONE
     }
 
-    /**
-     * Force re-detection of privilege method
-     * Useful after user installs Shizuku or roots device
-     */
     suspend fun redetectPrivilegeMethod(): PrivilegeMethod {
         return privilegeManager?.redetectPrivilegeMethod() ?: PrivilegeMethod.NONE
     }
 
-    /**
-     * Get device information
-     */
     fun getDeviceInfo(): DeviceInfo {
         return DeviceInfo(
             apiLevel = Build.VERSION.SDK_INT,
@@ -185,10 +137,6 @@ class RootManager private constructor() {
     }
 }
 
-/**
- * Result of executing a command
- * Kept for backward compatibility - delegates to privilege.CommandResult
- */
 data class CommandResult(
     val success: Boolean,
     val output: List<String>,
@@ -196,9 +144,6 @@ data class CommandResult(
     val exitCode: Int = -1
 )
 
-/**
- * Device information
- */
 data class DeviceInfo(
     val apiLevel: Int,
     val manufacturer: String,

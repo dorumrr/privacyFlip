@@ -1,8 +1,12 @@
 Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, location services, and NFC. When you unlock, it intelligently restores the features you want back on.
 
+<b>Works with Root OR Shizuku - Choose your preferred privilege method!</b>
+
 <b>Features:</b>
 
 • Manage your device privacy based on lock/unlock state
+• Dual privilege support: Root OR Shizuku (no root required!)
+• Automatic privilege detection (Sui > Root > Shizuku)
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC)
 • Customizable timing delays (0-60 seconds for both lock and unlock)
 • Background service for persistent monitoring
@@ -18,12 +22,25 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Location services - Control GPS and location tracking
 • NFC - Control NFC sensor
 
-<b>Requirements:</b>
+<b>Requirements (Choose ONE):</b>
 
-• Root access (Magisk, SuperSU, or similar)
+<b>Option 1: Root Access</b> (Recommended for rooted devices)
 • Android 5.0+ (API level 21)
+• Root access via Magisk, SuperSU, or similar
+• Best performance with UID 0 privileges
 
-The app requires root permissions to control system-level privacy features. All privacy actions are performed locally on the device with no data transmission.
+<b>Option 2: Shizuku</b> (No root required!)
+• Android 6.0+ (API level 23)
+• Shizuku app installed and running
+• ADB privileges via USB or wireless debugging
+• Perfect for non-rooted devices
+
+<b>Option 3: Sui</b> (Best of both worlds)
+• Rooted device with Magisk
+• Sui Magisk module installed
+• Best user experience - automatic startup, no prompts
+
+The app requires elevated permissions to control system-level privacy features. All privacy actions are performed locally on the device with no data transmission.
 
 <b>Privacy & Security:</b>
 
@@ -34,19 +51,20 @@ The app requires root permissions to control system-level privacy features. All 
 
 <b>Usage:</b>
 
-1. Open PrivacyFlip and grant root permissions
+<b>For Root users:</b>
+1. Open PrivacyFlip and grant root permissions when prompted
 2. Configure your preferred privacy settings
 3. Set lock/unlock delays if desired
 4. The app works automatically in the background
+
+<b>For Shizuku users:</b>
+1. Install and start Shizuku app (enable via ADB or wireless debugging)
+2. Open PrivacyFlip and grant Shizuku permissions when prompted
+3. Configure your preferred privacy settings
+4. Set lock/unlock delays if desired
+5. The app works automatically in the background
 
 Once configured, PrivacyFlip works automatically:
 
 • Lock your device → Selected features will be disabled
 • Unlock your device → Selected features will be restored
-
-<b>F-Droid Compliance:</b>
-
-• Zero Google dependencies - Pure AndroidX implementation
-• No tracking or telemetry - Complete privacy focus
-• Traditional Android Views - No Material Design dependencies
-• Open source transparency - Full code audit available

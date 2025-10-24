@@ -1,0 +1,9 @@
+Version 1.3.0 - Shizuku Support & Major Improvements
+
+• Added Shizuku support - No root required! Use ADB privileges
+• Added Sui support - Magisk module for seamless Shizuku integration
+• Automatic privilege detection (Sui > Root > Shizuku)
+• Fixed root permission detection after Magisk grant
+• Enhanced error messages for better user guidance
+• Full dark mode compatibility improvements
+

@@ -1,16 +1,14 @@
 # PrivacyFlip
 
-**Automatic lock/unlock privacy control for rooted Android devices 🔐📱✨**
+**Automatic lock/unlock privacy control for Android devices 🔐📱✨**
 
 **PrivacyFlip** automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, and **NFC**. When you unlock, it intelligently restores the features you want back on.
+
+**Works with Root OR Shizuku** - Choose your preferred privilege method!
 
 <div>
   <a href="https://apt.izzysoft.de/fdroid/index/apk/io.github.dorumrr.privacyflip" target="_blank" rel="noopener"><img height="50" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"></a> <a href="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank" rel="noopener"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a> <a href="https://www.buymeacoffee.com/ossdev"><img height="50" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" /></a>
 </div>
-
-
-<!-- [![SUPPORT DEVELOPMENT](https://img.shields.io/badge/SUPPORT%20DEVELOPMENT-DONATE-2E2E2E?style=for-the-badge&color=FFD700)](https://buymeacoffee.com/ossdev) -->
-
 
 ## 📸 Screenshots
 
@@ -40,9 +38,23 @@
 
 ## 📱 Requirements
 
+**Choose ONE of the following privilege methods:**
+
+### **Option 1: Root Access** (Recommended for rooted devices)
 - **Android 5.0+** (API level 21 and newer)
-- **Root access** (Magisk, SuperSU, or similar)
-- **Rooted device** with su binary available
+- **Root access** via Magisk, SuperSU, or similar
+- **Best performance** with UID 0 privileges
+
+### **Option 2: Shizuku** (For non-rooted devices)
+- **Android 6.0+** (API level 23 and newer)
+- **[Shizuku app](https://shizuku.rikka.app/)** installed and running
+- **ADB privileges** via USB debugging or wireless ADB
+- **No root required** - works with ADB-level permissions
+
+### **Option 3: Sui** (Best of both worlds)
+- **Rooted device** with Magisk installed
+- **[Sui Magisk module](https://github.com/RikkaApps/Sui)** installed
+- **Best user experience** - no permission prompts, automatic startup
 
 ## 🏗️ Architecture & Dependencies
 
@@ -51,13 +63,21 @@
 - **Traditional Android Views** - Efficient UI with ViewBinding
 - **Navigation Component** - Fragment-based navigation
 - **MVVM Pattern** - Reactive architecture with LiveData
+- **Dual Privilege Support** - Abstraction layer for Root and Shizuku
 
 ### **Key Dependencies**
 - **[libsu](https://github.com/topjohnwu/libsu)** - Reliable root access management
+- **[Shizuku API](https://github.com/RikkaApps/Shizuku-API)** - ADB privilege management
+- **[Sui](https://github.com/RikkaApps/Sui)** - Magisk module for Shizuku API
 - **AndroidX Core Libraries** - Modern Android framework components
 - **Work Manager** - Background task scheduling
 - **Navigation Component** - Fragment navigation (Google Material excluded)
 - **ViewBinding** - Type-safe view references
+
+### **Privilege Detection Priority**
+1. **Sui** - Magisk module providing Shizuku API with root (best UX)
+2. **Root** - Traditional root access via Magisk/SuperSU
+3. **Shizuku** - ADB privileges via Shizuku app (no root required)
 
 
 

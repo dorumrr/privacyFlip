@@ -6,11 +6,14 @@ import android.os.Build
 import io.github.dorumrr.privacyflip.util.LogManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import kotlin.coroutines.resume
 
 /**
  * Executor that uses Shizuku API for ADB-level privileges
@@ -25,25 +28,33 @@ class ShizukuExecutor : PrivilegeExecutor {
     
     private var logManager: LogManager? = null
     private var context: Context? = null
-    
+
     @Volatile
     private var permissionGranted: Boolean? = null
-    
+
+    // Continuation for waiting for permission result
+    @Volatile
+    private var permissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
+
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         logManager?.i(TAG, "Shizuku binder received - service available")
         onBinderReceived()
     }
-    
+
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         logManager?.w(TAG, "Shizuku binder dead - service unavailable")
         onBinderDead()
     }
-    
+
     private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
         if (requestCode == PERMISSION_REQUEST_CODE) {
             val granted = grantResult == PackageManager.PERMISSION_GRANTED
             permissionGranted = granted
             logManager?.i(TAG, "Permission result: ${if (granted) "granted" else "denied"}")
+
+            // Resume the waiting coroutine
+            permissionContinuation?.resume(granted)
+            permissionContinuation = null
         }
     }
     
@@ -103,21 +114,42 @@ class ShizukuExecutor : PrivilegeExecutor {
                 logManager?.w(TAG, "Shizuku pre-v11 is not supported")
                 return@withContext false
             }
-            
+
+            // Check if already granted
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                logManager?.i(TAG, "Permission already granted")
+                permissionGranted = true
+                return@withContext true
+            }
+
             if (Shizuku.shouldShowRequestPermissionRationale()) {
                 logManager?.w(TAG, "User previously denied permission")
                 // Still try to request
             }
-            
+
             logManager?.i(TAG, "Requesting Shizuku permission...")
-            Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
-            
-            // Wait a bit for the permission dialog
-            kotlinx.coroutines.delay(500)
-            
-            return@withContext isPermissionGranted()
+
+            // Wait for permission result with timeout (30 seconds)
+            val granted = withTimeoutOrNull(30000) {
+                suspendCancellableCoroutine { continuation ->
+                    permissionContinuation = continuation
+
+                    // Request permission - this will show the dialog
+                    Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
+
+                    // If cancelled, clean up
+                    continuation.invokeOnCancellation {
+                        permissionContinuation = null
+                    }
+                }
+            } ?: false // Timeout returns null, convert to false
+
+            logManager?.i(TAG, "Permission request completed: $granted")
+            return@withContext granted
+
         } catch (e: Exception) {
             logManager?.e(TAG, "Error requesting permission: ${e.message}")
+            permissionContinuation = null
             return@withContext false
         }
     }

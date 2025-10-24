@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.dorumrr.privacyflip"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 35
         versionCode = 6
         versionName = "1.3.0"
@@ -46,21 +46,6 @@ android {
                 keyAlias = (keystoreProperties["keyAlias"] as String).trim()
                 keyPassword = (keystoreProperties["keyPassword"] as String).trim()
             }
-        }
-    }
-
-    // Build variants for testing Shizuku without actual installation
-    flavorDimensions += "shizuku"
-    productFlavors {
-        create("real") {
-            dimension = "shizuku"
-            // Uses real Shizuku API
-        }
-        create("mock") {
-            dimension = "shizuku"
-            // Uses mock Shizuku implementation for testing
-            applicationIdSuffix = ".mock"
-            versionNameSuffix = "-mock"
         }
     }
 
@@ -145,7 +130,7 @@ dependencies {
     implementation("com.github.topjohnwu.libsu:core:5.0.4")
     implementation("com.github.topjohnwu.libsu:service:5.0.4")
 
-    // Shizuku API (only for 'real' flavor)
-    "realImplementation"("dev.rikka.shizuku:api:13.1.5")
-    "realImplementation"("dev.rikka.shizuku:provider:13.1.5")
+    // Shizuku API
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

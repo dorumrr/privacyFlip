@@ -2,26 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Essential permissions for privacy control -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-
-    <!-- Boot persistence for background service -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-
-
-
-    <!-- Battery optimization exemption for reliable background operation -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <!-- Quick Settings Tile permission (Android 7+) - This is actually available to regular apps -->
     <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" tools:ignore="ProtectedPermissions" />
     
-
-
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -32,8 +21,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PrivacyFlip"
         tools:targetApi="31">
-        
-        <!-- Main Activity -->
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -45,14 +41,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Privacy Monitor Service -->
         <service
             android:name=".service.PrivacyMonitorService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
-        <!-- Quick Settings Tile -->
         <service
             android:name=".tile.PrivacyFlipTileService"
             android:exported="true"
@@ -64,9 +58,6 @@
             </intent-filter>
         </service>
 
-
-
-        <!-- App Widget -->
         <receiver
             android:name=".widget.PrivacyFlipWidget"
             android:exported="true">
@@ -78,9 +69,6 @@
                 android:resource="@xml/privacy_flip_widget_info" />
         </receiver>
 
-
-
-        <!-- Screen State Receiver -->
         <receiver
             android:name=".receiver.ScreenStateReceiver"
             android:enabled="true"
@@ -92,7 +80,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Boot Receiver for service persistence -->
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"

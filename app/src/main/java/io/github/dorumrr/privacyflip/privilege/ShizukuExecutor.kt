@@ -90,26 +90,49 @@ class ShizukuExecutor : PrivilegeExecutor {
     
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
         try {
+            logManager?.d(TAG, "requestPermission() called")
+
             if (Shizuku.isPreV11()) {
+                logManager?.w(TAG, "Shizuku is pre-V11, cannot request permission")
                 return@withContext false
             }
 
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                logManager?.d(TAG, "Permission already granted")
                 permissionGranted = true
                 return@withContext true
             }
+
+            // Check if we should show rationale (user denied with "Don't ask again")
+            if (Shizuku.shouldShowRequestPermissionRationale()) {
+                logManager?.w(TAG, "User previously denied permission with 'Don't ask again'")
+                return@withContext false
+            }
+
+            logManager?.d(TAG, "Requesting Shizuku permission...")
 
             // 30-second timeout to match root permission timeout
             val granted = withTimeoutOrNull(30000) {
                 suspendCancellableCoroutine { continuation ->
                     permissionContinuation = continuation
-                    Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
+
+                    try {
+                        Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
+                        logManager?.d(TAG, "Shizuku.requestPermission() called successfully")
+                    } catch (e: Exception) {
+                        logManager?.e(TAG, "Exception calling Shizuku.requestPermission(): ${e.message}")
+                        continuation.resume(false)
+                        return@suspendCancellableCoroutine
+                    }
+
                     continuation.invokeOnCancellation {
+                        logManager?.d(TAG, "Permission request cancelled")
                         permissionContinuation = null
                     }
                 }
             } ?: false
 
+            logManager?.d(TAG, "Permission request result: $granted")
             return@withContext granted
 
         } catch (e: Exception) {

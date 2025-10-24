@@ -25,20 +25,6 @@ class PrivilegeManager private constructor(private val context: Context) {
     }
     
     private suspend fun detectBestPrivilegeMethod(): PrivilegeMethod {
-        val isMockFlavor = try {
-            val buildConfigClass = Class.forName("${context.packageName}.BuildConfig")
-            val flavorField = buildConfigClass.getField("FLAVOR")
-            flavorField.get(null) == "mock"
-        } catch (e: Exception) {
-            false
-        }
-
-        if (isMockFlavor) {
-            currentExecutor = MockShizukuExecutor()
-            currentExecutor?.initialize(context)
-            return PrivilegeMethod.SHIZUKU
-        }
-
         // Priority: Sui > Root > Shizuku
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
@@ -82,13 +68,7 @@ class PrivilegeManager private constructor(private val context: Context) {
     }
     
     private fun createShizukuExecutor(): PrivilegeExecutor {
-        return try {
-            val clazz = Class.forName("io.github.dorumrr.privacyflip.privilege.ShizukuExecutor")
-            clazz.getDeclaredConstructor().newInstance() as PrivilegeExecutor
-        } catch (e: Exception) {
-            logManager.e(TAG, "Failed to create ShizukuExecutor: ${e.message}")
-            throw e
-        }
+        return ShizukuExecutor()
     }
 
     fun getCurrentMethod(): PrivilegeMethod = currentMethod

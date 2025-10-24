@@ -38,15 +38,15 @@
 
 ## 📱 Requirements
 
+**Minimum:** Android 7.0+ (API level 24)
+
 **Choose ONE of the following privilege methods:**
 
 ### **Option 1: Root Access** (Recommended for rooted devices)
-- **Android 5.0+** (API level 21 and newer)
 - **Root access** via Magisk, SuperSU, or similar
 - **Best performance** with UID 0 privileges
 
 ### **Option 2: Shizuku** (For non-rooted devices)
-- **Android 6.0+** (API level 23 and newer)
 - **[Shizuku app](https://shizuku.rikka.app/)** installed and running
 - **ADB privileges** via USB debugging or wireless ADB
 - **No root required** - works with ADB-level permissions

@@ -39,29 +39,14 @@ else
     exit 1
 fi
 
-# Function to find the most recent APK (debug or release, any flavor)
+# Function to find the most recent APK (debug or release)
 find_apk() {
-    # Find all APKs (handles product flavors like mock/real)
-    # Prefer release over debug, and real over mock
-    REAL_RELEASE_APK=$(find app/build/outputs/apk/real/release -name "*.apk" -type f 2>/dev/null | head -1)
-    MOCK_RELEASE_APK=$(find app/build/outputs/apk/mock/release -name "*.apk" -type f 2>/dev/null | head -1)
-    REAL_DEBUG_APK=$(find app/build/outputs/apk/real/debug -name "*.apk" -type f 2>/dev/null | head -1)
-    MOCK_DEBUG_APK=$(find app/build/outputs/apk/mock/debug -name "*.apk" -type f 2>/dev/null | head -1)
-
-    # Also check for non-flavored builds (backward compatibility)
+    # Prefer release over debug
     RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
     DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f 2>/dev/null | head -1)
 
-    # Priority order: real release > mock release > real debug > mock debug > release > debug
-    if [ -f "$REAL_RELEASE_APK" ]; then
-        echo "$REAL_RELEASE_APK"
-    elif [ -f "$MOCK_RELEASE_APK" ]; then
-        echo "$MOCK_RELEASE_APK"
-    elif [ -f "$REAL_DEBUG_APK" ]; then
-        echo "$REAL_DEBUG_APK"
-    elif [ -f "$MOCK_DEBUG_APK" ]; then
-        echo "$MOCK_DEBUG_APK"
-    elif [ -f "$RELEASE_APK" ]; then
+    # Priority order: release > debug
+    if [ -f "$RELEASE_APK" ]; then
         echo "$RELEASE_APK"
     elif [ -f "$DEBUG_APK" ]; then
         echo "$DEBUG_APK"
@@ -274,7 +259,6 @@ case "${1:-menu}" in
         # Clean previous builds (complete clean)
         echo "🧹 Cleaning previous builds..."
         ./gradlew clean
-        rm -rf app/build/outputs/apk/release/*
         echo "✅ Clean complete!"
         echo ""
 
@@ -283,7 +267,7 @@ case "${1:-menu}" in
         ./gradlew assembleRelease
 
         # Find the generated APK
-        RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+        RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
 
         if [ -f "$RELEASE_APK" ]; then
             echo ""
@@ -304,40 +288,55 @@ case "${1:-menu}" in
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
 
-            # Extract and display certificate info
-            CERT_INFO=$(unzip -p "$RELEASE_APK" META-INF/*.RSA 2>/dev/null | keytool -printcert 2>&1)
+            # Find apksigner tool
+            APKSIGNER=""
+            if [ -n "$ANDROID_HOME" ]; then
+                APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name "apksigner" 2>/dev/null | head -1)
+            fi
+            if [ -z "$APKSIGNER" ]; then
+                APKSIGNER=$(find ~/Library/Android/sdk/build-tools -name "apksigner" 2>/dev/null | head -1)
+            fi
 
-            # Get SHA256 fingerprint
-            SHA256_FULL=$(echo "$CERT_INFO" | grep "SHA256:" | sed 's/.*SHA256: //')
-            SHA256_FDROID=$(echo "$SHA256_FULL" | tr -d ':' | tr '[:upper:]' '[:lower:]')
+            if [ -n "$APKSIGNER" ] && [ -f "$APKSIGNER" ]; then
+                # Use apksigner to get certificate info
+                CERT_INFO=$("$APKSIGNER" verify --print-certs "$RELEASE_APK" 2>&1)
 
-            # Get SHA1 fingerprint
-            SHA1_FULL=$(echo "$CERT_INFO" | grep "SHA1:" | sed 's/.*SHA1: //')
+                # Get certificate DN (owner)
+                CERT_OWNER=$(echo "$CERT_INFO" | grep "certificate DN:" | head -1 | sed 's/.*certificate DN: //')
 
-            # Get certificate owner
-            CERT_OWNER=$(echo "$CERT_INFO" | grep "Owner:" | sed 's/Owner: //')
+                # Get SHA256 fingerprint
+                SHA256_FULL=$(echo "$CERT_INFO" | grep "SHA-256 digest:" | head -1 | sed 's/.*SHA-256 digest: //')
+                SHA256_FDROID="$SHA256_FULL"  # Already in lowercase without colons
 
-            echo "Certificate Owner:"
-            echo "  $CERT_OWNER"
-            echo ""
-            echo "SHA-1 Fingerprint:"
-            echo "  $SHA1_FULL"
-            echo ""
-            echo "SHA-256 Fingerprint:"
-            echo "  $SHA256_FULL"
-            echo ""
-            echo "F-Droid AllowedAPKSigningKeys (SHA-256 without colons, lowercase):"
-            echo "  $SHA256_FDROID"
-            echo ""
+                # Get SHA1 fingerprint
+                SHA1_FULL=$(echo "$CERT_INFO" | grep "SHA-1 digest:" | head -1 | sed 's/.*SHA-1 digest: //')
 
-            # Verify it's NOT the debug key
-            if echo "$CERT_OWNER" | grep -q "CN=Android Debug"; then
-                echo "⚠️  WARNING: APK is signed with DEBUG KEY!"
-                echo "   This should NOT happen for F-Droid releases!"
-                echo "   Check your keystore.properties configuration."
+                echo "Certificate Owner:"
+                echo "  $CERT_OWNER"
                 echo ""
+                echo "SHA-1 Fingerprint:"
+                echo "  $SHA1_FULL"
+                echo ""
+                echo "SHA-256 Fingerprint:"
+                echo "  $SHA256_FULL"
+                echo ""
+                echo "F-Droid AllowedAPKSigningKeys (SHA-256):"
+                echo "  $SHA256_FDROID"
+                echo ""
+
+                # Verify it's NOT the debug key
+                if echo "$CERT_OWNER" | grep -q "CN=Android Debug"; then
+                    echo "⚠️  WARNING: APK is signed with DEBUG KEY!"
+                    echo "   This should NOT happen for F-Droid releases!"
+                    echo "   Check your keystore.properties configuration."
+                    echo ""
+                else
+                    echo "✅ APK is signed with PROPER RELEASE KEY (not debug key)"
+                    echo ""
+                fi
             else
-                echo "✅ APK is signed with PROPER RELEASE KEY (not debug key)"
+                echo "⚠️  apksigner tool not found - cannot verify signature"
+                echo "   Install Android SDK build-tools to see signature information"
                 echo ""
             fi
 

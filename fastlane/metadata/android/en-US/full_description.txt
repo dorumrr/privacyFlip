@@ -22,15 +22,17 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Location services - Control GPS and location tracking
 • NFC - Control NFC sensor
 
-<b>Requirements (Choose ONE):</b>
+<b>Requirements:</b>
+
+• Android 7.0+ (API level 24)
+
+<b>Choose ONE privilege method:</b>
 
 <b>Option 1: Root Access</b> (Recommended for rooted devices)
-• Android 5.0+ (API level 21)
 • Root access via Magisk, SuperSU, or similar
 • Best performance with UID 0 privileges
 
 <b>Option 2: Shizuku</b> (No root required!)
-• Android 6.0+ (API level 23)
 • Shizuku app installed and running
 • ADB privileges via USB or wireless debugging
 • Perfect for non-rooted devices

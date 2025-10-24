@@ -33,7 +33,7 @@ class RootExecutor : PrivilegeExecutor {
                     Shell.setDefaultBuilder(
                         Shell.Builder.create()
                             .setFlags(Shell.FLAG_REDIRECT_STDERR)
-                            .setTimeout(10)
+                            .setTimeout(30) // 30 seconds to match Shizuku timeout - gives user time to respond to Magisk prompt
                     )
                     isShellInitialized = true
                     logManager?.i(TAG, "Root shell initialized successfully")
@@ -73,10 +73,8 @@ class RootExecutor : PrivilegeExecutor {
     }
     
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
-        if (_rootPermissionGranted != null) {
-            return@withContext _rootPermissionGranted!!
-        }
-        
+        // CRITICAL: Always check fresh status from Shell.isAppGrantedRoot()
+        // Don't rely on cached value because permission can be denied/revoked at any time
         try {
             val hasRoot = Shell.isAppGrantedRoot() == true
             _rootPermissionGranted = hasRoot
@@ -92,19 +90,22 @@ class RootExecutor : PrivilegeExecutor {
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
         try {
             logManager?.i(TAG, "Requesting root permission...")
-            
+
             // Execute a simple command to trigger root permission dialog
             val result = Shell.cmd("id").exec()
-            val granted = result.isSuccess
-            
+
+            // CRITICAL: Don't rely on result.isSuccess alone - it might succeed without root
+            // Instead, explicitly check if root was actually granted using Shell.isAppGrantedRoot()
+            val granted = Shell.isAppGrantedRoot() == true
+
             _rootPermissionGranted = granted
-            
+
             if (granted) {
                 logManager?.i(TAG, "Root permission granted")
             } else {
-                logManager?.w(TAG, "Root permission denied")
+                logManager?.w(TAG, "Root permission denied or ignored by user")
             }
-            
+
             return@withContext granted
         } catch (e: Exception) {
             logManager?.e(TAG, "Error requesting root permission: ${e.message}")

@@ -173,20 +173,30 @@ class MainFragment : Fragment() {
     private fun updateUI(uiState: UiState) {
         // Show/hide loading
         binding.loadingIndicator.visibility = if (uiState.isLoading) View.VISIBLE else View.GONE
-        
-        // Show/hide content based on root status
-        if (uiState.isRootGranted) {
-            // Root granted - show Global Privacy card and main content, hide system requirements
-            binding.globalPrivacyCard.root.visibility = View.VISIBLE
-            binding.mainContentContainer.visibility = View.VISIBLE
-            binding.systemRequirementsCard.root.visibility = View.GONE
 
-        } else {
-            // Root not granted - hide Global Privacy card and main content, show System Requirements
+        // CRITICAL: Hide ALL content while loading (during permission request)
+        // Only show content after permission status is determined
+        if (uiState.isLoading) {
+            // During loading - hide everything, only show spinner
             binding.globalPrivacyCard.root.visibility = View.GONE
             binding.mainContentContainer.visibility = View.GONE
-            binding.systemRequirementsCard.root.visibility = View.VISIBLE
-
+            binding.systemRequirementsCard.root.visibility = View.GONE
+            binding.creditsFooter.root.visibility = View.GONE
+        } else {
+            // After loading - show appropriate content based on root status
+            if (uiState.isRootGranted) {
+                // Root granted - show Global Privacy card and main content, hide system requirements
+                binding.globalPrivacyCard.root.visibility = View.VISIBLE
+                binding.mainContentContainer.visibility = View.VISIBLE
+                binding.systemRequirementsCard.root.visibility = View.GONE
+            } else {
+                // Root not granted - hide Global Privacy card and main content, show System Requirements
+                binding.globalPrivacyCard.root.visibility = View.GONE
+                binding.mainContentContainer.visibility = View.GONE
+                binding.systemRequirementsCard.root.visibility = View.VISIBLE
+            }
+            // Always show footer after loading completes
+            binding.creditsFooter.root.visibility = View.VISIBLE
         }
 
 

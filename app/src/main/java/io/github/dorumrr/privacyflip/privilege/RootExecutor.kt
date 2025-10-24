@@ -73,12 +73,20 @@ class RootExecutor : PrivilegeExecutor {
     }
     
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
-        // CRITICAL: Always check fresh status from Shell.isAppGrantedRoot()
-        // Don't rely on cached value because permission can be denied/revoked at any time
+        // CRITICAL: Always check fresh status by getting/creating the shell
+        // This ensures we check the actual current permission status from Magisk
         try {
-            val hasRoot = Shell.isAppGrantedRoot() == true
+            logManager?.i(TAG, "Checking root permission status...")
+
+            // Get or create the main shell - this will trigger permission check if needed
+            // If permission was granted in Magisk settings, this will detect it
+            val shell = Shell.getShell()
+
+            // Now check if the shell has root access
+            val hasRoot = shell.isRoot
             _rootPermissionGranted = hasRoot
-            logManager?.i(TAG, "Root permission check: $hasRoot")
+
+            logManager?.i(TAG, "Root permission check: $hasRoot (shell alive: ${shell.isAlive})")
             return@withContext hasRoot
         } catch (e: Exception) {
             logManager?.e(TAG, "Error checking root permission: ${e.message}")
@@ -91,12 +99,11 @@ class RootExecutor : PrivilegeExecutor {
         try {
             logManager?.i(TAG, "Requesting root permission...")
 
-            // Execute a simple command to trigger root permission dialog
-            val result = Shell.cmd("id").exec()
+            // Get or create the main shell - this will trigger Magisk permission dialog
+            val shell = Shell.getShell()
 
-            // CRITICAL: Don't rely on result.isSuccess alone - it might succeed without root
-            // Instead, explicitly check if root was actually granted using Shell.isAppGrantedRoot()
-            val granted = Shell.isAppGrantedRoot() == true
+            // Check if root was granted
+            val granted = shell.isRoot
 
             _rootPermissionGranted = granted
 

@@ -169,7 +169,7 @@ class MainViewModel : ViewModel() {
                             if (didAttemptAutoRequest) {
                                 when (privilegeMethod) {
                                     PrivilegeMethod.SHIZUKU -> "Shizuku permission denied. Click 'Grant Shizuku Permission' button to try again."
-                                    PrivilegeMethod.ROOT -> "Root permission denied. Click 'Grant Root Permission' button to try again."
+                                    PrivilegeMethod.ROOT -> "Root permission denied. Uninstall and reinstall the app, then grant root access when prompted by Magisk."
                                     PrivilegeMethod.SUI -> "Sui permission denied. Click 'Grant Sui Permission' button to try again."
                                     PrivilegeMethod.NONE -> "No privilege method available. Please install Shizuku or root your device."
                                 }
@@ -373,7 +373,7 @@ class MainViewModel : ViewModel() {
                         PrivilegeMethod.SHIZUKU ->
                             "Shizuku permission denied. Please ensure Shizuku app is running and wireless debugging is enabled. Try again or restart Shizuku."
                         PrivilegeMethod.ROOT ->
-                            "Root permission denied. Please grant root access when prompted by Magisk/SuperSU. If this persists, check your root manager settings."
+                            "Root permission denied. Uninstall and reinstall the app, then grant root access when prompted by Magisk/SuperSU."
                         PrivilegeMethod.SUI ->
                             "Sui permission denied. Please grant permission when prompted. If this persists, check Sui module settings in Magisk."
                         else ->

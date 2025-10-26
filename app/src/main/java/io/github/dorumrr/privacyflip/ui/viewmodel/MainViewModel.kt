@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.ui.viewmodel
 
+import android.app.KeyguardManager
 import android.content.Context
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -68,6 +70,9 @@ class MainViewModel : ViewModel() {
         logManager = LogManager.getInstance(context)
         preferenceManager = PreferenceManager.getInstance(context)
 
+        logManager.i(TAG, "=== MainViewModel INITIALIZATION START ===")
+        logManager.i(TAG, "App version: ${context.packageManager.getPackageInfo(context.packageName, 0).versionName}")
+
         viewModelScope.launch {
             rootManager.initialize(context)
             checkRootStatus()
@@ -80,7 +85,11 @@ class MainViewModel : ViewModel() {
         startBackgroundServiceIfEnabled()
         loadPermissionStatus()
 
+        logManager.i(TAG, "Performing initial lock delay configuration check...")
+        checkLockDelayConfiguration(context)
+
         isInitialized = true
+        logManager.i(TAG, "=== MainViewModel INITIALIZATION COMPLETE ===")
     }
 
     override fun onCleared() {
@@ -295,6 +304,8 @@ class MainViewModel : ViewModel() {
     fun updateScreenLockConfig(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean) {
         viewModelScope.launch {
             try {
+                logManager.i(TAG, "Updating screen lock config: feature=$feature, disableOnLock=$disableOnLock, enableOnUnlock=$enableOnUnlock")
+
                 preferenceManager.updateScreenLockConfig(feature, disableOnLock, enableOnUnlock)
 
                 val currentState = _uiState.value ?: UiState()
@@ -303,7 +314,16 @@ class MainViewModel : ViewModel() {
 
                 updateUiState { it.copy(screenLockConfig = newConfig) }
 
-                logManager.d(TAG, "Screen lock config updated for $feature: disable=$disableOnLock, enable=$enableOnUnlock")
+                logManager.i(TAG, "✅ Screen lock config updated successfully for $feature")
+
+                // Re-check lock delay warning if camera or microphone settings changed
+                // This ensures the warning appears/disappears dynamically when user toggles switches
+                if (feature == PrivacyFeature.CAMERA || feature == PrivacyFeature.MICROPHONE) {
+                    logManager.i(TAG, "Sensor feature ($feature) changed - triggering lock delay configuration check")
+                    context?.let { checkLockDelayConfiguration(it) }
+                } else {
+                    logManager.d(TAG, "Non-sensor feature changed - no lock delay check needed")
+                }
 
             } catch (e: Exception) {
                 logManager.e(TAG, "Failed to update screen lock config for $feature: ${e.message}")
@@ -362,6 +382,28 @@ class MainViewModel : ViewModel() {
         loadPermissionStatus()
     }
     
+    /**
+     * Reloads screen lock configuration from SharedPreferences.
+     * This should be called when the app comes back from background to ensure
+     * the UI reflects any changes made by the worker (e.g., after lock/unlock).
+     */
+    fun reloadScreenLockConfig() {
+        context?.let { ctx ->
+            logManager.d(TAG, "Reloading screen lock config from preferences (triggered by onResume)")
+            loadScreenLockConfig(ctx)
+            logManager.d(TAG, "Screen lock config reloaded successfully")
+
+            // Re-check lock delay warning in case camera/mic settings changed
+            val currentConfig = _uiState.value?.screenLockConfig
+            val cameraOrMicEnabled = currentConfig?.cameraDisableOnLock == true ||
+                                    currentConfig?.microphoneDisableOnLock == true
+            if (cameraOrMicEnabled) {
+                logManager.d(TAG, "Camera or mic is enabled - re-checking lock delay configuration")
+                checkLockDelayConfiguration(ctx)
+            }
+        }
+    }
+
     private fun loadGlobalPrivacyStatus() {
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
         updateUiState { it.copy(isGlobalPrivacyEnabled = isEnabled) }
@@ -379,7 +421,13 @@ class MainViewModel : ViewModel() {
                 mobileDataDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK),
                 mobileDataEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK),
                 locationDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("LOCATION"), Constants.Defaults.LOCATION_DISABLE_ON_LOCK),
-                locationEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("LOCATION"), Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK)
+                locationEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("LOCATION"), Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK),
+                nfcDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("NFC"), Constants.Defaults.NFC_DISABLE_ON_LOCK),
+                nfcEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("NFC"), Constants.Defaults.NFC_ENABLE_ON_UNLOCK),
+                cameraDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("CAMERA"), Constants.Defaults.CAMERA_DISABLE_ON_LOCK),
+                cameraEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("CAMERA"), Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK),
+                microphoneDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK),
+                microphoneEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK)
             )
 
             updateUiState { it.copy(screenLockConfig = config) }
@@ -416,6 +464,265 @@ class MainViewModel : ViewModel() {
             ensureBackgroundServiceRunning()
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to ensure background service running: ${e.message}")
+        }
+    }
+
+    /**
+     * Check if the device's lock delay configuration allows camera/mic to be disabled on lock.
+     * Returns true if sensors can be disabled, false if user needs to configure lock delay.
+     *
+     * This method implements comprehensive detection across all Android versions and manufacturers.
+     */
+    private fun canDisableSensorsOnLock(context: Context): Boolean {
+        return try {
+            // Log device information for debugging
+            logManager.i(TAG, "=== LOCK DELAY DETECTION START ===")
+            logManager.i(TAG, "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            logManager.i(TAG, "Android Version: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+            logManager.i(TAG, "Build ID: ${android.os.Build.ID}")
+
+            // Check if camera/mic sensor privacy is supported (Android 12+)
+            val isSensorPrivacySupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+            logManager.i(TAG, "Sensor privacy API supported: $isSensorPrivacySupported")
+
+            if (!isSensorPrivacySupported) {
+                logManager.w(TAG, "Sensor privacy not supported on API ${android.os.Build.VERSION.SDK_INT} - warning not applicable")
+                return true // No warning needed on older Android versions
+            }
+
+            // Check if "Power button instantly locks" is enabled
+            val powerButtonInstantlyLocks = checkPowerButtonInstantlyLocks(context)
+            logManager.i(TAG, "Power button instantly locks: $powerButtonInstantlyLocks")
+
+            if (powerButtonInstantlyLocks) {
+                logManager.w(TAG, "⚠️ Power button instantly locks is ENABLED - sensors CANNOT be disabled on lock")
+                logManager.w(TAG, "Reason: Keyguard engages immediately when power button is pressed")
+                return false
+            }
+
+            // Check lock timeout setting with multiple fallback methods
+            val lockTimeout = detectLockTimeout(context)
+            logManager.i(TAG, "Lock timeout detected: ${lockTimeout}ms (${lockTimeout / 1000.0}s)")
+
+            // Analyze the timeout value
+            val canDisable = analyzeLockTimeout(lockTimeout)
+
+            logManager.i(TAG, "=== LOCK DELAY DETECTION RESULT ===")
+            logManager.i(TAG, "Can disable sensors on lock: $canDisable")
+            if (canDisable) {
+                logManager.i(TAG, "✅ Sufficient timing window exists to disable sensors before keyguard locks")
+            } else {
+                logManager.w(TAG, "❌ Insufficient timing window - sensors cannot be disabled reliably")
+                logManager.w(TAG, "User needs to configure lock delay to 5+ seconds")
+            }
+            logManager.i(TAG, "=== LOCK DELAY DETECTION END ===")
+
+            canDisable
+
+        } catch (e: Exception) {
+            logManager.e(TAG, "❌ CRITICAL ERROR in lock delay detection: ${e.message}")
+            logManager.e(TAG, "Stack trace: ${e.stackTraceToString()}")
+            // Default to false (show warning) if we can't determine - safer approach
+            logManager.w(TAG, "Defaulting to showing warning due to detection error")
+            false
+        }
+    }
+
+    /**
+     * Check if "Power button instantly locks" setting is enabled.
+     * Tries multiple setting keys for different manufacturers.
+     */
+    private fun checkPowerButtonInstantlyLocks(context: Context): Boolean {
+        val settingKeys = listOf(
+            "lockscreen.power_button_instantly_locks",  // Standard Android
+            "power_button_instantly_locks",              // Some manufacturers
+            "lockscreen_power_button_instantly_locks"    // Alternative format
+        )
+
+        for (key in settingKeys) {
+            try {
+                // Try Settings.System first (most common)
+                val value = Settings.System.getInt(context.contentResolver, key, -1)
+                if (value != -1) {
+                    logManager.d(TAG, "Found power button setting in Settings.System: $key = $value")
+                    return value == 1
+                }
+            } catch (e: Exception) {
+                logManager.d(TAG, "Could not read Settings.System.$key: ${e.message}")
+            }
+
+            try {
+                // Try Settings.Secure as fallback
+                val value = Settings.Secure.getInt(context.contentResolver, key, -1)
+                if (value != -1) {
+                    logManager.d(TAG, "Found power button setting in Settings.Secure: $key = $value")
+                    return value == 1
+                }
+            } catch (e: Exception) {
+                logManager.d(TAG, "Could not read Settings.Secure.$key: ${e.message}")
+            }
+        }
+
+        logManager.d(TAG, "Power button instantly locks setting not found - assuming disabled (safe default)")
+        return false // Safe default: assume it's disabled if we can't find it
+    }
+
+    /**
+     * Detect lock timeout with multiple fallback methods for different manufacturers.
+     * Returns timeout in milliseconds.
+     */
+    private fun detectLockTimeout(context: Context): Long {
+        logManager.d(TAG, "=== ATTEMPTING TO DETECT LOCK TIMEOUT ===")
+
+        val settingKeys = listOf(
+            "lock_screen_lock_after_timeout",      // Standard Android (Settings.Secure)
+            "lockscreen.lock_after_timeout",       // Alternative format
+            "lock_after_timeout",                  // Short format
+            "screen_lock_timeout"                  // Some manufacturers
+        )
+
+        // Try Settings.Secure first (standard location)
+        logManager.d(TAG, "Trying Settings.Secure...")
+        for (key in settingKeys) {
+            try {
+                val value = Settings.Secure.getLong(context.contentResolver, key, -1)
+                logManager.d(TAG, "  Settings.Secure.$key = $value")
+                if (value != -1L) {
+                    logManager.i(TAG, "✅ Found lock timeout in Settings.Secure: $key = ${value}ms")
+                    return value
+                }
+            } catch (e: Exception) {
+                logManager.d(TAG, "  Settings.Secure.$key threw exception: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+
+        // Try Settings.System as fallback (some manufacturers)
+        logManager.d(TAG, "Trying Settings.System...")
+        for (key in settingKeys) {
+            try {
+                val value = Settings.System.getLong(context.contentResolver, key, -1)
+                logManager.d(TAG, "  Settings.System.$key = $value")
+                if (value != -1L) {
+                    logManager.i(TAG, "✅ Found lock timeout in Settings.System: $key = ${value}ms")
+                    return value
+                }
+            } catch (e: Exception) {
+                logManager.d(TAG, "  Settings.System.$key threw exception: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+
+        // Try to read screen off timeout as a hint
+        try {
+            val screenOffTimeout = Settings.System.getInt(
+                context.contentResolver,
+                Settings.System.SCREEN_OFF_TIMEOUT,
+                -1
+            )
+            logManager.d(TAG, "Screen off timeout: ${screenOffTimeout}ms (for reference)")
+        } catch (e: Exception) {
+            logManager.d(TAG, "Could not read screen off timeout: ${e.message}")
+        }
+
+        // If we can't find the setting, we CANNOT determine the actual timeout
+        // This is common on emulators and some devices
+        logManager.w(TAG, "❌ Could not detect lock timeout setting from any known location")
+        logManager.w(TAG, "This may indicate:")
+        logManager.w(TAG, "  - Android emulator (settings not exposed)")
+        logManager.w(TAG, "  - Custom ROM with different setting keys")
+        logManager.w(TAG, "  - Android version with changed settings location")
+        logManager.w(TAG, "  - Manufacturer-specific implementation")
+
+        // IMPORTANT: We cannot assume a safe default here
+        // Return -1 to indicate "unknown" so caller can handle appropriately
+        logManager.w(TAG, "Returning -1 to indicate UNKNOWN lock timeout")
+        return -1L
+    }
+
+    /**
+     * Analyze lock timeout value and determine if sensors can be disabled.
+     *
+     * @param timeoutMs Lock timeout in milliseconds (-1 = unknown)
+     * @return true if there's sufficient time to disable sensors, false otherwise
+     */
+    private fun analyzeLockTimeout(timeoutMs: Long): Boolean {
+        when {
+            timeoutMs == -1L -> {
+                logManager.w(TAG, "⚠️ Lock timeout is UNKNOWN - cannot determine if sensors can be disabled")
+                logManager.w(TAG, "This typically happens on:")
+                logManager.w(TAG, "  - Android emulators")
+                logManager.w(TAG, "  - Devices where settings are not exposed via standard API")
+                logManager.w(TAG, "  - Custom ROMs with non-standard settings")
+                logManager.w(TAG, "DECISION: Showing warning to be safe (better safe than sorry)")
+                logManager.w(TAG, "User can test if camera/mic actually work on lock and ignore warning if they do")
+                return false // Show warning when we can't determine
+            }
+            timeoutMs == 0L -> {
+                logManager.w(TAG, "Lock timeout is 0ms (Immediately) - NO timing window")
+                return false
+            }
+            timeoutMs < 5000L -> {
+                logManager.w(TAG, "Lock timeout is ${timeoutMs}ms (< 5s) - timing window TOO SHORT")
+                logManager.w(TAG, "Sensor disable commands may not complete before keyguard locks")
+                return false
+            }
+            timeoutMs == 5000L -> {
+                logManager.i(TAG, "Lock timeout is 5000ms (5s) - MINIMUM acceptable timing window")
+                return true
+            }
+            timeoutMs < 30000L -> {
+                logManager.i(TAG, "Lock timeout is ${timeoutMs}ms (${timeoutMs / 1000}s) - GOOD timing window")
+                return true
+            }
+            else -> {
+                logManager.i(TAG, "Lock timeout is ${timeoutMs}ms (${timeoutMs / 1000}s) - EXCELLENT timing window")
+                return true
+            }
+        }
+    }
+
+    /**
+     * Check lock delay configuration and update UI state to show/hide warning.
+     * This is the main entry point for lock delay warning logic.
+     */
+    fun checkLockDelayConfiguration(context: Context) {
+        handleError("checking lock delay configuration") {
+            logManager.i(TAG, "=== LOCK DELAY WARNING CHECK START ===")
+
+            // Check if device configuration allows sensor disabling
+            val canDisableSensors = canDisableSensorsOnLock(context)
+            val shouldShowWarning = !canDisableSensors
+
+            logManager.i(TAG, "Device configuration check: canDisableSensors=$canDisableSensors")
+
+            // Only show warning if camera or microphone disable-on-lock is enabled
+            val currentConfig = _uiState.value?.screenLockConfig
+            val cameraEnabled = currentConfig?.cameraDisableOnLock == true
+            val micEnabled = currentConfig?.microphoneDisableOnLock == true
+            val isCameraOrMicEnabled = cameraEnabled || micEnabled
+
+            logManager.i(TAG, "User settings: camera_disable_on_lock=$cameraEnabled, mic_disable_on_lock=$micEnabled")
+            logManager.i(TAG, "At least one sensor feature enabled: $isCameraOrMicEnabled")
+
+            // Final decision: show warning only if BOTH conditions are true
+            val finalShowWarning = shouldShowWarning && isCameraOrMicEnabled
+
+            logManager.i(TAG, "=== LOCK DELAY WARNING DECISION ===")
+            logManager.i(TAG, "Show warning: $finalShowWarning")
+            if (finalShowWarning) {
+                logManager.w(TAG, "⚠️ WARNING WILL BE DISPLAYED TO USER")
+                logManager.w(TAG, "Reason: Device configuration prevents reliable sensor disabling on lock")
+                logManager.w(TAG, "Action required: User must configure lock delay settings")
+            } else {
+                logManager.i(TAG, "✅ No warning needed")
+                if (!isCameraOrMicEnabled) {
+                    logManager.i(TAG, "Reason: Camera/Mic disable-on-lock not enabled by user")
+                } else {
+                    logManager.i(TAG, "Reason: Device configuration allows sensor disabling")
+                }
+            }
+            logManager.i(TAG, "=== LOCK DELAY WARNING CHECK END ===")
+
+            updateUiState { it.copy(showLockDelayWarning = finalShowWarning) }
         }
     }
 
@@ -522,6 +829,16 @@ class MainViewModel : ViewModel() {
             { it.nfcDisableOnLock }, { it.nfcEnableOnUnlock })
     }
 
+    fun updateCameraSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.CAMERA, disableOnLock, enableOnUnlock,
+            { it.cameraDisableOnLock }, { it.cameraEnableOnUnlock })
+    }
+
+    fun updateMicrophoneSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.MICROPHONE, disableOnLock, enableOnUnlock,
+            { it.microphoneDisableOnLock }, { it.microphoneEnableOnUnlock })
+    }
+
     fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
         when (feature) {
             PrivacyFeature.WIFI -> updateWifiSettings(disableOnLock, enableOnUnlock)
@@ -529,6 +846,8 @@ class MainViewModel : ViewModel() {
             PrivacyFeature.MOBILE_DATA -> updateMobileDataSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.LOCATION -> updateLocationSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.NFC -> updateNFCSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.CAMERA -> updateCameraSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.MICROPHONE -> updateMicrophoneSettings(disableOnLock, enableOnUnlock)
         }
     }
 
@@ -551,7 +870,11 @@ data class ScreenLockConfig(
     val locationDisableOnLock: Boolean = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
     val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK,
     val nfcDisableOnLock: Boolean = Constants.Defaults.NFC_DISABLE_ON_LOCK,
-    val nfcEnableOnUnlock: Boolean = Constants.Defaults.NFC_ENABLE_ON_UNLOCK
+    val nfcEnableOnUnlock: Boolean = Constants.Defaults.NFC_ENABLE_ON_UNLOCK,
+    val cameraDisableOnLock: Boolean = Constants.Defaults.CAMERA_DISABLE_ON_LOCK,
+    val cameraEnableOnUnlock: Boolean = Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK,
+    val microphoneDisableOnLock: Boolean = Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK,
+    val microphoneEnableOnUnlock: Boolean = Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK
 ) {
     fun updateFeature(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean): ScreenLockConfig {
         return when (feature) {
@@ -574,6 +897,14 @@ data class ScreenLockConfig(
             PrivacyFeature.NFC -> copy(
                 nfcDisableOnLock = disableOnLock,
                 nfcEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.CAMERA -> copy(
+                cameraDisableOnLock = disableOnLock,
+                cameraEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.MICROPHONE -> copy(
+                microphoneDisableOnLock = disableOnLock,
+                microphoneEnableOnUnlock = enableOnUnlock
             )
         }
     }
@@ -603,5 +934,7 @@ data class UiState(
         lockDelaySeconds = Constants.Defaults.LOCK_DELAY_SECONDS,
         unlockDelaySeconds = Constants.Defaults.UNLOCK_DELAY_SECONDS,
         showCountdown = Constants.Defaults.SHOW_COUNTDOWN
-    )
+    ),
+    // Lock delay warning for camera/mic
+    val showLockDelayWarning: Boolean = false
 )

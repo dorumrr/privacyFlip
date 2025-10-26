@@ -8,11 +8,17 @@ enum class PrivacyFeature(
     BLUETOOTH("Bluetooth", "Short-range wireless connectivity"),
     MOBILE_DATA("Mobile Data", "Cellular data connectivity"),
     LOCATION("Location Services", "GPS and location tracking"),
-    NFC("NFC", "Near Field Communication");
+    NFC("NFC", "Near Field Communication"),
+    CAMERA("Camera", "Camera sensor access"),
+    MICROPHONE("Microphone", "Microphone sensor access");
 
     companion object {
         fun getConnectivityFeatures(): List<PrivacyFeature> {
             return listOf(WIFI, BLUETOOTH, MOBILE_DATA, LOCATION, NFC)
+        }
+
+        fun getSensorFeatures(): List<PrivacyFeature> {
+            return listOf(CAMERA, MICROPHONE)
         }
     }
 }

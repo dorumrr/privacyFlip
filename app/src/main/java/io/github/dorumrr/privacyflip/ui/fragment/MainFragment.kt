@@ -36,9 +36,17 @@ class MainFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         setupUI()
         observeViewModel()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        android.util.Log.d("MainFragment", "onResume() called - reloading screen lock configuration")
+        // Reload screen lock configuration from preferences when fragment resumes
+        // This ensures the UI reflects any changes made by the worker (e.g., after lock/unlock)
+        viewModel.reloadScreenLockConfig()
     }
 
     private fun setupUI() {
@@ -60,6 +68,7 @@ class MainFragment : Fragment() {
 
         // Setup privacy feature cards
         setupScreenLockCard()
+        setupExperimentalFeaturesCard()
         setupTimerCard()
         setupBackgroundPermissionErrorCard()
         setupGlobalPrivacyCard()
@@ -74,6 +83,25 @@ class MainFragment : Fragment() {
                 FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
                 FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location"),
                 FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC")
+            )
+
+            featureConfigs.forEach { config ->
+                setupPrivacyFeature(
+                    config.binding,
+                    config.iconRes,
+                    config.displayName,
+                    { viewModel.updateFeatureSetting(config.feature, disableOnLock = it) },
+                    { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
+                )
+            }
+        }
+    }
+
+    private fun setupExperimentalFeaturesCard() {
+        with(binding.experimentalFeaturesCard) {
+            val featureConfigs = listOf(
+                FeatureConfig(PrivacyFeature.CAMERA, cameraSettings, R.drawable.ic_camera, "Camera"),
+                FeatureConfig(PrivacyFeature.MICROPHONE, microphoneSettings, R.drawable.ic_mic, "Microphone")
             )
 
             featureConfigs.forEach { config ->
@@ -214,9 +242,15 @@ class MainFragment : Fragment() {
         updateGlobalPrivacyCard(uiState)
         updateSystemRequirementsCard(uiState)
         updateBackgroundPermissionErrorCard(uiState)
+
+        // Update lock delay warning visibility
+        updateLockDelayWarning(uiState)
     }
 
-
+    private fun updateLockDelayWarning(uiState: UiState) {
+        binding.experimentalFeaturesCard.lockDelayWarning.visibility =
+            if (uiState.showLockDelayWarning) View.VISIBLE else View.GONE
+    }
 
     private fun updateErrorMessage(uiState: UiState) {
         if (uiState.errorMessage != null) {
@@ -260,6 +294,18 @@ class MainFragment : Fragment() {
             binding.screenLockCard.nfcSettings,
             uiState.screenLockConfig.nfcDisableOnLock,
             uiState.screenLockConfig.nfcEnableOnUnlock
+        )
+
+        updatePrivacyFeatureSetting(
+            binding.experimentalFeaturesCard.cameraSettings,
+            uiState.screenLockConfig.cameraDisableOnLock,
+            uiState.screenLockConfig.cameraEnableOnUnlock
+        )
+
+        updatePrivacyFeatureSetting(
+            binding.experimentalFeaturesCard.microphoneSettings,
+            uiState.screenLockConfig.microphoneDisableOnLock,
+            uiState.screenLockConfig.microphoneEnableOnUnlock
         )
 
         // Clear flag

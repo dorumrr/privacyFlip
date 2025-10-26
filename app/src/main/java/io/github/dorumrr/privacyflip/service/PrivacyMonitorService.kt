@@ -199,10 +199,14 @@ class PrivacyMonitorService : Service() {
      */
     private fun triggerInitialPrivacyAction(isUnlocking: Boolean, reason: String) {
         try {
+            // Check if device is currently locked to pass correct flag to worker
+            val isDeviceLocked = isScreenCurrentlyLocked()
+
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
                 .setInputData(
                     workDataOf(
                         "is_locking" to !isUnlocking,
+                        "is_device_locked" to isDeviceLocked,
                         "trigger" to "service_init",
                         "reason" to reason
                     )
@@ -210,7 +214,7 @@ class PrivacyMonitorService : Service() {
                 .build()
 
             WorkManager.getInstance(this).enqueue(workRequest)
-            Log.i(TAG, "🔄 Initial privacy action enqueued: ${if (isUnlocking) "unlock" else "lock"} actions")
+            Log.i(TAG, "🔄 Initial privacy action enqueued: ${if (isUnlocking) "unlock" else "lock"} actions (deviceLocked=$isDeviceLocked)")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger initial privacy action", e)

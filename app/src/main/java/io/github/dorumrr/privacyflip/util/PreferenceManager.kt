@@ -43,6 +43,8 @@ class PreferenceManager private constructor(private val context: Context) {
             PrivacyFeature.LOCATION -> Constants.Defaults.LOCATION_DISABLE_ON_LOCK
             PrivacyFeature.MOBILE_DATA -> Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK
             PrivacyFeature.NFC -> Constants.Defaults.NFC_DISABLE_ON_LOCK
+            PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_DISABLE_ON_LOCK
+            PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK
         }
         return prefs.getBoolean(key, default)
     }
@@ -60,6 +62,8 @@ class PreferenceManager private constructor(private val context: Context) {
             PrivacyFeature.LOCATION -> Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK
             PrivacyFeature.MOBILE_DATA -> Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK
             PrivacyFeature.NFC -> Constants.Defaults.NFC_ENABLE_ON_UNLOCK
+            PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK
+            PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK
         }
         return prefs.getBoolean(key, default)
     }

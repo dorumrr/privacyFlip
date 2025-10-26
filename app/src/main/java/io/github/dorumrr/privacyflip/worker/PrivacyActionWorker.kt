@@ -33,10 +33,11 @@ class PrivacyActionWorker(
     override suspend fun doWork(): Result {
         try {
             val isLocking = inputData.getBoolean("is_locking", false)
+            val isDeviceLocked = inputData.getBoolean("is_device_locked", false)
             val trigger = inputData.getString("trigger") ?: "unknown"
             val reason = inputData.getString("reason") ?: "Unknown"
 
-            Log.i(TAG, "🔒 Executing privacy actions: locking=$isLocking, trigger=$trigger, reason=$reason")
+            Log.i(TAG, "🔒 Executing privacy actions: locking=$isLocking, deviceLocked=$isDeviceLocked, trigger=$trigger, reason=$reason")
 
             val rootManager = RootManager.getInstance(Unit)
             rootManager.initialize(applicationContext)
@@ -73,13 +74,40 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     Log.i(TAG, "Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
-                    val lockDelay = preferenceManager.lockDelaySeconds
-                    if (lockDelay > 0) {
-                        delay(lockDelay * 1000L)
+                    // Split features into two groups:
+                    // 1. Camera/Microphone - must be disabled IMMEDIATELY (before device locks)
+                    //    because Android blocks changing sensor privacy while locked
+                    // 2. Other features - can be disabled after the configured delay
+                    val sensorFeatures = featuresToDisable.filter {
+                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
+                    }
+                    val otherFeatures = featuresToDisable.filter {
+                        it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE
                     }
 
-                    val results = privacyManager.disableFeatures(featuresToDisable.toSet())
-                    processResults(results, featuresToDisable, "🔒", "disabled", "Disabled")
+                    // Disable camera/microphone IMMEDIATELY (no delay)
+                    // BUT only if device is NOT locked yet (keyguard not engaged)
+                    if (sensorFeatures.isNotEmpty()) {
+                        if (!isDeviceLocked) {
+                            Log.i(TAG, "⚡ Device unlocked - disabling sensors immediately: ${sensorFeatures.map { it.displayName }}")
+                            val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
+                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled")
+                        } else {
+                            Log.w(TAG, "⚠️ Device already locked - CANNOT disable sensors (Android restriction): ${sensorFeatures.map { it.displayName }}")
+                        }
+                    }
+
+                    // Disable other features after the configured delay
+                    if (otherFeatures.isNotEmpty()) {
+                        val lockDelay = preferenceManager.lockDelaySeconds
+                        if (lockDelay > 0) {
+                            Log.i(TAG, "⏳ Waiting ${lockDelay}s before disabling other features")
+                            delay(lockDelay * 1000L)
+                        }
+
+                        val otherResults = privacyManager.disableFeatures(otherFeatures.toSet())
+                        processResults(otherResults, otherFeatures, "🔒", "disabled", "Disabled")
+                    }
                 }
 
             } else {

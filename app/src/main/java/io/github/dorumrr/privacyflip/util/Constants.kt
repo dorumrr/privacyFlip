@@ -38,12 +38,19 @@ object Constants {
         const val LOCATION_DISABLE_ON_LOCK = true
         const val MOBILE_DATA_DISABLE_ON_LOCK = true
         const val NFC_DISABLE_ON_LOCK = true
+        // Camera/Microphone: These are disabled IMMEDIATELY when lock button is pressed
+        // (before the device fully locks) to work around Android's security restriction
+        const val CAMERA_DISABLE_ON_LOCK = true
+        const val MICROPHONE_DISABLE_ON_LOCK = true
 
         const val WIFI_ENABLE_ON_UNLOCK = true
         const val BLUETOOTH_ENABLE_ON_UNLOCK = false
         const val LOCATION_ENABLE_ON_UNLOCK = false
         const val MOBILE_DATA_ENABLE_ON_UNLOCK = true
         const val NFC_ENABLE_ON_UNLOCK = false
+        // Enable camera/mic on unlock (unblock them when device is unlocked)
+        const val CAMERA_ENABLE_ON_UNLOCK = true
+        const val MICROPHONE_ENABLE_ON_UNLOCK = true
     }
 
     object Logging {

@@ -33,6 +33,8 @@ class PrivacyManager private constructor(
         toggles[PrivacyFeature.MOBILE_DATA] = MobileDataToggle(rootManager)
         toggles[PrivacyFeature.LOCATION] = LocationToggle(rootManager)
         toggles[PrivacyFeature.NFC] = NFCToggle(rootManager, context)
+        toggles[PrivacyFeature.CAMERA] = CameraToggle(rootManager)
+        toggles[PrivacyFeature.MICROPHONE] = MicrophoneToggle(rootManager)
     }
     
     fun getAvailableToggles(): Map<PrivacyFeature, PrivacyToggle> {

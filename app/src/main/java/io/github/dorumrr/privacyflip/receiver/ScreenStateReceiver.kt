@@ -1,5 +1,6 @@
 package io.github.dorumrr.privacyflip.receiver
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -20,13 +21,22 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             Intent.ACTION_SCREEN_OFF -> {
-                Log.i(TAG, "📱 Screen LOCKED - triggering privacy actions")
-                triggerPrivacyAction(context, isLocking = true, reason = "Screen Lock")
+                // Check if device is already locked (keyguard engaged)
+                val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                val isKeyguardLocked = keyguardManager?.isKeyguardLocked ?: true
+
+                if (!isKeyguardLocked) {
+                    Log.i(TAG, "✅ Screen OFF but device NOT locked yet - triggering privacy actions")
+                    triggerPrivacyAction(context, isLocking = true, isDeviceLocked = false, reason = "Screen Off (Unlocked)")
+                } else {
+                    Log.w(TAG, "⚠️ Screen OFF and device ALREADY locked - camera/mic cannot be disabled")
+                    triggerPrivacyAction(context, isLocking = true, isDeviceLocked = true, reason = "Screen Off (Locked)")
+                }
             }
 
             Intent.ACTION_USER_PRESENT -> {
                 Log.i(TAG, "🔓 Screen UNLOCKED (user authenticated) - triggering privacy actions")
-                triggerPrivacyAction(context, isLocking = false, reason = "Screen Unlock")
+                triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen Unlock")
             }
 
             Intent.ACTION_SCREEN_ON -> {
@@ -39,21 +49,22 @@ class ScreenStateReceiver : BroadcastReceiver() {
         }
     }
     
-    private fun triggerPrivacyAction(context: Context, isLocking: Boolean, reason: String) {
+    private fun triggerPrivacyAction(context: Context, isLocking: Boolean, isDeviceLocked: Boolean, reason: String) {
         try {
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
                 .setInputData(
                     workDataOf(
                         "is_locking" to isLocking,
+                        "is_device_locked" to isDeviceLocked,
                         "trigger" to "screen_state",
                         "reason" to reason
                     )
                 )
                 .build()
-            
+
             WorkManager.getInstance(context).enqueue(workRequest)
-            Log.i(TAG, "Privacy action work enqueued for ${if (isLocking) "lock" else "unlock"}")
-            
+            Log.i(TAG, "Privacy action work enqueued for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger privacy action", e)
         }

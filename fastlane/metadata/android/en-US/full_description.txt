@@ -1,4 +1,4 @@
-Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it disables Wi-Fi, Bluetooth, mobile data, location services, and NFC. When you unlock, it intelligently restores the features you want back on.
+Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it can disable Wi-Fi, Bluetooth, mobile data, location services, NFC, and even camera/microphone sensors. When you unlock, it intelligently restores the features you want back on.
 
 <b>Works with Root OR Shizuku - Choose your preferred privilege method!</b>
 
@@ -8,6 +8,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Dual privilege support: Root OR Shizuku (no root required!)
 • Automatic privilege detection (Sui > Root > Shizuku)
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC)
+• Experimental camera and microphone sensor privacy controls (Android 12+)
 • Customizable timing delays (0-60 seconds for both lock and unlock)
 • Background service for persistent monitoring
 • Quick Settings tile integration
@@ -22,9 +23,17 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Location services - Control GPS and location tracking
 • NFC - Control NFC sensor
 
+<b>Experimental Features (Android 12+):</b>
+
+• Camera - Disable/enable camera sensor privacy
+• Microphone - Disable/enable microphone sensor privacy
+
+Note: Camera and microphone controls require a timing window between screen lock and device lock. The app will warn you if your device is configured for instant locking.
+
 <b>Requirements:</b>
 
 • Android 7.0+ (API level 24)
+• Android 12+ (API level 31) for camera/microphone features
 
 <b>Choose ONE privilege method:</b>
 

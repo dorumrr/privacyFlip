@@ -1,0 +1,8 @@
+Version 1.4.0 - Experimental Features & Enhanced Detection
+
+• New Camera and Microphone pivacy toggles as "Experimental Features"
+• Enhanced lock delay detection with comprehensive logging for all devices
+• Better handling of Android emulators and devices without exposed settings
+• Cleaner UI with dedicated experimental features card
+• Fixed lock delay warning now shows conservatively when settings cannot be detected
+• Removed duplicate warning icons for better visual clarity

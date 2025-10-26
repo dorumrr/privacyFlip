@@ -2,7 +2,7 @@
 
 **Automatic lock/unlock privacy control for Android devices 🔐📱✨**
 
-**PrivacyFlip** automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, and **NFC**. When you unlock, it intelligently restores the features you want back on.
+**PrivacyFlip** automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, **NFC**, and even **camera/microphone sensors** (experimental). When you unlock, it intelligently restores the features you want back on.
 
 **Works with Root or Shizuku** - Choose your preferred privilege method!
 
@@ -31,6 +31,12 @@
 - 📍 **Location services** - Control GPS and location tracking
 - 📳 **NFC** - Control Near Field Communication sensor
 
+### **Experimental Features** (Android 12+)
+- 📷 **Camera** - Disable/enable camera sensor privacy
+- 🎤 **Microphone** - Disable/enable microphone sensor privacy
+
+> **Note:** Camera and microphone controls require a timing window between screen lock and device lock. The app will warn you if your device is configured for instant locking.
+
 ### **Customizable Timing**
 - **Lock Delay**: 0-60 seconds before privacy actions trigger
 - **Unlock Delay**: 0-60 seconds before features are restored
@@ -39,6 +45,7 @@
 ## 📱 Requirements
 
 **Minimum:** Android 7.0+ (API level 24)
+**Camera/Microphone Features:** Android 12+ (API level 31)
 
 **Choose ONE of the following privilege methods:**
 

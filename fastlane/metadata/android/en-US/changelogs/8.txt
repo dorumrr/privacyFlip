@@ -1,0 +1,3 @@
+Version 1.4.0 - Dark Mode improvements
+
+• Fixed dark mode alert for Experimental Features

@@ -38,5 +38,9 @@
     <!-- Widget colors (dark theme) -->
     <color name="widget_background">#80FFFFFF</color>   <!-- Semi-transparent white -->
     <color name="widget_stroke">#40000000</color>       <!-- Semi-transparent black -->
+
+    <!-- Warning colors (dark theme) -->
+    <color name="warning_background">#FF3E2723</color>  <!-- Dark brown/orange background -->
+    <color name="warning_text">#FFFFB74D</color>        <!-- Light orange text -->
 </resources>
 

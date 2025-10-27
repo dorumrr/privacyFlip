@@ -224,6 +224,74 @@ case "${1:-menu}" in
         echo "   APK: $(find app/build/outputs/apk/debug -name "*.apk" -type f | head -1)"
         ;;
 
+    "screenshot")
+        echo "📸 Taking Screenshot..."
+        echo ""
+
+        # Check if device/emulator is connected
+        if ! check_emulator; then
+            echo "❌ No device or emulator detected!"
+            echo "   Please start an emulator or connect a device first"
+            echo "   Run: ./dev.sh emulator"
+            exit 1
+        fi
+
+        # Create screenshots directory if it doesn't exist
+        SCREENSHOTS_DIR="screenshots"
+        mkdir -p "$SCREENSHOTS_DIR"
+
+        # Generate timestamp for filename
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        SCREENSHOT_NAME="screenshot_${TIMESTAMP}.png"
+        LOCAL_PATH="${SCREENSHOTS_DIR}/${SCREENSHOT_NAME}"
+
+        echo "📱 Capturing screenshot from device..."
+
+        # Take screenshot on device (saves to /sdcard/)
+        DEVICE_PATH="/sdcard/${SCREENSHOT_NAME}"
+        $ADB_PATH shell screencap -p "$DEVICE_PATH"
+
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to capture screenshot on device"
+            exit 1
+        fi
+
+        echo "💾 Pulling screenshot to local machine..."
+        $ADB_PATH pull "$DEVICE_PATH" "$LOCAL_PATH"
+
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to pull screenshot from device"
+            exit 1
+        fi
+
+        # Clean up screenshot from device
+        $ADB_PATH shell rm "$DEVICE_PATH" 2>/dev/null
+
+        echo "✅ Screenshot saved: $LOCAL_PATH"
+        echo ""
+
+        # Open the screenshot
+        echo "🖼️  Opening screenshot..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            open "$LOCAL_PATH"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # Linux
+            if command -v xdg-open &> /dev/null; then
+                xdg-open "$LOCAL_PATH"
+            elif command -v gnome-open &> /dev/null; then
+                gnome-open "$LOCAL_PATH"
+            else
+                echo "   ⚠️  Could not auto-open screenshot. Please open manually: $LOCAL_PATH"
+            fi
+        else
+            echo "   ⚠️  Auto-open not supported on this OS. Screenshot saved to: $LOCAL_PATH"
+        fi
+
+        echo ""
+        echo "🎉 Done!"
+        ;;
+
     "release")
         echo "🚀 PrivacyFlip Release Builder"
         echo "============================="
@@ -582,6 +650,7 @@ case "${1:-menu}" in
         echo "  emulator        - Start Android emulator (prefers Pixel 9a Android 14)"
         echo "  install         - Fresh install: uninstall → clean build → install → launch"
         echo "  build           - Build debug APK only"
+        echo "  screenshot      - Take screenshot from device/emulator and open it"
         echo ""
         echo "📦 Release Commands:"
         echo "  release         - Build release APK for F-Droid/GitHub distribution"

@@ -21,6 +21,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Make version available in BuildConfig
+        buildConfigField("String", "VERSION_NAME", "\"${versionName}\"")
     }
 
     // Disable dependency metadata for F-Droid compliance
@@ -88,6 +91,7 @@ android {
     
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
     
     packaging {

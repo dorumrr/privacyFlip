@@ -1,6 +1,11 @@
 package io.github.dorumrr.privacyflip.ui.fragment
 
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -8,6 +13,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
+import io.github.dorumrr.privacyflip.BuildConfig
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.data.TimerSettings
@@ -408,7 +414,7 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.success_green)
                 )
                 globalPrivacyIcon.setImageResource(R.drawable.ic_check_circle)
-                globalPrivacyTitle.text = "Privacy Flip"
+                globalPrivacyTitle.text = getAppTitleWithVersion()
                 globalPrivacyStatus.text = "Protection Active"
             } else {
                 // Red - Protection Inactive
@@ -416,7 +422,7 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.error_red)
                 )
                 globalPrivacyIcon.setImageResource(R.drawable.ic_error)
-                globalPrivacyTitle.text = "Privacy Flip"
+                globalPrivacyTitle.text = getAppTitleWithVersion()
                 globalPrivacyStatus.text = "Protection Inactive"
             }
         }
@@ -555,6 +561,36 @@ class MainFragment : Fragment() {
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
+    }
+
+    /**
+     * Creates a formatted title with "Privacy Flip" in bold and version in regular text.
+     * Example: "Privacy Flip v1.4.2" where "Privacy Flip" is bold and version is 75% size.
+     */
+    private fun getAppTitleWithVersion(): SpannableString {
+        val appName = "Privacy Flip"
+        val version = " v${BuildConfig.VERSION_NAME}"
+        val fullText = appName + version
+
+        val spannable = SpannableString(fullText)
+
+        // Make only "Privacy Flip" bold (not the version)
+        spannable.setSpan(
+            StyleSpan(Typeface.BOLD),
+            0,
+            appName.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        // Make version text 75% of the normal size (25% smaller)
+        spannable.setSpan(
+            RelativeSizeSpan(0.75f),
+            appName.length,
+            fullText.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        return spannable
     }
 
 

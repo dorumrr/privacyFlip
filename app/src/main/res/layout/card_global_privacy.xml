@@ -36,10 +36,9 @@
                 android:id="@+id/globalPrivacyTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Privacy Flip"
+                tools:text="Privacy Flip v1.4.2"
                 android:textSize="16sp"
-                android:textColor="@color/icon_white"
-                android:textStyle="bold" />
+                android:textColor="@color/icon_white" />
 
             <TextView
                 android:id="@+id/globalPrivacyStatus"

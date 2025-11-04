@@ -1,0 +1,2 @@
+• Fixed a bug where the microphone was disabled during a call when the screen turned off
+• Refactored triggers logic for Camera and Microphone to bypass the user selection of delays as when device is locked (or screen off) and unlocked (or screen on)

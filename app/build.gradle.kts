@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.dorumrr.privacyflip"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.4.1"
+        versionCode = 9
+        versionName = "1.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

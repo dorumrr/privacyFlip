@@ -1,6 +1,7 @@
 package io.github.dorumrr.privacyflip.worker
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -19,7 +20,7 @@ class PrivacyActionWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
-    
+
     companion object {
         private const val TAG = "PrivacyActionWorker"
     }
@@ -27,6 +28,32 @@ class PrivacyActionWorker(
     private fun showToast(message: String) {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Checks if the microphone is currently in use (e.g., during a phone call or recording).
+     * This prevents interrupting active calls or recordings when the screen locks.
+     *
+     * @return true if microphone is in use, false otherwise
+     */
+    private fun isMicrophoneInUse(context: Context): Boolean {
+        return try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.let {
+                val mode = it.mode
+                val inUse = mode == AudioManager.MODE_IN_CALL ||
+                           mode == AudioManager.MODE_IN_COMMUNICATION
+
+                if (inUse) {
+                    Log.i(TAG, "🎤 Microphone in use detected (audio mode: $mode)")
+                }
+
+                inUse
+            } ?: false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking microphone usage", e)
+            false // Default to not in use if check fails
         }
     }
     
@@ -77,9 +104,20 @@ class PrivacyActionWorker(
                     // Split features into two groups:
                     // 1. Camera/Microphone - must be disabled IMMEDIATELY (before device locks)
                     //    because Android blocks changing sensor privacy while locked
+                    //    BUT skip microphone if it's in use (e.g., during a call)
                     // 2. Other features - can be disabled after the configured delay
                     val sensorFeatures = featuresToDisable.filter {
-                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
+                        when (it) {
+                            PrivacyFeature.MICROPHONE -> {
+                                val inUse = isMicrophoneInUse(applicationContext)
+                                if (inUse) {
+                                    Log.i(TAG, "🎤 Microphone in use (call/recording) - skipping disable to avoid interruption")
+                                }
+                                !inUse // Only include if NOT in use
+                            }
+                            PrivacyFeature.CAMERA -> true
+                            else -> false
+                        }
                     }
                     val otherFeatures = featuresToDisable.filter {
                         it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE
@@ -116,13 +154,32 @@ class PrivacyActionWorker(
                 if (featuresToEnable.isNotEmpty()) {
                     Log.i(TAG, "Enabling features on unlock: ${featuresToEnable.map { it.displayName }}")
 
-                    val unlockDelay = preferenceManager.unlockDelaySeconds
-                    if (unlockDelay > 0) {
-                        delay(unlockDelay * 1000L)
+                    // Split into sensor features (immediate) and other features (delayed)
+                    // This mirrors the lock behavior for consistency
+                    val sensorFeatures = featuresToEnable.filter {
+                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
+                    }
+                    val otherFeatures = featuresToEnable.filter {
+                        it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE
                     }
 
-                    val results = privacyManager.enableFeatures(featuresToEnable.toSet())
-                    processResults(results, featuresToEnable, "🔓", "enabled", "Re-enabled")
+                    // Enable camera/microphone IMMEDIATELY (no delay)
+                    if (sensorFeatures.isNotEmpty()) {
+                        Log.i(TAG, "⚡ Enabling sensors immediately (no delay): ${sensorFeatures.map { it.displayName }}")
+                        val sensorResults = privacyManager.enableFeatures(sensorFeatures.toSet())
+                        processResults(sensorResults, sensorFeatures, "🔓", "enabled", "Re-enabled")
+                    }
+
+                    // Enable other features after the configured delay
+                    if (otherFeatures.isNotEmpty()) {
+                        val unlockDelay = preferenceManager.unlockDelaySeconds
+                        if (unlockDelay > 0) {
+                            Log.i(TAG, "⏳ Waiting ${unlockDelay}s before enabling other features")
+                            delay(unlockDelay * 1000L)
+                        }
+                        val otherResults = privacyManager.enableFeatures(otherFeatures.toSet())
+                        processResults(otherResults, otherFeatures, "🔓", "enabled", "Re-enabled")
+                    }
                 }
             }
 

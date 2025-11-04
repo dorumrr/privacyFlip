@@ -82,13 +82,14 @@
 
             </LinearLayout>
 
-            <SeekBar
+            <io.github.dorumrr.privacyflip.ui.widget.TickMarkSeekBar
                 android:id="@+id/lockDelaySeekBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:max="60"
-                android:progress="3" />
+                android:layout_marginBottom="16dp"
+                android:max="100"
+                android:progress="10" />
 
         </LinearLayout>
 
@@ -129,13 +130,14 @@
 
             </LinearLayout>
 
-            <SeekBar
+            <io.github.dorumrr.privacyflip.ui.widget.TickMarkSeekBar
                 android:id="@+id/unlockDelaySeekBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:max="60"
-                android:progress="3" />
+                android:layout_marginBottom="16dp"
+                android:max="100"
+                android:progress="1" />
 
         </LinearLayout>
 

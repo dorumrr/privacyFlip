@@ -1,0 +1,2 @@
+• Extended Delay time, granular 0 to 60 seconds, then 2 and 5 minutes.
+• 

@@ -10,6 +10,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
+import io.github.dorumrr.privacyflip.data.TimerSettings
 import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
@@ -172,9 +173,10 @@ class MainFragment : Fragment() {
             setupSeekBar(
                 lockDelaySeekBar,
                 lockDelayValue
-            ) { progress ->
+            ) { position ->
                 val currentSettings = viewModel.uiState.value?.timerSettings ?: return@setupSeekBar
-                val newSettings = currentSettings.copy(lockDelaySeconds = progress)
+                val seconds = TimerSettings.positionToSeconds(position)
+                val newSettings = currentSettings.copy(lockDelaySeconds = seconds)
                 viewModel.updateTimerSettings(newSettings)
             }
 
@@ -182,9 +184,10 @@ class MainFragment : Fragment() {
             setupSeekBar(
                 unlockDelaySeekBar,
                 unlockDelayValue
-            ) { progress ->
+            ) { position ->
                 val currentSettings = viewModel.uiState.value?.timerSettings ?: return@setupSeekBar
-                val newSettings = currentSettings.copy(unlockDelaySeconds = progress)
+                val seconds = TimerSettings.positionToSeconds(position)
+                val newSettings = currentSettings.copy(unlockDelaySeconds = seconds)
                 viewModel.updateTimerSettings(newSettings)
             }
         }
@@ -318,12 +321,14 @@ class MainFragment : Fragment() {
 
         with(binding.timerCard) {
             // Update Lock Delay
-            lockDelaySeekBar.progress = uiState.timerSettings.lockDelaySeconds
-            lockDelayValue.text = uiState.timerSettings.lockDelaySeconds.toString()
+            val lockPosition = TimerSettings.secondsToPosition(uiState.timerSettings.lockDelaySeconds)
+            lockDelaySeekBar.progress = lockPosition
+            lockDelayValue.text = TimerSettings.formatSeconds(uiState.timerSettings.lockDelaySeconds)
 
             // Update Unlock Delay
-            unlockDelaySeekBar.progress = uiState.timerSettings.unlockDelaySeconds
-            unlockDelayValue.text = uiState.timerSettings.unlockDelaySeconds.toString()
+            val unlockPosition = TimerSettings.secondsToPosition(uiState.timerSettings.unlockDelaySeconds)
+            unlockDelaySeekBar.progress = unlockPosition
+            unlockDelayValue.text = TimerSettings.formatSeconds(uiState.timerSettings.unlockDelaySeconds)
         }
 
         // Clear flag
@@ -540,10 +545,11 @@ class MainFragment : Fragment() {
         onProgressChanged: (Int) -> Unit
     ) {
         seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, position: Int, fromUser: Boolean) {
                 if (fromUser && !isUpdatingUI) {
-                    valueText.text = progress.toString()
-                    onProgressChanged(progress)
+                    val seconds = TimerSettings.positionToSeconds(position)
+                    valueText.text = TimerSettings.formatSeconds(seconds)
+                    onProgressChanged(position)
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}

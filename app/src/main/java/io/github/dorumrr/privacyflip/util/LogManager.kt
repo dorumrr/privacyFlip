@@ -13,7 +13,15 @@ class LogManager private constructor(private val context: Context) {
     companion object : SingletonHolder<LogManager, Context>({ context ->
         LogManager(context.applicationContext)
     }) {
-        private const val TAG = "LogManager"
+        private const val TAG = "privacyFlip-LogManager"
+        private const val LOG_PREFIX = "privacyFlip-"
+
+        /**
+         * Ensures all log tags are prefixed with "privacyFlip-"
+         */
+        private fun prefixTag(tag: String): String {
+            return if (tag.startsWith(LOG_PREFIX)) tag else "$LOG_PREFIX$tag"
+        }
     }
 
     private val logFile = File(context.filesDir, Constants.Logging.LOG_FILE_NAME)
@@ -38,16 +46,18 @@ class LogManager private constructor(private val context: Context) {
 
     fun log(level: String, tag: String, message: String) {
         try {
+            val prefixedTag = prefixTag(tag)
+
             when (level) {
-                "D" -> Log.d(tag, message)
-                "I" -> Log.i(tag, message)
-                "W" -> Log.w(tag, message)
-                "E" -> Log.e(tag, message)
-                else -> Log.d(tag, message)
+                "D" -> Log.d(prefixedTag, message)
+                "I" -> Log.i(prefixedTag, message)
+                "W" -> Log.w(prefixedTag, message)
+                "E" -> Log.e(prefixedTag, message)
+                else -> Log.d(prefixedTag, message)
             }
 
             val timestamp = dateFormat.format(Date())
-            val logEntry = "$timestamp $level/$tag: $message"
+            val logEntry = "$timestamp $level/$prefixedTag: $message"
             logQueue.offer(logEntry)
 
             if (!isProcessing) {

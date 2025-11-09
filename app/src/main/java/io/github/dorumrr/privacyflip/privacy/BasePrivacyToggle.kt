@@ -8,7 +8,7 @@ abstract class BasePrivacyToggle(
     protected val rootManager: RootManager
 ) : PrivacyToggle {
 
-    protected val TAG: String = this::class.simpleName ?: "BasePrivacyToggle"
+    protected val TAG: String = "privacyFlip-${this::class.simpleName ?: "BasePrivacyToggle"}"
 
     protected abstract val enableCommands: List<CommandSet>
     protected abstract val disableCommands: List<CommandSet>

@@ -18,13 +18,17 @@ import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val TAG = "privacyFlip-MainActivity"
+    }
+
     private val viewModel: MainViewModel by viewModels()
     private lateinit var binding: ActivityMainBinding
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        Log.d("MainActivity", "Permission results: $permissions")
+        Log.d(TAG, "Permission results: $permissions")
         viewModel.requestPermissions(permissions.keys.toTypedArray())
     }
 
@@ -62,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.uiState.observe(this) { uiState ->
             // Handle permission requests
             uiState.pendingPermissionRequest?.let { permissions ->
-                Log.d("MainActivity", "Auto-requesting permissions: ${permissions.contentToString()}")
+                Log.d(TAG, "Auto-requesting permissions: ${permissions.contentToString()}")
                 permissionLauncher.launch(permissions)
                 viewModel.clearPendingPermissionRequest()
             }

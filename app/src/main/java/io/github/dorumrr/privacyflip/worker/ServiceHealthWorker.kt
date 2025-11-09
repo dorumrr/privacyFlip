@@ -13,7 +13,7 @@ class ServiceHealthWorker(
 ) : CoroutineWorker(context, params) {
 
     companion object {
-        private const val TAG = "ServiceHealthWorker"
+        private const val TAG = "privacyFlip-ServiceHealthWorker"
     }
 
     override suspend fun doWork(): Result {

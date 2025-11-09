@@ -30,7 +30,7 @@ import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 class PrivacyMonitorService : Service() {
 
     companion object {
-        private const val TAG = "PrivacyMonitorService"
+        private const val TAG = "privacyFlip-PrivacyMonitorService"
 
         // Track service running state
         @Volatile

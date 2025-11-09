@@ -16,13 +16,16 @@
         android:padding="16dp"
         android:gravity="center_vertical">
 
-        <!-- Check Icon -->
+        <!-- App Icon -->
         <ImageView
             android:id="@+id/globalPrivacyIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_check_circle"
-            android:tint="@color/icon_white" />
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_gravity="center_vertical"
+            android:src="@drawable/app_icon"
+            android:scaleType="centerCrop"
+            android:background="@drawable/circle_shape"
+            android:clipToOutline="true" />
 
         <!-- Text Content -->
         <LinearLayout

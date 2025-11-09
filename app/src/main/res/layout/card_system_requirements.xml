@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardBackgroundColor="@color/background_card"
+    app:cardBackgroundColor="@color/system_requirements_background"
     app:cardCornerRadius="12dp"
     app:cardElevation="2dp">
 
@@ -34,7 +34,7 @@
                 android:layout_weight="1"
                 android:text="System Requirements"
                 android:textSize="16sp"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/system_requirements_text"
                 android:textStyle="bold" />
 
         </LinearLayout>
@@ -46,13 +46,13 @@
             android:layout_marginTop="4dp"
             android:text="Required for privacy control functionality"
             android:textSize="12sp"
-            android:textColor="@color/text_secondary" />
+            android:textColor="@color/system_requirements_text" />
 
         <Space
             android:layout_width="match_parent"
             android:layout_height="16dp" />
 
-        <!-- Root Access Section -->
+        <!-- Privileged Access Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -64,21 +64,13 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <ImageView
-                    android:id="@+id/rootStatusIcon"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:src="@drawable/ic_security"
-                    android:tint="@color/trust_blue" />
-
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:text="Root Access"
+                    android:text="Privileged Access"
                     android:textSize="14sp"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/system_requirements_text"
                     android:textStyle="bold" />
 
                 <TextView
@@ -86,19 +78,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/system_requirements_text"
                     tools:text="Available" />
 
             </LinearLayout>
 
             <TextView
+                android:id="@+id/privilegeAccessDescription"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:layout_marginStart="24dp"
                 android:text="Required for system-level privacy controls"
                 android:textSize="12sp"
-                android:textColor="@color/text_secondary" />
+                android:textColor="@color/system_requirements_text" />
 
             <!-- Root Actions -->
             <LinearLayout
@@ -106,7 +98,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:layout_marginStart="24dp"
                 android:orientation="horizontal"
                 android:visibility="gone">
 
@@ -115,10 +106,15 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Grant Root"
-                    android:textSize="12sp"
-                    android:textColor="@color/trust_blue"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:padding="8dp" />
+                    android:textSize="13sp"
+                    android:textColor="@color/icon_white"
+                    android:background="@drawable/button_rounded_blue"
+                    android:textStyle="bold"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:minHeight="48dp" />
 
             </LinearLayout>
 
@@ -142,21 +138,13 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <ImageView
-                    android:id="@+id/batteryStatusIcon"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:src="@drawable/ic_battery"
-                    android:tint="@color/trust_blue" />
-
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:text="Battery Optimization"
                     android:textSize="14sp"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/system_requirements_text"
                     android:textStyle="bold" />
 
                 <TextView
@@ -164,7 +152,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/system_requirements_text"
                     android:text="Optimization disabled" />
 
             </LinearLayout>
@@ -173,10 +161,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:layout_marginStart="24dp"
                 android:text="Disable battery optimization for reliable background operation"
                 android:textSize="12sp"
-                android:textColor="@color/text_secondary" />
+                android:textColor="@color/system_requirements_text" />
 
             <!-- Battery Actions -->
             <LinearLayout
@@ -184,7 +171,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:layout_marginStart="24dp"
                 android:orientation="horizontal"
                 android:visibility="gone">
 
@@ -192,11 +178,16 @@
                     android:id="@+id/batteryOptimizationButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Open Battery Settings"
-                    android:textSize="12sp"
-                    android:textColor="@color/trust_blue"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:padding="8dp" />
+                    android:text="OPEN BATTERY SETTINGS"
+                    android:textSize="13sp"
+                    android:textColor="@color/icon_white"
+                    android:background="@drawable/button_rounded_blue"
+                    android:textStyle="bold"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:minHeight="48dp" />
 
             </LinearLayout>
 

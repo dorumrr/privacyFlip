@@ -13,7 +13,7 @@ import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 class ScreenStateReceiver : BroadcastReceiver() {
     
     companion object {
-        private const val TAG = "ScreenStateReceiver"
+        private const val TAG = "privacyFlip-ScreenStateReceiver"
     }
     
     override fun onReceive(context: Context, intent: Intent) {

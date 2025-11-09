@@ -18,7 +18,7 @@ class PrivacyManager private constructor(
             RootManager.getInstance(Unit)
         )
     }) {
-        private const val TAG = "PrivacyManager"
+        private const val TAG = "privacyFlip-PrivacyManager"
     }
     
     private val toggles = mutableMapOf<PrivacyFeature, PrivacyToggle>()

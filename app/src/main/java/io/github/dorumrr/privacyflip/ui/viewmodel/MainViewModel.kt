@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
 class MainViewModel : ViewModel() {
 
     companion object {
-        private const val TAG = "MainViewModel"
+        private const val TAG = "privacyFlip-MainViewModel"
     }
 
     private inline fun handleError(operation: String, action: () -> Unit) {
@@ -104,12 +104,15 @@ class MainViewModel : ViewModel() {
     }
 
     private fun checkRootStatus() {
+        logManager.d(TAG, "checkRootStatus() called - checking privilege method and availability")
         viewModelScope.launch {
             updateUiState { it.copy(isLoading = true) }
 
             try {
                 val privilegeMethod = rootManager.getPrivilegeMethod()
+                logManager.d(TAG, "checkRootStatus() - privilegeMethod: $privilegeMethod")
                 val isPrivilegeAvailable = rootManager.isRootAvailable()
+                logManager.d(TAG, "checkRootStatus() - isPrivilegeAvailable: $isPrivilegeAvailable")
                 val currentState = _uiState.value ?: UiState()
 
                 var didAttemptAutoRequest = false
@@ -117,9 +120,10 @@ class MainViewModel : ViewModel() {
                 val isPrivilegeGranted = if (isPrivilegeAvailable) {
                     val alreadyGranted = rootManager.isRootGranted()
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
+                        // Set flag BEFORE requesting to prevent duplicate requests if checkRootStatus() is called again
+                        updateUiState { it.copy(hasTriedAutoRootRequest = true) }
                         didAttemptAutoRequest = true
                         val granted = rootManager.requestRootPermission()
-                        updateUiState { it.copy(hasTriedAutoRootRequest = true) }
                         granted
                     } else {
                         alreadyGranted
@@ -135,26 +139,7 @@ class MainViewModel : ViewModel() {
                         privilegeMethod = privilegeMethod,
                         privilegeMethodName = privilegeMethod.getDisplayName(),
                         privilegeMethodDescription = privilegeMethod.getDescription(),
-                        isLoading = false,
-                        errorMessage = if (!isPrivilegeAvailable) {
-                            "Root or Shizuku required - Install Shizuku from Play Store (for non-rooted devices) or root your device with Magisk"
-                        } else if (isPrivilegeAvailable && !isPrivilegeGranted) {
-                            if (didAttemptAutoRequest) {
-                                when (privilegeMethod) {
-                                    PrivilegeMethod.SHIZUKU -> "Shizuku permission denied. Click 'Grant Shizuku Permission' button to try again."
-                                    PrivilegeMethod.ROOT -> "Root permission denied. Uninstall and reinstall the app, then grant root access when prompted by Magisk."
-                                    PrivilegeMethod.SUI -> "Sui permission denied. Click 'Grant Sui Permission' button to try again."
-                                    PrivilegeMethod.NONE -> "No privilege method available. Please install Shizuku or root your device."
-                                }
-                            } else {
-                                when (privilegeMethod) {
-                                    PrivilegeMethod.SHIZUKU -> "Shizuku permission required. Click 'Grant Shizuku Permission' button below to request permission."
-                                    PrivilegeMethod.ROOT -> "Root permission required. Click 'Grant Root Permission' button below to request permission."
-                                    PrivilegeMethod.SUI -> "Sui permission required. Click 'Grant Sui Permission' button below to request permission."
-                                    PrivilegeMethod.NONE -> "No privilege method available. Please install Shizuku or root your device."
-                                }
-                            }
-                        } else null
+                        isLoading = false
                     )
                 }
 
@@ -163,10 +148,10 @@ class MainViewModel : ViewModel() {
                     loadPermissionStatus()
                 }
             } catch (e: Exception) {
+                logManager.e(TAG, "Error checking privilege status: ${e.message}")
                 updateUiState {
                     it.copy(
-                        isLoading = false,
-                        errorMessage = "Error checking privilege status: ${e.message}"
+                        isLoading = false
                     )
                 }
             }
@@ -188,9 +173,7 @@ class MainViewModel : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
-                updateUiState {
-                    it.copy(errorMessage = "Error loading privacy status: ${e.message}")
-                }
+                logManager.e(TAG, "Error loading privacy status: ${e.message}")
             }
         }
     }
@@ -249,13 +232,7 @@ class MainViewModel : ViewModel() {
         
         _privacyConfig.value = currentConfig.copy(unlockFeatures = newUnlockFeatures)
     }
-    
 
-
-    fun clearError() {
-        updateUiState { it.copy(errorMessage = null) }
-    }
-    
     private fun loadPermissionStatus() {
         viewModelScope.launch {
             try {
@@ -333,43 +310,47 @@ class MainViewModel : ViewModel() {
 
     fun requestRootPermission() {
         viewModelScope.launch {
+            logManager.d(TAG, "========== requestRootPermission() START ==========")
+            val currentState = _uiState.value
+            logManager.d(TAG, "requestRootPermission() - Current UI state: isRootGranted=${currentState?.isRootGranted}, isRootAvailable=${currentState?.isRootAvailable}")
+
             updateUiState { it.copy(isLoading = true) }
 
             try {
                 val privilegeMethod = rootManager.getPrivilegeMethod()
+                logManager.d(TAG, "requestRootPermission() - Privilege method: $privilegeMethod")
+
+                logManager.d(TAG, "requestRootPermission() - Calling rootManager.forceRootPermissionRequest()...")
                 val isRootGranted = rootManager.forceRootPermissionRequest()
+                logManager.d(TAG, "requestRootPermission() - forceRootPermissionRequest() returned: $isRootGranted")
 
-                val errorMsg = if (!isRootGranted) {
-                    when (privilegeMethod) {
-                        PrivilegeMethod.SHIZUKU ->
-                            "Shizuku permission denied. Please ensure Shizuku app is running and wireless debugging is enabled. Try again or restart Shizuku."
-                        PrivilegeMethod.ROOT ->
-                            "Root permission denied. Uninstall and reinstall the app, then grant root access when prompted by Magisk/SuperSU."
-                        PrivilegeMethod.SUI ->
-                            "Sui permission denied. Please grant permission when prompted. If this persists, check Sui module settings in Magisk."
-                        else ->
-                            "Permission denied or failed. Please try again."
-                    }
-                } else null
+                // Double-check the actual permission state
+                val actualGranted = rootManager.isRootGranted()
+                logManager.d(TAG, "requestRootPermission() - Double-checking: rootManager.isRootGranted() = $actualGranted")
 
+                logManager.d(TAG, "requestRootPermission() - Updating UI state with isRootGranted=$isRootGranted")
                 updateUiState {
                     it.copy(
                         isRootGranted = isRootGranted,
-                        isLoading = false,
-                        errorMessage = errorMsg
+                        isLoading = false
                     )
                 }
 
                 if (isRootGranted) {
+                    logManager.d(TAG, "requestRootPermission() - Permission granted, loading privacy and permission status...")
                     loadPrivacyStatus()
                     loadPermissionStatus()
+                } else {
+                    logManager.w(TAG, "requestRootPermission() - Permission NOT granted")
                 }
+
+                logManager.d(TAG, "========== requestRootPermission() END ==========")
             } catch (e: Exception) {
-                logManager.e(TAG, "Error requesting permission: ${e.message}")
+                logManager.e(TAG, "requestRootPermission() - ERROR: ${e.message}")
+                logManager.e(TAG, "requestRootPermission() - Stack trace: ${e.stackTraceToString()}")
                 updateUiState {
                     it.copy(
-                        isLoading = false,
-                        errorMessage = "Error requesting permission: ${e.message}"
+                        isLoading = false
                     )
                 }
             }
@@ -377,9 +358,35 @@ class MainViewModel : ViewModel() {
     }
 
     fun refresh() {
-        checkRootStatus()
-        loadPrivacyStatus()
-        loadPermissionStatus()
+        logManager.d(TAG, "refresh() called - reloading status WITHOUT auto-requesting permission")
+        viewModelScope.launch {
+            try {
+                val privilegeMethod = rootManager.getPrivilegeMethod()
+                val isPrivilegeAvailable = rootManager.isRootAvailable()
+                val isPrivilegeGranted = if (isPrivilegeAvailable) {
+                    rootManager.isRootGranted()
+                } else {
+                    false
+                }
+
+                updateUiState {
+                    it.copy(
+                        isRootAvailable = isPrivilegeAvailable,
+                        isRootGranted = isPrivilegeGranted,
+                        privilegeMethod = privilegeMethod,
+                        privilegeMethodName = privilegeMethod.getDisplayName(),
+                        privilegeMethodDescription = privilegeMethod.getDescription()
+                    )
+                }
+
+                if (isPrivilegeGranted) {
+                    loadPrivacyStatus()
+                    loadPermissionStatus()
+                }
+            } catch (e: Exception) {
+                logManager.e(TAG, "refresh() - Error: ${e.message}")
+            }
+        }
     }
     
     /**
@@ -757,9 +764,7 @@ class MainViewModel : ViewModel() {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    updateUiState {
-                        it.copy(errorMessage = "Error disabling global privacy: ${e.message}")
-                    }
+                    logManager.e(TAG, "Error disabling global privacy: ${e.message}")
                 } finally {
                     globalPrivacyToggleJob = null
                 }
@@ -928,7 +933,6 @@ data class UiState(
     val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
     val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,
     val backgroundServicePermissionGranted: Boolean = false,
-    val errorMessage: String? = null,
     // Timer settings for UI binding
     val timerSettings: TimerSettings = TimerSettings(
         lockDelaySeconds = Constants.Defaults.LOCK_DELAY_SECONDS,

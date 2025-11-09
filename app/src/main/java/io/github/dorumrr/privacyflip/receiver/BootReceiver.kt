@@ -13,7 +13,7 @@ import io.github.dorumrr.privacyflip.util.PreferenceManager
 class BootReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val TAG = "BootReceiver"
+        private const val TAG = "privacyFlip-BootReceiver"
     }
     
     override fun onReceive(context: Context, intent: Intent) {

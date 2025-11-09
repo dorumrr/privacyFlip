@@ -10,7 +10,7 @@ import java.io.File
 class RootExecutor : PrivilegeExecutor {
 
     companion object {
-        private const val TAG = "RootExecutor"
+        private const val TAG = "privacyFlip-RootExecutor"
 
         @Volatile
         private var isShellInitialized = false
@@ -66,8 +66,10 @@ class RootExecutor : PrivilegeExecutor {
 
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val shell = Shell.getShell()
-            val hasRoot = shell.isRoot
+            // Try to execute a simple root command to check if permission is granted
+            // This is more reliable than Shell.isAppGrantedRoot() which may cache results
+            val result = Shell.cmd("id -u").exec()
+            val hasRoot = result.isSuccess && result.out.isNotEmpty() && result.out[0] == "0"
             _rootPermissionGranted = hasRoot
             return@withContext hasRoot
         } catch (e: Exception) {

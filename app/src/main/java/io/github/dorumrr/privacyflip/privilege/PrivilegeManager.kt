@@ -12,7 +12,7 @@ class PrivilegeManager private constructor(private val context: Context) {
     companion object : SingletonHolder<PrivilegeManager, Context>({ context ->
         PrivilegeManager(context.applicationContext)
     }) {
-        private const val TAG = "PrivilegeManager"
+        private const val TAG = "privacyFlip-PrivilegeManager"
     }
 
     private val logManager = LogManager.getInstance(context)
@@ -78,11 +78,16 @@ class PrivilegeManager private constructor(private val context: Context) {
     }
 
     suspend fun isPermissionGranted(): Boolean {
-        return currentExecutor?.isPermissionGranted() ?: false
+        val granted = currentExecutor?.isPermissionGranted() ?: false
+        android.util.Log.d(TAG, "PrivilegeManager.isPermissionGranted() - currentMethod: $currentMethod, result: $granted")
+        return granted
     }
 
     suspend fun requestPermission(): Boolean {
-        return currentExecutor?.requestPermission() ?: false
+        android.util.Log.d(TAG, "PrivilegeManager.requestPermission() - currentMethod: $currentMethod, calling executor...")
+        val granted = currentExecutor?.requestPermission() ?: false
+        android.util.Log.d(TAG, "PrivilegeManager.requestPermission() - executor returned: $granted")
+        return granted
     }
 
     suspend fun executeCommand(command: String): CommandResult {

@@ -42,5 +42,9 @@
     <!-- Warning colors (dark theme) -->
     <color name="warning_background">#FF3E2723</color>  <!-- Dark brown/orange background -->
     <color name="warning_text">#FFFFB74D</color>        <!-- Light orange text -->
+
+    <!-- System Requirements card (dark theme) -->
+    <color name="system_requirements_background">#FF3E1A1A</color>  <!-- Very dark red background -->
+    <color name="system_requirements_text">#FFFFFFFF</color>        <!-- White text for dark background -->
 </resources>
 

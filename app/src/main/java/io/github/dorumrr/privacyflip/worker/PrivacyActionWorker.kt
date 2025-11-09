@@ -22,7 +22,7 @@ class PrivacyActionWorker(
 ) : CoroutineWorker(context, params) {
 
     companion object {
-        private const val TAG = "PrivacyActionWorker"
+        private const val TAG = "privacyFlip-PrivacyActionWorker"
     }
 
     private fun showToast(message: String) {
@@ -77,12 +77,9 @@ class PrivacyActionWorker(
             val hasPrivilege = rootManager.isRootGranted()
 
             if (!hasPrivilege) {
-                Log.w(TAG, "Privilege permission not granted - attempting to request")
-                val privilegeGranted = rootManager.requestRootPermission()
-                if (!privilegeGranted) {
-                    Log.e(TAG, "Failed to obtain privilege permission - privacy actions will fail")
-                    return Result.failure()
-                }
+                Log.w(TAG, "Privilege permission not granted - cannot execute privacy actions")
+                Log.w(TAG, "User must grant permission from the UI before privacy actions can be executed")
+                return Result.failure()
             }
 
             val privacyManager = PrivacyManager.getInstance(applicationContext)

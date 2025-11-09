@@ -42,4 +42,8 @@
     <!-- Warning colors -->
     <color name="warning_background">#FFFFF3E0</color>  <!-- Light orange background -->
     <color name="warning_text">#FFE65100</color>        <!-- Dark orange text -->
+
+    <!-- System Requirements card (light theme) -->
+    <color name="system_requirements_background">#FFFFEBEE</color>  <!-- Light red/pink background -->
+    <color name="system_requirements_text">#FF212121</color>        <!-- Dark text for light background -->
 </resources>

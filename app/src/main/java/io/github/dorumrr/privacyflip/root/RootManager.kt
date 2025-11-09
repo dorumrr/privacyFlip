@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 class RootManager private constructor() {
 
     companion object : SingletonHolder<RootManager, Unit>({ RootManager() }) {
-        private const val TAG = "RootManager"
+        private const val TAG = "privacyFlip-RootManager"
     }
 
     private var logManager: LogManager? = null
@@ -37,8 +37,11 @@ class RootManager private constructor() {
 
     suspend fun isRootGranted(): Boolean = withContext(Dispatchers.IO) {
         try {
-            return@withContext privilegeManager?.isPermissionGranted() ?: false
+            val granted = privilegeManager?.isPermissionGranted() ?: false
+            Log.d(TAG, "isRootGranted() - privilegeManager.isPermissionGranted() returned: $granted")
+            return@withContext granted
         } catch (e: Exception) {
+            Log.e(TAG, "isRootGranted() - exception: ${e.message}")
             return@withContext false
         }
     }
@@ -112,9 +115,23 @@ class RootManager private constructor() {
 
     suspend fun forceRootPermissionRequest(): Boolean = withContext(Dispatchers.IO) {
         try {
-            return@withContext privilegeManager?.requestPermission() ?: false
+            Log.d(TAG, "forceRootPermissionRequest() - calling privilegeManager.requestPermission()...")
+            val granted = privilegeManager?.requestPermission() ?: false
+            Log.d(TAG, "forceRootPermissionRequest() - privilegeManager.requestPermission() returned: $granted")
+
+            // Double-check the actual state (this is the source of truth)
+            val actualGranted = privilegeManager?.isPermissionGranted() ?: false
+            Log.d(TAG, "forceRootPermissionRequest() - double-check: privilegeManager.isPermissionGranted() = $actualGranted")
+
+            // Use the double-check value as it's more reliable
+            // requestPermission() might return false due to timing, but permission could still be granted
+            if (granted != actualGranted) {
+                Log.w(TAG, "forceRootPermissionRequest() - MISMATCH: requestPermission=$granted, isPermissionGranted=$actualGranted - using actualGranted")
+            }
+
+            return@withContext actualGranted
         } catch (e: Exception) {
-            Log.e(TAG, "Error in force permission request", e)
+            Log.e(TAG, "forceRootPermissionRequest() - error: ${e.message}", e)
             return@withContext false
         }
     }

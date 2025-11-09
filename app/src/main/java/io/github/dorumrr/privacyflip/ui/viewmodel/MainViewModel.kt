@@ -115,14 +115,11 @@ class MainViewModel : ViewModel() {
                 logManager.d(TAG, "checkRootStatus() - isPrivilegeAvailable: $isPrivilegeAvailable")
                 val currentState = _uiState.value ?: UiState()
 
-                var didAttemptAutoRequest = false
-
                 val isPrivilegeGranted = if (isPrivilegeAvailable) {
                     val alreadyGranted = rootManager.isRootGranted()
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
                         // Set flag BEFORE requesting to prevent duplicate requests if checkRootStatus() is called again
                         updateUiState { it.copy(hasTriedAutoRootRequest = true) }
-                        didAttemptAutoRequest = true
                         val granted = rootManager.requestRootPermission()
                         granted
                     } else {

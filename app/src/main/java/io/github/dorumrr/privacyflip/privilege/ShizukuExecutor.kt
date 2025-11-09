@@ -291,6 +291,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         logManager?.i(TAG, "Shizuku binder received - service restarted")
 
         context?.let { ctx ->
+            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
             GlobalScope.launch(Dispatchers.IO) {
                 try {
                     // Re-request permission (should be auto-granted if previously granted)
@@ -327,6 +328,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         permissionGranted = null
 
         context?.let { ctx ->
+            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
             GlobalScope.launch(Dispatchers.IO) {
                 try {
                     // Stop the privacy monitor service since Shizuku is no longer available

@@ -463,6 +463,14 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.icon_white)
                 )
                 globalPrivacyStatus.text = "Protection Active"
+
+                // Switch colors: Blue when ON
+                globalPrivacySwitch.thumbTintList = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.trust_blue)
+                )
+                globalPrivacySwitch.trackTintList = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.trust_blue_light)
+                )
             } else {
                 // Normal card style - Protection Inactive
                 globalPrivacyCardView.setCardBackgroundColor(
@@ -478,6 +486,14 @@ class MainFragment : Fragment() {
                     androidx.core.content.ContextCompat.getColor(requireContext(), R.color.text_secondary)
                 )
                 globalPrivacyStatus.text = "Protection Inactive"
+
+                // Switch colors: Red when OFF
+                globalPrivacySwitch.thumbTintList = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.error_red)
+                )
+                globalPrivacySwitch.trackTintList = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.error_red)
+                )
             }
         }
     }

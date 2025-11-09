@@ -22,13 +22,10 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Mobile data - Manage cellular data connection
 • Location services - Control GPS and location tracking
 • NFC - Control NFC sensor
+• Camera - Disable/enable camera sensor privacy (Android 12+)
+• Microphone - Disable/enable microphone sensor privacy (Android 12+)
 
-<b>Experimental Features (Android 12+):</b>
-
-• Camera - Disable/enable camera sensor privacy
-• Microphone - Disable/enable microphone sensor privacy
-
-Note: Camera and microphone controls require a timing window between screen lock and device lock. The app will warn you if your device is configured for instant locking.
+Note: Camera and microphone controls require a timing window between screen lock and device lock. Tap the info icon next to these features for configuration details.
 
 <b>Requirements:</b>
 

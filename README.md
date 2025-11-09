@@ -2,12 +2,14 @@
 
 **Automatic lock/unlock privacy control for Android devices 🔐📱✨**
 
-**PrivacyFlip** automatically manages your device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, **NFC**, and even **camera/microphone sensors** (experimental). When you unlock, it intelligently restores the features you want back on.
+**PrivacyFlip** automatically manages your Android device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, **NFC**, and even **camera/microphone sensors**. When you unlock, it intelligently restores the features you want back on.
 
-**Works with Root or Shizuku** - Choose your preferred privilege method!
+**Works with Shizuku or Root** - Choose your preferred privilege method!
 
 <div>
-  <a href="https://apt.izzysoft.de/fdroid/index/apk/io.github.dorumrr.privacyflip" target="_blank" rel="noopener"><img height="50" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"></a> <a href="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank" rel="noopener"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a> <a href="https://www.buymeacoffee.com/ossdev"><img height="50" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" /></a>
+  <a href="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank" rel="noopener"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a> 
+  <a href="https://apt.izzysoft.de/fdroid/index/apk/io.github.dorumrr.privacyflip" target="_blank" rel="noopener"><img height="50" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"></a> 
+  <a href="https://www.buymeacoffee.com/ossdev"><img height="50" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" /></a>
 </div>
 
 ## 📸 Screenshots
@@ -30,12 +32,10 @@
 - 📡 **Mobile data** - Manage cellular data connection
 - 📍 **Location services** - Control GPS and location tracking
 - 📳 **NFC** - Control Near Field Communication sensor
+- 📷 **Camera** - Disable/enable camera sensor privacy (Android 12+)
+- 🎤 **Microphone** - Disable/enable microphone sensor privacy (Android 12+)
 
-### **Experimental Features** (Android 12+)
-- 📷 **Camera** - Disable/enable camera sensor privacy
-- 🎤 **Microphone** - Disable/enable microphone sensor privacy
-
-> **Note:** Camera and microphone controls require a timing window between screen lock and device lock. The app will warn you if your device is configured for instant locking.
+> **Note:** Camera and microphone controls require a timing window between screen lock and device lock. Tap the info icon next to these features in the app for configuration details if not working as expected.
 
 ### **Customizable Timing**
 - **Lock Delay**: 0-60 seconds before privacy actions trigger

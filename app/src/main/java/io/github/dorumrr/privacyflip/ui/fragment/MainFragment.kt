@@ -1,5 +1,6 @@
 package io.github.dorumrr.privacyflip.ui.fragment
 
+import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableString
@@ -62,8 +63,6 @@ class MainFragment : Fragment() {
             viewModel.clearError()
         }
 
-
-
         // Setup click listeners for footer elements
         binding.creditsFooter.createdByText.setOnClickListener {
             openGitHubRepository()
@@ -75,7 +74,6 @@ class MainFragment : Fragment() {
 
         // Setup privacy feature cards
         setupScreenLockCard()
-        setupExperimentalFeaturesCard()
         setupTimerCard()
         setupBackgroundPermissionErrorCard()
         setupGlobalPrivacyCard()
@@ -101,24 +99,34 @@ class MainFragment : Fragment() {
                     { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
                 )
             }
-        }
-    }
 
-    private fun setupExperimentalFeaturesCard() {
-        with(binding.experimentalFeaturesCard) {
-            val featureConfigs = listOf(
-                FeatureConfig(PrivacyFeature.CAMERA, cameraSettings, R.drawable.ic_camera, "Camera"),
-                FeatureConfig(PrivacyFeature.MICROPHONE, microphoneSettings, R.drawable.ic_mic, "Microphone")
-            )
+            cameraDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateFeatureSetting(PrivacyFeature.CAMERA, disableOnLock = isChecked)
+                }
+            }
+            cameraEnableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateFeatureSetting(PrivacyFeature.CAMERA, enableOnUnlock = isChecked)
+                }
+            }
 
-            featureConfigs.forEach { config ->
-                setupPrivacyFeature(
-                    config.binding,
-                    config.iconRes,
-                    config.displayName,
-                    { viewModel.updateFeatureSetting(config.feature, disableOnLock = it) },
-                    { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
-                )
+            microphoneDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateFeatureSetting(PrivacyFeature.MICROPHONE, disableOnLock = isChecked)
+                }
+            }
+            microphoneEnableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateFeatureSetting(PrivacyFeature.MICROPHONE, enableOnUnlock = isChecked)
+                }
+            }
+
+            cameraInfoIcon.setOnClickListener {
+                showCameraMicInfoDialog()
+            }
+            microphoneInfoIcon.setOnClickListener {
+                showCameraMicInfoDialog()
             }
         }
     }
@@ -251,14 +259,6 @@ class MainFragment : Fragment() {
         updateGlobalPrivacyCard(uiState)
         updateSystemRequirementsCard(uiState)
         updateBackgroundPermissionErrorCard(uiState)
-
-        // Update lock delay warning visibility
-        updateLockDelayWarning(uiState)
-    }
-
-    private fun updateLockDelayWarning(uiState: UiState) {
-        binding.experimentalFeaturesCard.lockDelayWarning.visibility =
-            if (uiState.showLockDelayWarning) View.VISIBLE else View.GONE
     }
 
     private fun updateErrorMessage(uiState: UiState) {
@@ -305,19 +305,12 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.nfcEnableOnUnlock
         )
 
-        updatePrivacyFeatureSetting(
-            binding.experimentalFeaturesCard.cameraSettings,
-            uiState.screenLockConfig.cameraDisableOnLock,
-            uiState.screenLockConfig.cameraEnableOnUnlock
-        )
+        binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
+        binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
 
-        updatePrivacyFeatureSetting(
-            binding.experimentalFeaturesCard.microphoneSettings,
-            uiState.screenLockConfig.microphoneDisableOnLock,
-            uiState.screenLockConfig.microphoneEnableOnUnlock
-        )
+        binding.screenLockCard.microphoneDisableOnLockSwitch.isChecked = uiState.screenLockConfig.microphoneDisableOnLock
+        binding.screenLockCard.microphoneEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.microphoneEnableOnUnlock
 
-        // Clear flag
         isUpdatingUI = false
     }
 
@@ -363,6 +356,14 @@ class MainFragment : Fragment() {
             // Handle case where no browser is available
             android.widget.Toast.makeText(requireContext(), "Unable to open donation page", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showCameraMicInfoDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Camera & Microphone Info")
+            .setMessage(getString(R.string.lock_delay_warning_message))
+            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun requestBackgroundServicePermission() {

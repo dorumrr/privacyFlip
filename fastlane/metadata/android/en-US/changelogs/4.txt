@@ -1,5 +1,3 @@
-Version 1.1.0 - Added NFC Privacy, Android 15 Compatibility, and Dark Theme support
-
 • Implemented NFC Privacy Control
 • Full Android 15 (API 35) support
 • Dark theme, automatically adapts to system settings

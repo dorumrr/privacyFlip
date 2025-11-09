@@ -1,5 +1,3 @@
-Version 1.3.0 - Shizuku Support & Major Improvements
-
 • Added Shizuku support - No root required! Use ADB privileges
 • Added Sui support - Magisk module for seamless Shizuku integration
 • Automatic privilege detection (Sui > Root > Shizuku)

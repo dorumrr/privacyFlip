@@ -1,5 +1,3 @@
-Initial release of Privacy Flip v1.0.0
-
 • Automatic privacy control on screen lock/unlock
 • Background service for persistent monitoring
 • Material 3 design with dark theme support

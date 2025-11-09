@@ -1,5 +1,3 @@
-Version 1.0.1 - Improvements and fixes
-
 • Service persistence
 • Removed PanicMode
 • Adjusted defaults for lock and unlock delays.

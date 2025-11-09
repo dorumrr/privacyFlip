@@ -1,0 +1,6 @@
+• Fixed root permission detection
+• Implemented Shizuku auto-restoration
+• Better privilege error handling
+• Added a System Requirements card
+• Customized global privacy switch colors
+• Improved overall logging

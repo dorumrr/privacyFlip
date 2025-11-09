@@ -35,58 +35,37 @@
 - 📷 **Camera** - Disable/enable camera sensor privacy (Android 12+)
 - 🎤 **Microphone** - Disable/enable microphone sensor privacy (Android 12+)
 
-> **Note:** Camera and microphone controls require a timing window between screen lock and device lock. Tap the info icon next to these features in the app for configuration details if not working as expected.
-
 ### **Customizable Timing**
-- **Lock Delay**: 0-60 seconds before privacy actions trigger
-- **Unlock Delay**: 0-60 seconds before features are restored
+- **Lock Delay**: 0-60 seconds (granular), 2 minutes, or 5 minutes before privacy actions trigger
+- **Unlock Delay**: 0-60 seconds (granular), 2 minutes, or 5 minutes before features are restored
 - **Instant Mode**: Set delays to 0 for immediate action
+- **Note**: Camera and microphone ignore custom delays and trigger immediately, due to Android limitations
 
 ## 📱 Requirements
 
 **Minimum:** Android 7.0+ (API level 24)
 **Camera/Microphone Features:** Android 12+ (API level 31)
 
-**Choose ONE of the following privilege methods:**
+**Choose your privilege method:**
 
-### **Option 1: Root Access** (Recommended for rooted devices)
-- **Root access** via Magisk, SuperSU, or similar
-- **Best performance** with UID 0 privileges
-
-### **Option 2: Shizuku** (For non-rooted devices)
-- **[Shizuku app](https://shizuku.rikka.app/)** installed and running
+### **Option 1: Shizuku** (No root required!)
+- **Shizuku** app installed and running
 - **ADB privileges** via USB debugging or wireless ADB
 - **No root required** - works with ADB-level permissions
 
+### **Option 2: Root Access** (Recommended for rooted devices)
+- **Root access** via Magisk, SuperSU, or similar
+- **Best performance** with UID 0 privileges
+
 ### **Option 3: Sui** (Best of both worlds)
 - **Rooted device** with Magisk installed
-- **[Sui Magisk module](https://github.com/RikkaApps/Sui)** installed
+- **Sui Magisk** module installed
 - **Best user experience** - no permission prompts, automatic startup
-
-## 🏗️ Architecture & Dependencies
-
-- **Zero Google Dependencies** - Complete F-Droid compliance
-- **Pure AndroidX** - Modern Android development without Google services
-- **Traditional Android Views** - Efficient UI with ViewBinding
-- **Navigation Component** - Fragment-based navigation
-- **MVVM Pattern** - Reactive architecture with LiveData
-- **Dual Privilege Support** - Abstraction layer for Root and Shizuku
-
-### **Key Dependencies**
-- **[libsu](https://github.com/topjohnwu/libsu)** - Reliable root access management
-- **[Shizuku API](https://github.com/RikkaApps/Shizuku-API)** - ADB privilege management
-- **[Sui](https://github.com/RikkaApps/Sui)** - Magisk module for Shizuku API
-- **AndroidX Core Libraries** - Modern Android framework components
-- **Work Manager** - Background task scheduling
-- **Navigation Component** - Fragment navigation (Google Material excluded)
-- **ViewBinding** - Type-safe view references
 
 ### **Privilege Detection Priority**
 1. **Sui** - Magisk module providing Shizuku API with root (best UX)
 2. **Root** - Traditional root access via Magisk/SuperSU
-3. **Shizuku** - ADB privileges via Shizuku app (no root required)
-
-
+3. **Shizuku** - ADB privileges via Shizuku app
 
 ## 🤝 Contributing
 
@@ -115,4 +94,6 @@ PrivacyFlip protects your privacy. You can protect its future!
 
 ---
 
-*Giving Privacy its due, by Doru Moraru*
+*Late nights for brighter days*
+
+Created by Doru Moraru

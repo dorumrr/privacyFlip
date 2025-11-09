@@ -7,13 +7,10 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Manage your device privacy based on lock/unlock state
 • Dual privilege support: Root OR Shizuku (no root required!)
 • Automatic privilege detection (Sui > Root > Shizuku)
-• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC)
-• Experimental camera and microphone sensor privacy controls (Android 12+)
-• Customizable timing delays (0-60 seconds for both lock and unlock)
+• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone)
+• Customizable timing delays (0-60 seconds granular, 2 minutes, or 5 minutes)
 • Background service for persistent monitoring
 • Quick Settings tile integration
-• Traditional Android Views with clean, efficient UI
-• Comprehensive logging and debugging
 
 <b>Privacy Features Controlled:</b>
 
@@ -25,45 +22,37 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Camera - Disable/enable camera sensor privacy (Android 12+)
 • Microphone - Disable/enable microphone sensor privacy (Android 12+)
 
-Note: Camera and microphone controls require a timing window between screen lock and device lock. Tap the info icon next to these features for configuration details.
+Note: Camera and microphone ignore custom delays and trigger immediately (if not in use to avoid interrupting calls), due to Android limitations
 
 <b>Requirements:</b>
 
 • Android 7.0+ (API level 24)
 • Android 12+ (API level 31) for camera/microphone features
 
-<b>Choose ONE privilege method:</b>
+<b>Choose your privilege method:</b>
 
-<b>Option 1: Root Access</b> (Recommended for rooted devices)
-• Root access via Magisk, SuperSU, or similar
-• Best performance with UID 0 privileges
-
-<b>Option 2: Shizuku</b> (No root required!)
+<b>Option 1: Shizuku</b> (No root required!)
 • Shizuku app installed and running
 • ADB privileges via USB or wireless debugging
 • Perfect for non-rooted devices
+
+<b>Option 2: Root Access</b> (Recommended for rooted devices)
+• Root access via Magisk, SuperSU, or similar
+• Best performance with UID 0 privileges
 
 <b>Option 3: Sui</b> (Best of both worlds)
 • Rooted device with Magisk
 • Sui Magisk module installed
 • Best user experience - automatic startup, no prompts
 
-The app requires elevated permissions to control system-level privacy features. All privacy actions are performed locally on the device with no data transmission.
-
 <b>Privacy & Security:</b>
 
 • Zero telemetry - No data sent to external servers
 • Local storage only - All settings stored on device
 • No network permissions - App cannot access internet
-• Open source - Full code transparency
+• Open source - https://github.com/dorumrr/privacyFlip
 
 <b>Usage:</b>
-
-<b>For Root users:</b>
-1. Open PrivacyFlip and grant root permissions when prompted
-2. Configure your preferred privacy settings
-3. Set lock/unlock delays if desired
-4. The app works automatically in the background
 
 <b>For Shizuku users:</b>
 1. Install and start Shizuku app (enable via ADB or wireless debugging)
@@ -71,6 +60,12 @@ The app requires elevated permissions to control system-level privacy features. 
 3. Configure your preferred privacy settings
 4. Set lock/unlock delays if desired
 5. The app works automatically in the background
+
+<b>For Root users:</b>
+1. Open PrivacyFlip and grant root permissions when prompted
+2. Configure your preferred privacy settings
+3. Set lock/unlock delays if desired
+4. The app works automatically in the background
 
 Once configured, PrivacyFlip works automatically:
 

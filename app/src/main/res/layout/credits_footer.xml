@@ -28,17 +28,27 @@
         android:clickable="true"
         android:focusable="true" />
 
-    <!-- Author credit -->
-    <LinearLayout
+    <!-- First row: Late nights for brighter days. -->
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:text="Late nights for brighter days."
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:gravity="center" />
+
+    <!-- Second row: Created by Doru Moraru -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
         android:orientation="horizontal">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Giving Privacy its due, by "
+            android:text="Created by "
             android:textSize="12sp"
             android:textColor="@color/text_secondary" />
 

@@ -29,11 +29,13 @@ class PrivilegeManager private constructor(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 if (SuiDetector.detectAndInitialize(context)) {
+                    logManager.d(TAG, "Sui detected and initialized successfully")
                     currentExecutor = createShizukuExecutor()
                     currentExecutor?.initialize(context)
                     return PrivilegeMethod.SUI
                 }
             } catch (e: Exception) {
+                logManager.d(TAG, "Sui detection failed: ${e.message}")
                 // Continue to next method
             }
         }
@@ -43,10 +45,14 @@ class PrivilegeManager private constructor(private val context: Context) {
             rootExecutor.initialize(context)
 
             if (rootExecutor.isAvailable()) {
+                logManager.d(TAG, "Root detected and available")
                 currentExecutor = rootExecutor
                 return PrivilegeMethod.ROOT
+            } else {
+                logManager.d(TAG, "Root not available (su binary not found)")
             }
         } catch (e: Exception) {
+            logManager.e(TAG, "Root detection failed: ${e.message}")
             // Continue to next method
         }
 
@@ -56,14 +62,19 @@ class PrivilegeManager private constructor(private val context: Context) {
                 shizukuExecutor.initialize(context)
 
                 if (shizukuExecutor.isAvailable()) {
+                    logManager.d(TAG, "Shizuku detected and available")
                     currentExecutor = shizukuExecutor
                     return PrivilegeMethod.SHIZUKU
+                } else {
+                    logManager.d(TAG, "Shizuku not available (binder not responding)")
                 }
             } catch (e: Exception) {
+                logManager.d(TAG, "Shizuku detection failed: ${e.message}")
                 // No Shizuku available
             }
         }
 
+        logManager.w(TAG, "No privilege method available")
         return PrivilegeMethod.NONE
     }
     

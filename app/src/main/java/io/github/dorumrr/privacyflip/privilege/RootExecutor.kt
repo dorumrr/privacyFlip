@@ -55,10 +55,13 @@ class RootExecutor : PrivilegeExecutor {
                 "/system/app/SuperSU.apk"
             )
 
-            val rootExists = suPaths.any { File(it).exists() } || Shell.isAppGrantedRoot() == true
+            // Only check if su binary exists - don't call Shell.isAppGrantedRoot()
+            // because it creates a shell instance before we're ready to show the prompt
+            val rootExists = suPaths.any { File(it).exists() }
             _isRootAvailable = rootExists
             return@withContext rootExists
         } catch (e: Exception) {
+            logManager?.e(TAG, "Error checking root availability: ${e.message}")
             _isRootAvailable = false
             return@withContext false
         }

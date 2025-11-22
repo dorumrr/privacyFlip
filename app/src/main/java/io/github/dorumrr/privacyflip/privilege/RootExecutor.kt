@@ -5,7 +5,6 @@ import com.topjohnwu.superuser.Shell
 import io.github.dorumrr.privacyflip.util.LogManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class RootExecutor : PrivilegeExecutor {
 
@@ -41,28 +40,32 @@ class RootExecutor : PrivilegeExecutor {
     }
     
     override suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
-        if (_isRootAvailable != null) {
-            return@withContext _isRootAvailable!!
-        }
+        // Don't cache the result - always check fresh to avoid stale state
+        // This is important because:
+        // 1. User might grant/deny root permission after first check
+        // 2. Magisk might be installed/uninstalled
+        // 3. Device might be rebooted and root state changed
 
         try {
-            val suPaths = listOf(
-                "/system/bin/su",
-                "/system/xbin/su",
-                "/sbin/su",
-                "/vendor/bin/su",
-                "/system/app/Superuser.apk",
-                "/system/app/SuperSU.apk"
-            )
-
-            // Only check if su binary exists - don't call Shell.isAppGrantedRoot()
-            // because it creates a shell instance before we're ready to show the prompt
-            val rootExists = suPaths.any { File(it).exists() }
-            _isRootAvailable = rootExists
-            return@withContext rootExists
+            // The most reliable way to check if root is available is to actually try to get a root shell
+            // This will trigger the Magisk prompt if needed, which is exactly what we want
+            //
+            // Shell.getShell() behavior:
+            // - Tries to create a root shell (via 'su')
+            // - If su is available and user grants permission: returns root shell (isRoot = true)
+            // - If su is available but user denies permission: returns non-root shell (isRoot = false)
+            // - If su is not available: returns non-root shell (isRoot = false)
+            //
+            // This approach:
+            // - Works on all devices and Android versions (libsu handles compatibility)
+            // - Works on modern Magisk setups (su in any location)
+            // - Works on custom ROMs with non-standard su locations
+            // - Triggers Magisk prompt at the right time (during availability check)
+            // - Most compatible solution recommended by libsu author
+            val shell = Shell.getShell()
+            return@withContext shell.isRoot
         } catch (e: Exception) {
             logManager?.e(TAG, "Error checking root availability: ${e.message}")
-            _isRootAvailable = false
             return@withContext false
         }
     }

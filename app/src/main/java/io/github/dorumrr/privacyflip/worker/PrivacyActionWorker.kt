@@ -14,6 +14,7 @@ import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.data.PrivacyResult
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.ConnectionStateChecker
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.FeatureConfigurationManager
 import kotlinx.coroutines.delay
@@ -30,32 +31,6 @@ class PrivacyActionWorker(
     private fun showToast(message: String) {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * Checks if the microphone is currently in use (e.g., during a phone call or recording).
-     * This prevents interrupting active calls or recordings when the screen locks.
-     *
-     * @return true if microphone is in use, false otherwise
-     */
-    private fun isMicrophoneInUse(context: Context): Boolean {
-        return try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            audioManager?.let {
-                val mode = it.mode
-                val inUse = mode == AudioManager.MODE_IN_CALL ||
-                           mode == AudioManager.MODE_IN_COMMUNICATION
-
-                if (inUse) {
-                    Log.i(TAG, "🎤 Microphone in use detected (audio mode: $mode)")
-                }
-
-                inUse
-            } ?: false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking microphone usage", e)
-            false // Default to not in use if check fails
         }
     }
 
@@ -105,6 +80,7 @@ class PrivacyActionWorker(
             val privacyManager = PrivacyManager.getInstance(applicationContext)
             val preferenceManager = PreferenceManager.getInstance(applicationContext)
             val configManager = FeatureConfigurationManager(preferenceManager)
+            val connectionChecker = ConnectionStateChecker(applicationContext, rootManager)
 
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
             if (!isGlobalPrivacyEnabled) {
@@ -118,25 +94,31 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     Log.i(TAG, "Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
+                    // Filter features based on "only if unused/not connected" setting
+                    val filteredFeatures = featuresToDisable.filter { feature ->
+                        val onlyIfUnused = preferenceManager.getFeatureOnlyIfUnused(feature)
+                        if (!onlyIfUnused) {
+                            true // Always disable if "only if unused" is not enabled
+                        } else {
+                            // Check if feature is in use
+                            val inUse = connectionChecker.isFeatureInUse(feature)
+                            if (inUse) {
+                                Log.i(TAG, "⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
+                            }
+                            !inUse // Only include if NOT in use
+                        }
+                    }
+
+                    Log.i(TAG, "Features to disable after filtering: ${filteredFeatures.map { it.displayName }}")
+
                     // Split features into two groups:
                     // 1. Camera/Microphone - must be disabled IMMEDIATELY (before device locks)
                     //    because Android blocks changing sensor privacy while locked
-                    //    BUT skip microphone if it's in use (e.g., during a call)
                     // 2. Other features - can be disabled after the configured delay
-                    val sensorFeatures = featuresToDisable.filter {
-                        when (it) {
-                            PrivacyFeature.MICROPHONE -> {
-                                val inUse = isMicrophoneInUse(applicationContext)
-                                if (inUse) {
-                                    Log.i(TAG, "🎤 Microphone in use (call/recording) - skipping disable to avoid interruption")
-                                }
-                                !inUse // Only include if NOT in use
-                            }
-                            PrivacyFeature.CAMERA -> true
-                            else -> false
-                        }
+                    val sensorFeatures = filteredFeatures.filter {
+                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
                     }
-                    val otherFeatures = featuresToDisable.filter {
+                    val otherFeatures = filteredFeatures.filter {
                         it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE
                     }
 

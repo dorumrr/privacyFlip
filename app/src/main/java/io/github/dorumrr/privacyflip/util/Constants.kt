@@ -24,6 +24,7 @@ object Constants {
 
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"
+        fun getFeatureOnlyIfUnusedKey(featureName: String): String = "${featureName.lowercase()}_only_if_unused"
     }
     
     object Defaults {
@@ -42,6 +43,16 @@ object Constants {
         // (before the device fully locks) to work around Android's security restriction
         const val CAMERA_DISABLE_ON_LOCK = true
         const val MICROPHONE_DISABLE_ON_LOCK = true
+
+        // "Only if unused/not connected" defaults - when true, feature will only be
+        // disabled on lock if it's not actively connected/in use
+        const val WIFI_ONLY_IF_UNUSED = false
+        const val BLUETOOTH_ONLY_IF_UNUSED = false
+        const val LOCATION_ONLY_IF_UNUSED = false
+        const val MOBILE_DATA_ONLY_IF_UNUSED = false
+        const val NFC_ONLY_IF_UNUSED = false
+        const val CAMERA_ONLY_IF_UNUSED = false
+        const val MICROPHONE_ONLY_IF_UNUSED = true // Microphone already had smart behavior
 
         const val WIFI_ENABLE_ON_UNLOCK = true
         const val BLUETOOTH_ENABLE_ON_UNLOCK = false

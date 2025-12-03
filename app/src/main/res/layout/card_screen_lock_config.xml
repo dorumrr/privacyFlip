@@ -285,6 +285,33 @@
 
             </LinearLayout>
 
+            <!-- Microphone Only if not in use option -->
+            <LinearLayout
+                android:id="@+id/microphoneOnlyIfUnusedContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="24dp"
+                android:visibility="gone">
+
+                <CheckBox
+                    android:id="@+id/microphoneOnlyIfUnusedCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="32dp"
+                    android:paddingStart="4dp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Only if not in use"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_hint" />
+
+            </LinearLayout>
+
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="4dp" />

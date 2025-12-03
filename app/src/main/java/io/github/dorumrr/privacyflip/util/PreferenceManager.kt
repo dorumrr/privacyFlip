@@ -73,6 +73,25 @@ class PreferenceManager private constructor(private val context: Context) {
         prefs.edit().putBoolean(key, value).apply()
     }
 
+    fun getFeatureOnlyIfUnused(feature: PrivacyFeature): Boolean {
+        val key = Constants.Preferences.getFeatureOnlyIfUnusedKey(feature.name)
+        val default = when (feature) {
+            PrivacyFeature.WIFI -> Constants.Defaults.WIFI_ONLY_IF_UNUSED
+            PrivacyFeature.BLUETOOTH -> Constants.Defaults.BLUETOOTH_ONLY_IF_UNUSED
+            PrivacyFeature.LOCATION -> Constants.Defaults.LOCATION_ONLY_IF_UNUSED
+            PrivacyFeature.MOBILE_DATA -> Constants.Defaults.MOBILE_DATA_ONLY_IF_UNUSED
+            PrivacyFeature.NFC -> Constants.Defaults.NFC_ONLY_IF_UNUSED
+            PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_ONLY_IF_UNUSED
+            PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED
+        }
+        return prefs.getBoolean(key, default)
+    }
+
+    fun setFeatureOnlyIfUnused(feature: PrivacyFeature, value: Boolean) {
+        val key = Constants.Preferences.getFeatureOnlyIfUnusedKey(feature.name)
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
     fun updateTimerSettings(settings: TimerSettings) {
         prefs.edit().apply {
             putInt(Constants.Preferences.KEY_LOCK_DELAY, settings.lockDelaySeconds)

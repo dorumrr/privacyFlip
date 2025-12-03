@@ -130,6 +130,7 @@ class MainFragment : Fragment() {
                     config.binding,
                     config.iconRes,
                     config.displayName,
+                    config.feature,
                     { viewModel.updateFeatureSetting(config.feature, disableOnLock = it) },
                     { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
                 )
@@ -149,11 +150,18 @@ class MainFragment : Fragment() {
             microphoneDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
                     viewModel.updateFeatureSetting(PrivacyFeature.MICROPHONE, disableOnLock = isChecked)
+                    // Show/hide the "only if unused" checkbox based on disable switch state
+                    microphoneOnlyIfUnusedContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
                 }
             }
             microphoneEnableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
                     viewModel.updateFeatureSetting(PrivacyFeature.MICROPHONE, enableOnUnlock = isChecked)
+                }
+            }
+            microphoneOnlyIfUnusedCheckbox.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateFeatureOnlyIfUnused(PrivacyFeature.MICROPHONE, isChecked)
                 }
             }
 
@@ -308,42 +316,57 @@ class MainFragment : Fragment() {
         // Set flag to prevent infinite loops
         isUpdatingUI = true
 
-        // Update all privacy feature settings using DRY helper
+        // Update WiFi and Bluetooth with "only if unused" support
         updatePrivacyFeatureSetting(
             binding.screenLockCard.wifiSettings,
             uiState.screenLockConfig.wifiDisableOnLock,
-            uiState.screenLockConfig.wifiEnableOnUnlock
+            uiState.screenLockConfig.wifiEnableOnUnlock,
+            uiState.screenLockConfig.wifiOnlyIfUnused,
+            showOnlyIfUnused = true
         )
 
         updatePrivacyFeatureSetting(
             binding.screenLockCard.bluetoothSettings,
             uiState.screenLockConfig.bluetoothDisableOnLock,
-            uiState.screenLockConfig.bluetoothEnableOnUnlock
+            uiState.screenLockConfig.bluetoothEnableOnUnlock,
+            uiState.screenLockConfig.bluetoothOnlyIfUnused,
+            showOnlyIfUnused = true
         )
 
+        // Mobile Data, Location, NFC - hide "only if unused" checkbox (detection not supported)
         updatePrivacyFeatureSetting(
             binding.screenLockCard.mobileDataSettings,
             uiState.screenLockConfig.mobileDataDisableOnLock,
-            uiState.screenLockConfig.mobileDataEnableOnUnlock
+            uiState.screenLockConfig.mobileDataEnableOnUnlock,
+            onlyIfUnused = false,
+            showOnlyIfUnused = false
         )
 
         updatePrivacyFeatureSetting(
             binding.screenLockCard.locationSettings,
             uiState.screenLockConfig.locationDisableOnLock,
-            uiState.screenLockConfig.locationEnableOnUnlock
+            uiState.screenLockConfig.locationEnableOnUnlock,
+            onlyIfUnused = false,
+            showOnlyIfUnused = false
         )
 
         updatePrivacyFeatureSetting(
             binding.screenLockCard.nfcSettings,
             uiState.screenLockConfig.nfcDisableOnLock,
-            uiState.screenLockConfig.nfcEnableOnUnlock
+            uiState.screenLockConfig.nfcEnableOnUnlock,
+            onlyIfUnused = false,
+            showOnlyIfUnused = false
         )
 
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
         binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
 
+        // Microphone with "only if unused" support
         binding.screenLockCard.microphoneDisableOnLockSwitch.isChecked = uiState.screenLockConfig.microphoneDisableOnLock
         binding.screenLockCard.microphoneEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.microphoneEnableOnUnlock
+        binding.screenLockCard.microphoneOnlyIfUnusedCheckbox.isChecked = uiState.screenLockConfig.microphoneOnlyIfUnused
+        binding.screenLockCard.microphoneOnlyIfUnusedContainer.visibility = 
+            if (uiState.screenLockConfig.microphoneDisableOnLock) View.VISIBLE else View.GONE
 
         isUpdatingUI = false
     }
@@ -672,26 +695,54 @@ class MainFragment : Fragment() {
         featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
         iconRes: Int,
         name: String,
+        feature: PrivacyFeature,
         onDisableLockChange: (Boolean) -> Unit,
         onEnableUnlockChange: (Boolean) -> Unit
     ) {
+        // Check if this feature supports "only if unused" detection
+        val supportsOnlyIfUnused = feature == PrivacyFeature.WIFI || feature == PrivacyFeature.BLUETOOTH
+        
         featureBinding.featureIcon.setImageResource(iconRes)
         featureBinding.featureName.text = name
         featureBinding.disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (!isUpdatingUI) onDisableLockChange(isChecked)
+            if (!isUpdatingUI) {
+                onDisableLockChange(isChecked)
+                // Show/hide the "only if unused" checkbox based on disable switch state
+                // Only for features that support connection detection
+                if (supportsOnlyIfUnused) {
+                    featureBinding.onlyIfUnusedContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+                }
+            }
         }
         featureBinding.enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) onEnableUnlockChange(isChecked)
+        }
+        featureBinding.onlyIfUnusedCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI && supportsOnlyIfUnused) {
+                viewModel.updateFeatureOnlyIfUnused(feature, isChecked)
+            }
+        }
+        
+        // Hide the checkbox container for features that don't support detection
+        if (!supportsOnlyIfUnused) {
+            featureBinding.onlyIfUnusedContainer.visibility = View.GONE
         }
     }
 
     private fun updatePrivacyFeatureSetting(
         featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
         disableOnLock: Boolean,
-        enableOnUnlock: Boolean
+        enableOnUnlock: Boolean,
+        onlyIfUnused: Boolean = false,
+        showOnlyIfUnused: Boolean = true
     ) {
         featureBinding.disableOnLockSwitch.isChecked = disableOnLock
         featureBinding.enableOnUnlockSwitch.isChecked = enableOnUnlock
+        featureBinding.onlyIfUnusedCheckbox.isChecked = onlyIfUnused
+        // Show/hide the "only if unused" container based on disableOnLock state
+        // But only if this feature supports the option
+        featureBinding.onlyIfUnusedContainer.visibility = 
+            if (showOnlyIfUnused && disableOnLock) View.VISIBLE else View.GONE
     }
 
     private fun setupSeekBar(

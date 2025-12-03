@@ -1,0 +1,1 @@
+- Implemented "only if unused" feature for BT/WiFi/Microphone privacy settings

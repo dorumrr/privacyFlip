@@ -70,17 +70,6 @@
         </receiver>
 
         <receiver
-            android:name=".receiver.ScreenStateReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.SCREEN_OFF" />
-                <action android:name="android.intent.action.SCREEN_ON" />
-                <action android:name="android.intent.action.USER_PRESENT" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"
             android:exported="false">

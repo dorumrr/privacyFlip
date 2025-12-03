@@ -6,8 +6,10 @@ import android.os.Build
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -28,6 +30,9 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     private var logManager: LogManager? = null
     private var context: Context? = null
+
+    // Use a dedicated coroutine scope instead of GlobalScope
+    private val executorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var permissionGranted: Boolean? = null
@@ -282,6 +287,7 @@ class ShizukuExecutor : PrivilegeExecutor {
             Shizuku.removeBinderReceivedListener(binderReceivedListener)
             Shizuku.removeBinderDeadListener(binderDeadListener)
             Shizuku.removeRequestPermissionResultListener(permissionResultListener)
+            executorScope.cancel() // Cancel the coroutine scope
         } catch (e: Exception) {
             logManager?.e(TAG, "Error cleaning up: ${e.message}")
         }
@@ -291,8 +297,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         logManager?.i(TAG, "Shizuku binder received - service restarted")
 
         context?.let { ctx ->
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            GlobalScope.launch(Dispatchers.IO) {
+            executorScope.launch {
                 try {
                     // Re-request permission (should be auto-granted if previously granted)
                     val granted = requestPermission()
@@ -328,8 +333,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         permissionGranted = null
 
         context?.let { ctx ->
-            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-            GlobalScope.launch(Dispatchers.IO) {
+            executorScope.launch {
                 try {
                     // Stop the privacy monitor service since Shizuku is no longer available
                     logManager?.i(TAG, "Stopping PrivacyMonitorService due to Shizuku death")

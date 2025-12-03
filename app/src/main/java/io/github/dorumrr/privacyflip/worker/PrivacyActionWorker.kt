@@ -1,9 +1,11 @@
 package io.github.dorumrr.privacyflip.worker
 
+import android.app.KeyguardManager
 import android.content.Context
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
 import androidx.work.CoroutineWorker
@@ -56,6 +58,28 @@ class PrivacyActionWorker(
             false // Default to not in use if check fails
         }
     }
+
+    /**
+     * Checks if the screen is currently locked.
+     * Used to validate screen state after delays to prevent executing stale actions.
+     *
+     * @return true if screen is locked, false if unlocked
+     */
+    private fun isScreenCurrentlyLocked(): Boolean {
+        return try {
+            val keyguardManager = applicationContext.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+
+            val isKeyguardLocked = keyguardManager.isKeyguardLocked
+            val isScreenOn = powerManager.isInteractive
+
+            // Screen is considered locked if keyguard is active OR screen is off
+            isKeyguardLocked || !isScreenOn
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking screen lock state", e)
+            false // Default to unlocked if we can't determine state
+        }
+    }
     
     override suspend fun doWork(): Result {
         try {
@@ -68,10 +92,6 @@ class PrivacyActionWorker(
 
             val rootManager = RootManager.getInstance(Unit)
             rootManager.initialize(applicationContext)
-
-            if (trigger == "service_init") {
-                delay(2000L)
-            }
 
             // Check if privilege is granted (works for Root, Shizuku, and Sui)
             val hasPrivilege = rootManager.isRootGranted()
@@ -138,6 +158,18 @@ class PrivacyActionWorker(
                         if (lockDelay > 0) {
                             Log.i(TAG, "⏳ Waiting ${lockDelay}s before disabling other features")
                             delay(lockDelay * 1000L)
+
+                            // Validate screen is still locked after delay
+                            if (!isScreenCurrentlyLocked()) {
+                                Log.w(TAG, "⚠️ Screen is no longer locked after delay - cancelling disable action")
+                                return Result.success()
+                            }
+
+                            // Re-check global privacy setting after delay
+                            if (!preferenceManager.isGlobalPrivacyEnabled) {
+                                Log.i(TAG, "🚫 Global privacy disabled during delay - cancelling disable action")
+                                return Result.success()
+                            }
                         }
 
                         val otherResults = privacyManager.disableFeatures(otherFeatures.toSet())
@@ -173,6 +205,18 @@ class PrivacyActionWorker(
                         if (unlockDelay > 0) {
                             Log.i(TAG, "⏳ Waiting ${unlockDelay}s before enabling other features")
                             delay(unlockDelay * 1000L)
+
+                            // Validate screen is still unlocked after delay
+                            if (isScreenCurrentlyLocked()) {
+                                Log.w(TAG, "⚠️ Screen is locked again after delay - cancelling enable action")
+                                return Result.success()
+                            }
+
+                            // Re-check global privacy setting after delay
+                            if (!preferenceManager.isGlobalPrivacyEnabled) {
+                                Log.i(TAG, "🚫 Global privacy disabled during delay - skipping enable action")
+                                return Result.success()
+                            }
                         }
                         val otherResults = privacyManager.enableFeatures(otherFeatures.toSet())
                         processResults(otherResults, otherFeatures, "🔓", "enabled", "Re-enabled")

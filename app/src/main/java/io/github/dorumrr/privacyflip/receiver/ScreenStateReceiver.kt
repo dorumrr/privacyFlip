@@ -5,17 +5,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
 class ScreenStateReceiver : BroadcastReceiver() {
-    
-    companion object {
-        private const val TAG = "privacyFlip-ScreenStateReceiver"
-    }
-    
+
     override fun onReceive(context: Context, intent: Intent) {
         Log.i(TAG, "Screen state changed: ${intent.action}")
 
@@ -41,6 +38,8 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
             Intent.ACTION_SCREEN_ON -> {
                 Log.d(TAG, "💡 Screen turned ON (but may still be locked - waiting for USER_PRESENT)")
+                // Cancel any pending lock workers since screen is back on
+                cancelPendingLockWork(context)
             }
 
             else -> {
@@ -62,11 +61,33 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 )
                 .build()
 
-            WorkManager.getInstance(context).enqueue(workRequest)
-            Log.i(TAG, "Privacy action work enqueued for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
+            // Use unique work names to prevent multiple workers from running simultaneously
+            // REPLACE policy cancels any existing work with the same name
+            val workName = if (isLocking) WORK_NAME_LOCK else WORK_NAME_UNLOCK
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                workName,
+                ExistingWorkPolicy.REPLACE,
+                workRequest
+            )
+            Log.i(TAG, "Privacy action work enqueued (unique: $workName) for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger privacy action", e)
         }
+    }
+
+    private fun cancelPendingLockWork(context: Context) {
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_LOCK)
+            Log.i(TAG, "🚫 Cancelled pending lock work due to screen turning back on")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to cancel pending lock work", e)
+        }
+    }
+
+    companion object {
+        private const val TAG = "privacyFlip-ScreenStateReceiver"
+        private const val WORK_NAME_LOCK = "privacy_action_lock"
+        private const val WORK_NAME_UNLOCK = "privacy_action_unlock"
     }
 }

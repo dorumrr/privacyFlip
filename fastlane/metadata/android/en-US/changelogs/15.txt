@@ -1,0 +1,6 @@
+- Fixed Data/WiFi disabled while screen is on
+- Fixed a race condition from concurrent workers
+- Fixed an issue with double event firing
+- Removed service initialization delays
+- Improved coroutine management
+- Added global privacy re-check after delays

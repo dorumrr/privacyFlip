@@ -11,12 +11,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -152,17 +151,13 @@ class PrivacyMonitorService : Service() {
      */
     private fun applyInitialPrivacyState() {
         try {
-            // Delay slightly to ensure system services are ready
-            Handler(Looper.getMainLooper()).postDelayed({
-                val isScreenLocked = isScreenCurrentlyLocked()
-                val reason = "Service Initialization"
+            val isScreenLocked = isScreenCurrentlyLocked()
+            val reason = "Service Initialization"
 
-                Log.i(TAG, "🔍 Checking initial screen state: ${if (isScreenLocked) "LOCKED" else "UNLOCKED"}")
+            Log.i(TAG, "🔍 Checking initial screen state: ${if (isScreenLocked) "LOCKED" else "UNLOCKED"}")
 
-                // Apply appropriate privacy actions based on current screen state
-                triggerInitialPrivacyAction(!isScreenLocked, reason)
-
-            }, 1000L) // 1 second delay to ensure system is ready
+            // Apply appropriate privacy actions based on current screen state
+            triggerInitialPrivacyAction(!isScreenLocked, reason)
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to apply initial privacy state", e)
@@ -195,7 +190,7 @@ class PrivacyMonitorService : Service() {
 
     /**
      * Triggers privacy action based on initial screen state.
-     * Uses the same WorkManager pattern as ScreenStateReceiver for consistency.
+     * Uses unique work names to prevent conflicts with screen state receiver.
      */
     private fun triggerInitialPrivacyAction(isUnlocking: Boolean, reason: String) {
         try {
@@ -213,8 +208,14 @@ class PrivacyMonitorService : Service() {
                 )
                 .build()
 
-            WorkManager.getInstance(this).enqueue(workRequest)
-            Log.i(TAG, "🔄 Initial privacy action enqueued: ${if (isUnlocking) "unlock" else "lock"} actions (deviceLocked=$isDeviceLocked)")
+            // Use unique work names consistent with ScreenStateReceiver
+            val workName = if (!isUnlocking) "privacy_action_lock" else "privacy_action_unlock"
+            WorkManager.getInstance(this).enqueueUniqueWork(
+                workName,
+                ExistingWorkPolicy.REPLACE,
+                workRequest
+            )
+            Log.i(TAG, "🔄 Initial privacy action enqueued (unique: $workName): ${if (isUnlocking) "unlock" else "lock"} actions (deviceLocked=$isDeviceLocked)")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger initial privacy action", e)

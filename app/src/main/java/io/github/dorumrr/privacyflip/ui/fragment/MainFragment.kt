@@ -177,25 +177,9 @@ class MainFragment : Fragment() {
     private fun setupGlobalPrivacyCard() {
         binding.globalPrivacyCard.globalPrivacySwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) {
-                // Check if permission is required for this action
-                val currentState = viewModel.uiState.value
-                val requiresPermission = !isChecked // Turning OFF requires permission (to enable features)
-
-                if (requiresPermission && currentState?.isRootGranted == false) {
-                    // Revert the switch state
-                    isUpdatingUI = true
-                    binding.globalPrivacyCard.globalPrivacySwitch.isChecked = !isChecked
-                    isUpdatingUI = false
-
-                    // Show toast message to inform user
-                    android.widget.Toast.makeText(
-                        requireContext(),
-                        "Permission required to disable global privacy. Please grant ${currentState.privilegeMethod.getDisplayName()} permission first.",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    viewModel.toggleGlobalPrivacy(isChecked)
-                }
+                // Toggling global privacy on/off just changes monitoring behavior.
+                // It does NOT require root permission since it doesn't modify feature states.
+                viewModel.toggleGlobalPrivacy(isChecked)
             }
         }
     }

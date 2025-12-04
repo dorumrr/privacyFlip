@@ -24,8 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -51,7 +49,6 @@ class MainViewModel : ViewModel() {
     private lateinit var preferenceManager: PreferenceManager
     private var context: Context? = null
     private var isInitialized = false
-    private var globalPrivacyToggleJob: Job? = null
 
     private val _uiState = MutableLiveData(UiState())
     val uiState: LiveData<UiState> = _uiState
@@ -94,8 +91,6 @@ class MainViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        globalPrivacyToggleJob?.cancel()
-        globalPrivacyToggleJob = null
     }
 
     fun updateUiState(update: (UiState) -> UiState) {
@@ -771,30 +766,11 @@ class MainViewModel : ViewModel() {
     }
 
     fun toggleGlobalPrivacy(enabled: Boolean) {
-        globalPrivacyToggleJob?.cancel()
-        globalPrivacyToggleJob = null
-
         preferenceManager.isGlobalPrivacyEnabled = enabled
         updateUiState { it.copy(isGlobalPrivacyEnabled = enabled) }
-
-        if (!enabled) {
-            globalPrivacyToggleJob = viewModelScope.launch {
-                try {
-                    // Recheck preference in case user toggled back while coroutine was starting
-                    if (!preferenceManager.isGlobalPrivacyEnabled) {
-                        val allFeatures = PrivacyFeature.getConnectivityFeatures().toSet()
-                        privacyManager.enableFeatures(allFeatures)
-                        loadPrivacyStatus()
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    logManager.e(TAG, "Error disabling global privacy: ${e.message}")
-                } finally {
-                    globalPrivacyToggleJob = null
-                }
-            }
-        }
+        // Note: Turning off global privacy simply stops monitoring lock/unlock events.
+        // It does NOT modify current feature states (WiFi, Bluetooth, etc.).
+        // This respects user's current connectivity configuration.
     }
 
     private fun ensureBackgroundServiceRunning() {

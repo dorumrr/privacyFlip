@@ -49,6 +49,8 @@ class PreferenceManager private constructor(private val context: Context) {
             PrivacyFeature.NFC -> Constants.Defaults.NFC_DISABLE_ON_LOCK
             PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_DISABLE_ON_LOCK
             PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK
+            PrivacyFeature.AIRPLANE_MODE -> Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK
+            PrivacyFeature.BATTERY_SAVER -> Constants.Defaults.BATTERY_SAVER_DISABLE_ON_LOCK
         }
         return prefs.getBoolean(key, default)
     }
@@ -68,6 +70,8 @@ class PreferenceManager private constructor(private val context: Context) {
             PrivacyFeature.NFC -> Constants.Defaults.NFC_ENABLE_ON_UNLOCK
             PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK
             PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK
+            PrivacyFeature.AIRPLANE_MODE -> Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK
+            PrivacyFeature.BATTERY_SAVER -> Constants.Defaults.BATTERY_SAVER_ENABLE_ON_UNLOCK
         }
         return prefs.getBoolean(key, default)
     }
@@ -87,6 +91,8 @@ class PreferenceManager private constructor(private val context: Context) {
             PrivacyFeature.NFC -> Constants.Defaults.NFC_ONLY_IF_UNUSED
             PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_ONLY_IF_UNUSED
             PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED
+            PrivacyFeature.AIRPLANE_MODE -> Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED
+            PrivacyFeature.BATTERY_SAVER -> Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED
         }
         return prefs.getBoolean(key, default)
     }

@@ -39,7 +39,9 @@ class ConnectionStateChecker(
             PrivacyFeature.LOCATION,
             PrivacyFeature.MOBILE_DATA,
             PrivacyFeature.NFC,
-            PrivacyFeature.CAMERA -> false
+            PrivacyFeature.CAMERA,
+            PrivacyFeature.AIRPLANE_MODE,
+            PrivacyFeature.BATTERY_SAVER -> false
         }
     }
 

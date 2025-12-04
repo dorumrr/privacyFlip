@@ -69,6 +69,16 @@ object Constants {
         // Enable camera/mic on unlock (unblock them when device is unlocked)
         const val CAMERA_ENABLE_ON_UNLOCK = true
         const val MICROPHONE_ENABLE_ON_UNLOCK = true
+
+        // Airplane Mode defaults (opt-in - disabled by default as it's more drastic)
+        const val AIRPLANE_MODE_DISABLE_ON_LOCK = false
+        const val AIRPLANE_MODE_ENABLE_ON_UNLOCK = false
+        const val AIRPLANE_MODE_ONLY_IF_UNUSED = false
+
+        // Battery Saver defaults (opt-in - disabled by default as it's a system mode)
+        const val BATTERY_SAVER_DISABLE_ON_LOCK = false
+        const val BATTERY_SAVER_ENABLE_ON_UNLOCK = false
+        const val BATTERY_SAVER_ONLY_IF_UNUSED = false
     }
 
     object Logging {

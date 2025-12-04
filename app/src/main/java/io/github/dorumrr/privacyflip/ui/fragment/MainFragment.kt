@@ -142,7 +142,9 @@ class MainFragment : Fragment() {
                 FeatureConfig(PrivacyFeature.BLUETOOTH, bluetoothSettings, R.drawable.ic_bluetooth, "Bluetooth"),
                 FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
                 FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location"),
-                FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC")
+                FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC"),
+                FeatureConfig(PrivacyFeature.BATTERY_SAVER, batterySaverSettings, R.drawable.ic_battery, "Battery Saver"),
+                FeatureConfig(PrivacyFeature.AIRPLANE_MODE, airplaneModeSettings, R.drawable.ic_airplane, "Airplane Mode ⚠️")
             )
 
             featureConfigs.forEach { config ->
@@ -190,6 +192,16 @@ class MainFragment : Fragment() {
             }
             microphoneInfoIcon.setOnClickListener {
                 showCameraMicInfoDialog()
+            }
+
+            // Setup info icons for Airplane Mode and Battery Saver
+            airplaneModeSettings.featureInfoIcon.visibility = View.VISIBLE
+            airplaneModeSettings.featureInfoIcon.setOnClickListener {
+                showAirplaneModeInfoDialog()
+            }
+            batterySaverSettings.featureInfoIcon.visibility = View.VISIBLE
+            batterySaverSettings.featureInfoIcon.setOnClickListener {
+                showBatterySaverInfoDialog()
             }
         }
     }
@@ -386,6 +398,23 @@ class MainFragment : Fragment() {
             showOnlyIfUnused = false
         )
 
+        // Battery Saver and Airplane Mode - hide "only if unused" checkbox (not applicable)
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.batterySaverSettings,
+            uiState.screenLockConfig.batterySaverDisableOnLock,
+            uiState.screenLockConfig.batterySaverEnableOnUnlock,
+            onlyIfUnused = false,
+            showOnlyIfUnused = false
+        )
+
+        updatePrivacyFeatureSetting(
+            binding.screenLockCard.airplaneModeSettings,
+            uiState.screenLockConfig.airplaneModeDisableOnLock,
+            uiState.screenLockConfig.airplaneModeEnableOnUnlock,
+            onlyIfUnused = false,
+            showOnlyIfUnused = false
+        )
+
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
         binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
 
@@ -450,6 +479,22 @@ class MainFragment : Fragment() {
         AlertDialog.Builder(requireContext())
             .setTitle("Camera & Microphone Info")
             .setMessage(getString(R.string.lock_delay_warning_message))
+            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showAirplaneModeInfoDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Airplane Mode (Experimental)")
+            .setMessage(getString(R.string.airplane_mode_info_message))
+            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun showBatterySaverInfoDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Battery Saver Info")
+            .setMessage(getString(R.string.battery_saver_info_message))
             .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
             .show()
     }
@@ -704,6 +749,10 @@ class MainFragment : Fragment() {
             locationSettings.enableOnUnlockSwitch.isEnabled = isEnabled
             nfcSettings.disableOnLockSwitch.isEnabled = isEnabled
             nfcSettings.enableOnUnlockSwitch.isEnabled = isEnabled
+            airplaneModeSettings.disableOnLockSwitch.isEnabled = isEnabled
+            airplaneModeSettings.enableOnUnlockSwitch.isEnabled = isEnabled
+            batterySaverSettings.disableOnLockSwitch.isEnabled = isEnabled
+            batterySaverSettings.enableOnUnlockSwitch.isEnabled = isEnabled
 
             // Camera and microphone (custom inline layouts)
             cameraDisableOnLockSwitch.isEnabled = isEnabled

@@ -32,6 +32,17 @@
             android:textStyle="bold"
             tools:text="Wi-Fi" />
 
+        <ImageView
+            android:id="@+id/featureInfoIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_info"
+            android:tint="@color/text_secondary"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="2dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
     </LinearLayout>
 
     <Space

@@ -459,7 +459,13 @@ class MainViewModel : ViewModel() {
                 cameraOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("CAMERA"), Constants.Defaults.CAMERA_ONLY_IF_UNUSED),
                 microphoneDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK),
                 microphoneEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK),
-                microphoneOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED)
+                microphoneOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED),
+                airplaneModeDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK),
+                airplaneModeEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK),
+                airplaneModeOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED),
+                batterySaverDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_DISABLE_ON_LOCK),
+                batterySaverEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ENABLE_ON_UNLOCK),
+                batterySaverOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED)
             )
 
             updateUiState { it.copy(screenLockConfig = config) }
@@ -858,6 +864,16 @@ class MainViewModel : ViewModel() {
             { it.microphoneDisableOnLock }, { it.microphoneEnableOnUnlock })
     }
 
+    fun updateAirplaneModeSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.AIRPLANE_MODE, disableOnLock, enableOnUnlock,
+            { it.airplaneModeDisableOnLock }, { it.airplaneModeEnableOnUnlock })
+    }
+
+    fun updateBatterySaverSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
+        updateFeatureSettings(PrivacyFeature.BATTERY_SAVER, disableOnLock, enableOnUnlock,
+            { it.batterySaverDisableOnLock }, { it.batterySaverEnableOnUnlock })
+    }
+
     fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
         when (feature) {
             PrivacyFeature.WIFI -> updateWifiSettings(disableOnLock, enableOnUnlock)
@@ -867,6 +883,8 @@ class MainViewModel : ViewModel() {
             PrivacyFeature.NFC -> updateNFCSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.CAMERA -> updateCameraSettings(disableOnLock, enableOnUnlock)
             PrivacyFeature.MICROPHONE -> updateMicrophoneSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.AIRPLANE_MODE -> updateAirplaneModeSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.BATTERY_SAVER -> updateBatterySaverSettings(disableOnLock, enableOnUnlock)
         }
     }
 
@@ -900,7 +918,13 @@ data class ScreenLockConfig(
     val cameraOnlyIfUnused: Boolean = Constants.Defaults.CAMERA_ONLY_IF_UNUSED,
     val microphoneDisableOnLock: Boolean = Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK,
     val microphoneEnableOnUnlock: Boolean = Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK,
-    val microphoneOnlyIfUnused: Boolean = Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED
+    val microphoneOnlyIfUnused: Boolean = Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED,
+    val airplaneModeDisableOnLock: Boolean = Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK,
+    val airplaneModeEnableOnUnlock: Boolean = Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK,
+    val airplaneModeOnlyIfUnused: Boolean = Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED,
+    val batterySaverDisableOnLock: Boolean = Constants.Defaults.BATTERY_SAVER_DISABLE_ON_LOCK,
+    val batterySaverEnableOnUnlock: Boolean = Constants.Defaults.BATTERY_SAVER_ENABLE_ON_UNLOCK,
+    val batterySaverOnlyIfUnused: Boolean = Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED
 ) {
     fun updateFeature(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean): ScreenLockConfig {
         return when (feature) {
@@ -932,6 +956,14 @@ data class ScreenLockConfig(
                 microphoneDisableOnLock = disableOnLock,
                 microphoneEnableOnUnlock = enableOnUnlock
             )
+            PrivacyFeature.AIRPLANE_MODE -> copy(
+                airplaneModeDisableOnLock = disableOnLock,
+                airplaneModeEnableOnUnlock = enableOnUnlock
+            )
+            PrivacyFeature.BATTERY_SAVER -> copy(
+                batterySaverDisableOnLock = disableOnLock,
+                batterySaverEnableOnUnlock = enableOnUnlock
+            )
         }
     }
 
@@ -944,6 +976,8 @@ data class ScreenLockConfig(
             PrivacyFeature.NFC -> copy(nfcOnlyIfUnused = onlyIfUnused)
             PrivacyFeature.CAMERA -> copy(cameraOnlyIfUnused = onlyIfUnused)
             PrivacyFeature.MICROPHONE -> copy(microphoneOnlyIfUnused = onlyIfUnused)
+            PrivacyFeature.AIRPLANE_MODE -> copy(airplaneModeOnlyIfUnused = onlyIfUnused)
+            PrivacyFeature.BATTERY_SAVER -> copy(batterySaverOnlyIfUnused = onlyIfUnused)
         }
     }
 
@@ -956,6 +990,8 @@ data class ScreenLockConfig(
             PrivacyFeature.NFC -> nfcOnlyIfUnused
             PrivacyFeature.CAMERA -> cameraOnlyIfUnused
             PrivacyFeature.MICROPHONE -> microphoneOnlyIfUnused
+            PrivacyFeature.AIRPLANE_MODE -> airplaneModeOnlyIfUnused
+            PrivacyFeature.BATTERY_SAVER -> batterySaverOnlyIfUnused
         }
     }
 }

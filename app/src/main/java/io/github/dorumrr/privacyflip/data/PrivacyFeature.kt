@@ -10,7 +10,9 @@ enum class PrivacyFeature(
     LOCATION("Location Services", "GPS and location tracking"),
     NFC("NFC", "Near Field Communication"),
     CAMERA("Camera", "Camera sensor access"),
-    MICROPHONE("Microphone", "Microphone sensor access");
+    MICROPHONE("Microphone", "Microphone sensor access"),
+    AIRPLANE_MODE("Airplane Mode", "Disables all wireless radios"),
+    BATTERY_SAVER("Battery Saver", "System battery saver mode");
 
     companion object {
         fun getConnectivityFeatures(): List<PrivacyFeature> {
@@ -19,6 +21,10 @@ enum class PrivacyFeature(
 
         fun getSensorFeatures(): List<PrivacyFeature> {
             return listOf(CAMERA, MICROPHONE)
+        }
+
+        fun getSystemModeFeatures(): List<PrivacyFeature> {
+            return listOf(AIRPLANE_MODE, BATTERY_SAVER)
         }
     }
 }

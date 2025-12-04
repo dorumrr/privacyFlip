@@ -1,0 +1,5 @@
+- Added Airplane Mode and Battery Saver features
+- Added debug notifications capability
+- Enhanced widget and status bar switch.
+- Fixed the global privacy toggle actions
+- Minor UI improvements

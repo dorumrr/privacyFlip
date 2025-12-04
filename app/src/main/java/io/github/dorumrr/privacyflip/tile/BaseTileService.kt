@@ -6,6 +6,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
+import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,6 +18,7 @@ abstract class BaseTileService : TileService() {
     protected abstract val serviceName: String
     
     protected lateinit var privacyManager: PrivacyManager
+    protected val preferenceManager: PreferenceManager by lazy { PreferenceManager.getInstance(this) }
     protected val serviceScope = CoroutineScope(Dispatchers.Main)
     
     override fun onCreate() {

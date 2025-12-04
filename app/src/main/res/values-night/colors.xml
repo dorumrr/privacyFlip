@@ -38,6 +38,10 @@
     <!-- Widget colors (dark theme) -->
     <color name="widget_background">#80FFFFFF</color>   <!-- Semi-transparent white -->
     <color name="widget_stroke">#40000000</color>       <!-- Semi-transparent black -->
+    <color name="widget_active_background">#CC388E3C</color>    <!-- Brighter green for dark mode - ON state -->
+    <color name="widget_active_stroke">#8066BB6A</color>        <!-- Light green stroke -->
+    <color name="widget_inactive_background">#CC616161</color>  <!-- Medium gray for dark mode - OFF state -->
+    <color name="widget_inactive_stroke">#80909090</color>      <!-- Light gray stroke -->
 
     <!-- Warning colors (dark theme) -->
     <color name="warning_background">#FF3E2723</color>  <!-- Dark brown/orange background -->

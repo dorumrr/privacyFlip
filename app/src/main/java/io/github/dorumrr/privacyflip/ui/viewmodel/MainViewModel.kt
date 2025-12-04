@@ -18,6 +18,7 @@ import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
+import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
 import io.github.dorumrr.privacyflip.worker.ServiceHealthWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -775,6 +776,9 @@ class MainViewModel : ViewModel() {
         // Note: Turning off global privacy simply stops monitoring lock/unlock events.
         // It does NOT modify current feature states (WiFi, Bluetooth, etc.).
         // This respects user's current connectivity configuration.
+        
+        // Update widgets to reflect new state
+        context?.let { PrivacyFlipWidget.updateAllWidgets(it) }
     }
 
     fun setDebugNotificationsEnabled(enabled: Boolean) {

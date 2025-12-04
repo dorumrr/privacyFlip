@@ -10,20 +10,36 @@
 
     <ImageView
         android:id="@+id/widget_icon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:layout_marginEnd="8dp"
         android:contentDescription="@string/widget_name"
-        android:src="@drawable/ic_privacy_shield" />
+        android:src="@mipmap/ic_launcher_foreground" />
 
-    <TextView
-        android:id="@+id/widget_text"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:text="@string/widget_privacy_off"
-        android:textColor="@android:color/white"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_privacy_off"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_app_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_name"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            android:alpha="0.7" />
+
+    </LinearLayout>
 
 </LinearLayout>

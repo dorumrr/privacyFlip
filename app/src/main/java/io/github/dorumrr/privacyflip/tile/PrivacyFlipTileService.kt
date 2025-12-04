@@ -4,6 +4,7 @@ import android.annotation.TargetApi
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.util.Log
+import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
 
 @TargetApi(Build.VERSION_CODES.N)
 class PrivacyFlipTileService : BaseTileService() {
@@ -12,37 +13,29 @@ class PrivacyFlipTileService : BaseTileService() {
     override val serviceName = "PrivacyFlip Tile Service"
 
     override suspend fun executeAction() {
-        val allFeatures = io.github.dorumrr.privacyflip.data.PrivacyFeature.getConnectivityFeatures().toSet()
-        val results = privacyManager.disableFeatures(allFeatures)
-        val allSuccess = results.all { it.success }
-
-        if (allSuccess) {
-            Log.d(tag, "Privacy features toggled successfully")
-        } else {
-            Log.w(tag, "Some privacy features failed to toggle")
-        }
+        // Toggle global privacy state
+        val currentState = preferenceManager.isGlobalPrivacyEnabled
+        val newState = !currentState
+        preferenceManager.isGlobalPrivacyEnabled = newState
+        
+        Log.d(tag, "Global privacy toggled: $currentState -> $newState")
+        
+        // Update widgets to reflect new state
+        PrivacyFlipWidget.updateAllWidgets(this)
     }
 
     override suspend fun updateTileStateInternal() {
-        val status = privacyManager.getPrivacyStatus()
         val tile = qsTile ?: return
+        val isEnabled = preferenceManager.isGlobalPrivacyEnabled
 
-        when {
-            status.isActive && status.activeFeatures.size >= 3 -> {
-                tile.state = Tile.STATE_ACTIVE
-                tile.label = "Privacy Active"
-                tile.contentDescription = "Privacy features are active"
-            }
-            status.isActive -> {
-                tile.state = Tile.STATE_ACTIVE
-                tile.label = "Privacy Partial"
-                tile.contentDescription = "Some privacy features are active"
-            }
-            else -> {
-                tile.state = Tile.STATE_INACTIVE
-                tile.label = "Privacy Inactive"
-                tile.contentDescription = "Privacy features are inactive"
-            }
+        if (isEnabled) {
+            tile.state = Tile.STATE_ACTIVE
+            tile.label = "Privacy ON"
+            tile.contentDescription = "Privacy Flip is enabled. Tap to disable."
+        } else {
+            tile.state = Tile.STATE_INACTIVE
+            tile.label = "Privacy OFF"
+            tile.contentDescription = "Privacy Flip is disabled. Tap to enable."
         }
 
         tile.updateTile()

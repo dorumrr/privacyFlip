@@ -5,7 +5,7 @@
     android:initialLayout="@layout/privacy_flip_widget"
     android:minWidth="110dp"
     android:minHeight="40dp"
-    android:previewImage="@drawable/ic_privacy_shield"
+    android:previewImage="@mipmap/ic_launcher"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="2"
     android:targetCellHeight="1"

@@ -303,12 +303,16 @@
                     android:paddingStart="4dp" />
 
                 <TextView
+                    android:id="@+id/microphoneOnlyIfUnusedText"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Only if not in use"
                     android:textSize="11sp"
-                    android:textColor="@color/text_hint" />
+                    android:textColor="@color/text_secondary"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground" />
 
             </LinearLayout>
 

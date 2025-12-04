@@ -187,6 +187,11 @@ class MainFragment : Fragment() {
                 }
             }
 
+            // Make the microphone "only if not in use" text clickable
+            microphoneOnlyIfUnusedText.setOnClickListener {
+                microphoneOnlyIfUnusedCheckbox.toggle()
+            }
+
             cameraInfoIcon.setOnClickListener {
                 showCameraMicInfoDialog()
             }
@@ -802,7 +807,14 @@ class MainFragment : Fragment() {
                 viewModel.updateFeatureOnlyIfUnused(feature, isChecked)
             }
         }
-        
+
+        // Make the text clickable to toggle the checkbox
+        featureBinding.onlyIfUnusedText.setOnClickListener {
+            if (supportsOnlyIfUnused) {
+                featureBinding.onlyIfUnusedCheckbox.toggle()
+            }
+        }
+
         // Hide the checkbox container for features that don't support detection
         if (!supportsOnlyIfUnused) {
             featureBinding.onlyIfUnusedContainer.visibility = View.GONE

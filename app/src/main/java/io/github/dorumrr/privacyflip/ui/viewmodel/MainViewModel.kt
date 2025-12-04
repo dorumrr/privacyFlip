@@ -426,7 +426,11 @@ class MainViewModel : ViewModel() {
 
     private fun loadGlobalPrivacyStatus() {
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
-        updateUiState { it.copy(isGlobalPrivacyEnabled = isEnabled) }
+        val debugNotificationsEnabled = preferenceManager.debugNotificationsEnabled
+        updateUiState { it.copy(
+            isGlobalPrivacyEnabled = isEnabled,
+            debugNotificationsEnabled = debugNotificationsEnabled
+        ) }
     }
 
     private fun loadScreenLockConfig(context: Context) {
@@ -773,6 +777,11 @@ class MainViewModel : ViewModel() {
         // This respects user's current connectivity configuration.
     }
 
+    fun setDebugNotificationsEnabled(enabled: Boolean) {
+        preferenceManager.debugNotificationsEnabled = enabled
+        updateUiState { it.copy(debugNotificationsEnabled = enabled) }
+    }
+
     private fun ensureBackgroundServiceRunning() {
         val context = this.context ?: return
 
@@ -972,5 +981,7 @@ data class UiState(
         showCountdown = Constants.Defaults.SHOW_COUNTDOWN
     ),
     // Lock delay warning for camera/mic
-    val showLockDelayWarning: Boolean = false
+    val showLockDelayWarning: Boolean = false,
+    // Debug notifications toggle
+    val debugNotificationsEnabled: Boolean = Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED
 )

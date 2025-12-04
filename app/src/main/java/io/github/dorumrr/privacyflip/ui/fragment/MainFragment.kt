@@ -1,11 +1,14 @@
 package io.github.dorumrr.privacyflip.ui.fragment
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
@@ -15,6 +18,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
@@ -40,6 +45,21 @@ class MainFragment : Fragment() {
 
     // Flag to prevent infinite loops when updating switches programmatically
     private var isUpdatingUI = false
+
+    // Permission launcher for notification permission (Android 13+)
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.i(TAG, "Notification permission granted")
+            viewModel.setDebugNotificationsEnabled(true)
+        } else {
+            Log.w(TAG, "Notification permission denied")
+            // Reset the switch since permission was denied
+            // The ViewModel state update will trigger UI update via observer
+            viewModel.setDebugNotificationsEnabled(false)
+        }
+    }
 
     // Broadcast receiver for Shizuku status changes
     private val shizukuStatusReceiver = object : BroadcastReceiver() {
@@ -233,6 +253,30 @@ class MainFragment : Fragment() {
                 val newSettings = currentSettings.copy(unlockDelaySeconds = seconds)
                 viewModel.updateTimerSettings(newSettings)
             }
+
+            // Setup Debug Notifications toggle
+            debugNotificationsSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    if (isChecked) {
+                        // Check if we need to request notification permission (Android 13+)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (ContextCompat.checkSelfPermission(
+                                    requireContext(),
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                // Request permission - the result handler will enable the feature if granted
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                return@setOnCheckedChangeListener
+                            }
+                        }
+                        // Permission already granted or not needed (Android < 13)
+                        viewModel.setDebugNotificationsEnabled(true)
+                    } else {
+                        viewModel.setDebugNotificationsEnabled(false)
+                    }
+                }
+            }
         }
     }
 
@@ -369,6 +413,9 @@ class MainFragment : Fragment() {
             val unlockPosition = TimerSettings.secondsToPosition(uiState.timerSettings.unlockDelaySeconds)
             unlockDelaySeekBar.progress = unlockPosition
             unlockDelayValue.text = TimerSettings.formatSeconds(uiState.timerSettings.unlockDelaySeconds)
+
+            // Update Debug Notifications toggle
+            debugNotificationsSwitch.isChecked = uiState.debugNotificationsEnabled
         }
 
         // Clear flag

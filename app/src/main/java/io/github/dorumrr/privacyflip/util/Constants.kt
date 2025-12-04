@@ -7,6 +7,11 @@ object Constants {
         const val NOTIFICATION_ID = 1000
     }
 
+    object DebugNotification {
+        const val CHANNEL_ID = "privacy_debug"
+        const val NOTIFICATION_ID_BASE = 2000
+    }
+
     object BootReceiver {
         const val DEBOUNCE_DELAY_MS = 300L
     }
@@ -21,6 +26,7 @@ object Constants {
         const val KEY_SHOW_COUNTDOWN = "show_countdown"
 
         const val KEY_BACKGROUND_SERVICE_ENABLED = "background_service_enabled"
+        const val KEY_DEBUG_NOTIFICATIONS_ENABLED = "debug_notifications_enabled"
 
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"
@@ -33,6 +39,7 @@ object Constants {
         const val SHOW_COUNTDOWN = true
 
         const val BACKGROUND_SERVICE_ENABLED = true
+        const val DEBUG_NOTIFICATIONS_ENABLED = false
 
         const val WIFI_DISABLE_ON_LOCK = true
         const val BLUETOOTH_DISABLE_ON_LOCK = true

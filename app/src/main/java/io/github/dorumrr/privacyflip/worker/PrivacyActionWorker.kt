@@ -15,6 +15,7 @@ import io.github.dorumrr.privacyflip.data.PrivacyResult
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.util.ConnectionStateChecker
+import io.github.dorumrr.privacyflip.util.DebugNotificationHelper
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.FeatureConfigurationManager
 import kotlinx.coroutines.delay
@@ -26,6 +27,10 @@ class PrivacyActionWorker(
 
     companion object {
         private const val TAG = "privacyFlip-PrivacyActionWorker"
+    }
+
+    private val debugNotifier: DebugNotificationHelper by lazy {
+        DebugNotificationHelper.getInstance(applicationContext)
     }
 
     private fun showToast(message: String) {
@@ -74,6 +79,7 @@ class PrivacyActionWorker(
             if (!hasPrivilege) {
                 Log.w(TAG, "Privilege permission not granted - cannot execute privacy actions")
                 Log.w(TAG, "User must grant permission from the UI before privacy actions can be executed")
+                debugNotifier.notifyNoPrivilege()
                 return Result.failure()
             }
 
@@ -85,6 +91,7 @@ class PrivacyActionWorker(
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
             if (!isGlobalPrivacyEnabled) {
                 Log.i(TAG, "🚫 Global privacy is disabled - skipping all privacy actions")
+                debugNotifier.notifyGlobalPrivacyDisabled()
                 return Result.success()
             }
 
@@ -95,6 +102,7 @@ class PrivacyActionWorker(
                     Log.i(TAG, "Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
                     // Filter features based on "only if unused/not connected" setting
+                    val skippedFeatures = mutableListOf<String>()
                     val filteredFeatures = featuresToDisable.filter { feature ->
                         val onlyIfUnused = preferenceManager.getFeatureOnlyIfUnused(feature)
                         if (!onlyIfUnused) {
@@ -104,6 +112,8 @@ class PrivacyActionWorker(
                             val inUse = connectionChecker.isFeatureInUse(feature)
                             if (inUse) {
                                 Log.i(TAG, "⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
+                                skippedFeatures.add(feature.displayName)
+                                debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
                             }
                             !inUse // Only include if NOT in use
                         }
@@ -128,9 +138,10 @@ class PrivacyActionWorker(
                         if (!isDeviceLocked) {
                             Log.i(TAG, "⚡ Device unlocked - disabling sensors immediately: ${sensorFeatures.map { it.displayName }}")
                             val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
-                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled")
+                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
                         } else {
                             Log.w(TAG, "⚠️ Device already locked - CANNOT disable sensors (Android restriction): ${sensorFeatures.map { it.displayName }}")
+                            debugNotifier.notifyActionCancelled("Device already locked - cannot disable ${sensorFeatures.map { it.displayName }.joinToString(", ")}")
                         }
                     }
 
@@ -144,18 +155,20 @@ class PrivacyActionWorker(
                             // Validate screen is still locked after delay
                             if (!isScreenCurrentlyLocked()) {
                                 Log.w(TAG, "⚠️ Screen is no longer locked after delay - cancelling disable action")
+                                debugNotifier.notifyActionCancelled("Screen unlocked during delay - disable cancelled")
                                 return Result.success()
                             }
 
                             // Re-check global privacy setting after delay
                             if (!preferenceManager.isGlobalPrivacyEnabled) {
                                 Log.i(TAG, "🚫 Global privacy disabled during delay - cancelling disable action")
+                                debugNotifier.notifyActionCancelled("Global privacy disabled during delay")
                                 return Result.success()
                             }
                         }
 
                         val otherResults = privacyManager.disableFeatures(otherFeatures.toSet())
-                        processResults(otherResults, otherFeatures, "🔒", "disabled", "Disabled")
+                        processResults(otherResults, otherFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
                     }
                 }
 
@@ -178,7 +191,7 @@ class PrivacyActionWorker(
                     if (sensorFeatures.isNotEmpty()) {
                         Log.i(TAG, "⚡ Enabling sensors immediately (no delay): ${sensorFeatures.map { it.displayName }}")
                         val sensorResults = privacyManager.enableFeatures(sensorFeatures.toSet())
-                        processResults(sensorResults, sensorFeatures, "🔓", "enabled", "Re-enabled")
+                        processResults(sensorResults, sensorFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
                     }
 
                     // Enable other features after the configured delay
@@ -191,25 +204,34 @@ class PrivacyActionWorker(
                             // Validate screen is still unlocked after delay
                             if (isScreenCurrentlyLocked()) {
                                 Log.w(TAG, "⚠️ Screen is locked again after delay - cancelling enable action")
+                                debugNotifier.notifyActionCancelled("Screen locked during delay - enable cancelled")
                                 return Result.success()
                             }
 
                             // Re-check global privacy setting after delay
                             if (!preferenceManager.isGlobalPrivacyEnabled) {
                                 Log.i(TAG, "🚫 Global privacy disabled during delay - skipping enable action")
+                                debugNotifier.notifyActionCancelled("Global privacy disabled during delay")
                                 return Result.success()
                             }
                         }
                         val otherResults = privacyManager.enableFeatures(otherFeatures.toSet())
-                        processResults(otherResults, otherFeatures, "🔓", "enabled", "Re-enabled")
+                        processResults(otherResults, otherFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
                     }
                 }
             }
 
             return Result.success()
             
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Work was cancelled (e.g., screen state changed during delay)
+            // This is expected behavior, not an error
+            Log.i(TAG, "⚠️ Privacy action cancelled (screen state changed)")
+            debugNotifier.notifyActionCancelled("Screen state changed during action")
+            throw e // Re-throw to properly cancel the coroutine
         } catch (e: Exception) {
             Log.e(TAG, "Privacy action worker failed", e)
+            debugNotifier.notifyError("Worker failed: ${e.message}")
             return Result.failure()
         }
     }
@@ -219,9 +241,11 @@ class PrivacyActionWorker(
         features: List<PrivacyFeature>,
         logIcon: String,
         actionPastTense: String,
-        toastPrefix: String
+        toastPrefix: String,
+        isLockAction: Boolean
     ) {
         val successCount = results.count { it.success }
+        val failedResults = results.filter { !it.success }
 
         results.forEach { result ->
             val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
@@ -236,6 +260,19 @@ class PrivacyActionWorker(
             }
             val toastMessage = "$toastPrefix: ${successfulFeatures.joinToString(", ")}"
             showToast(toastMessage)
+
+            // Send debug notification for successful actions
+            if (isLockAction) {
+                debugNotifier.notifyLockAction(successfulFeatures)
+            } else {
+                debugNotifier.notifyUnlockAction(successfulFeatures)
+            }
+        }
+
+        // Notify about failures
+        if (failedResults.isNotEmpty()) {
+            val failedFeatureNames = failedResults.map { it.feature.displayName }
+            debugNotifier.notifyError("Failed to ${if (isLockAction) "disable" else "enable"}: ${failedFeatureNames.joinToString(", ")}")
         }
     }
 }

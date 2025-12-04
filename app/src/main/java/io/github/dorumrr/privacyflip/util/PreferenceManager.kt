@@ -34,6 +34,10 @@ class PreferenceManager private constructor(private val context: Context) {
     var backgroundServiceEnabled: Boolean
         get() = prefs.getBoolean(Constants.Preferences.KEY_BACKGROUND_SERVICE_ENABLED, Constants.Defaults.BACKGROUND_SERVICE_ENABLED)
         set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_BACKGROUND_SERVICE_ENABLED, value).apply()
+
+    var debugNotificationsEnabled: Boolean
+        get() = prefs.getBoolean(Constants.Preferences.KEY_DEBUG_NOTIFICATIONS_ENABLED, Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED)
+        set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_DEBUG_NOTIFICATIONS_ENABLED, value).apply()
     
     fun getFeatureDisableOnLock(feature: PrivacyFeature): Boolean {
         val key = Constants.Preferences.getFeatureLockKey(feature.name)

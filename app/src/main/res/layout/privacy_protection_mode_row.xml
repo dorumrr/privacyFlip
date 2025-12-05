@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Layout for "protection mode" features like Airplane Mode and Battery Saver.
+    
+    Unlike radios (WiFi, Bluetooth, etc.) which are DISABLED for privacy,
+    these are protection MODES that should be ENABLED for privacy/power saving.
+    
+    Labels are inverted compared to privacy_feature_row.xml:
+    - "Enable on lock" (instead of "Disable on lock")
+    - "Disable on unlock" (instead of "Enable on unlock")
+    
+    The underlying switch IDs remain the same for compatibility with existing code.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- Feature Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/featureIcon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_battery"
+            android:tint="@color/text_primary"
+            tools:src="@drawable/ic_battery" />
+
+        <TextView
+            android:id="@+id/featureName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            tools:text="Battery Saver" />
+
+        <ImageView
+            android:id="@+id/featureInfoIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_info"
+            android:tint="@color/text_secondary"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="2dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="8dp" />
+
+    <!-- Lock Action - INVERTED: "Enable on lock" for protection modes -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Enable on lock"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary" />
+
+        <Switch
+            android:id="@+id/disableOnLockSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+    </LinearLayout>
+
+    <!-- Only if not connected option - hidden for protection modes -->
+    <LinearLayout
+        android:id="@+id/onlyIfUnusedContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="24dp"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/onlyIfUnusedCheckbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="32dp"
+            android:paddingStart="4dp" />
+
+        <TextView
+            android:id="@+id/onlyIfUnusedText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Only if not connected"
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary" />
+
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="4dp" />
+
+    <!-- Unlock Action - INVERTED: "Disable on unlock" for protection modes -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Disable on unlock"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary" />
+
+        <Switch
+            android:id="@+id/enableOnUnlockSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+    </LinearLayout>
+
+</LinearLayout>

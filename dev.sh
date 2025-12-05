@@ -217,6 +217,40 @@ case "${1:-menu}" in
         launch_app
         ;;
     
+    "update")
+        echo "🔄 Update: Build → Reinstall → Launch (preserves app data)"
+        echo ""
+
+        # Check if emulator/device is running
+        if ! check_emulator; then
+            echo "❌ No device or emulator detected!"
+            echo "   Please start an emulator or connect a device first"
+            echo "   Run: ./dev.sh emulator"
+            exit 1
+        fi
+
+        wait_for_device
+
+        # Build debug APK (incremental, no clean)
+        echo "🔨 Building debug APK..."
+        ./gradlew assembleDebug
+        echo "✅ Build complete!"
+        echo ""
+
+        # Install debug APK explicitly (not release)
+        DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f 2>/dev/null | head -1)
+        if [ -z "$DEBUG_APK" ]; then
+            echo "❌ Debug APK not found!"
+            exit 1
+        fi
+        echo "📱 Installing PrivacyFlip APK (debug)..."
+        echo "   APK: $(basename "$DEBUG_APK")"
+        $ADB_PATH install -r "$DEBUG_APK"
+        echo "✅ APK installed successfully!"
+        
+        launch_app
+        ;;
+    
     "build")
         echo "🔨 Building PrivacyFlip Debug APK..."
         ./gradlew assembleDebug
@@ -603,6 +637,7 @@ case "${1:-menu}" in
         echo "  check           - Check development environment setup"
         echo "  emulator        - Start Android emulator (prefers Pixel 9a Android 14)"
         echo "  install         - Fresh install: uninstall → clean build → install → launch"
+        echo "  update          - Quick update: build → reinstall → launch (preserves data)"
         echo "  build           - Build debug APK only"
         echo "  screenshot      - Take screenshot from device/emulator and open it"
         echo ""
@@ -611,13 +646,14 @@ case "${1:-menu}" in
         echo "  fdroid-scanner  - Scan APKs for F-Droid compliance (tracking URLs, etc.)"
         echo ""
         echo "🚀 Quick Start:"
-        echo "  1. ./test_dev.sh check       # Verify your setup"
-        echo "  2. ./test_dev.sh install     # Start emulator + install app (all-in-one)"
+        echo "  1. ./dev.sh check       # Verify your setup"
+        echo "  2. ./dev.sh install     # Start emulator + install app (all-in-one)"
         echo ""
         echo "💡 Common Workflows:"
-        echo "  Development:    ./test_dev.sh install         # Fresh install with clean build"
-        echo "  Release:        ./test_dev.sh release         # Build for distribution"
-        echo "  F-Droid check:  ./test_dev.sh fdroid-scanner  # Verify F-Droid compliance"
+        echo "  Development:    ./dev.sh install         # Fresh install with clean build"
+        echo "  Iteration:      ./dev.sh update          # Quick rebuild + reinstall"
+        echo "  Release:        ./dev.sh release         # Build for distribution"
+        echo "  F-Droid check:  ./dev.sh fdroid-scanner  # Verify F-Droid compliance"
         echo ""
         echo "📋 Requirements:"
         echo "  - Android SDK with ANDROID_HOME or ANDROID_SDK_ROOT set"

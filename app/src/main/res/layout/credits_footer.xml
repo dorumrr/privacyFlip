@@ -10,7 +10,15 @@
     android:paddingStart="16dp"
     android:paddingEnd="16dp">
 
-
+    <!-- Open source message -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="@string/open_source_message"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:gravity="center" />
 
     <!-- Donate Button -->
     <Button

@@ -19,4 +19,7 @@
 
     <!-- Battery Saver Info -->
     <string name="battery_saver_info_message">Battery Saver reduces background activity and may limit some app features.\n\nIt does not directly disable radios (WiFi, Bluetooth, etc.) but can affect sync, location accuracy, and background processing.\n\nUseful for extending battery life when locked for long periods.</string>
+
+    <!-- Footer -->
+    <string name="open_source_message">Free, open source, no ads, for your privacy.\nConsider donating to support ongoing development.</string>
 </resources>

@@ -350,10 +350,10 @@
             android:layout_marginVertical="12dp"
             android:background="@color/divider_color" />
 
-        <!-- Battery Saver Settings -->
+        <!-- Battery Saver Settings - Protection mode (Enable on lock, Disable on unlock) -->
         <include
             android:id="@+id/batterySaverSettings"
-            layout="@layout/privacy_feature_row"
+            layout="@layout/privacy_protection_mode_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
@@ -363,10 +363,10 @@
             android:layout_marginVertical="12dp"
             android:background="@color/divider_color" />
 
-        <!-- Airplane Mode Settings -->
+        <!-- Airplane Mode Settings - Protection mode (Enable on lock, Disable on unlock) -->
         <include
             android:id="@+id/airplaneModeSettings"
-            layout="@layout/privacy_feature_row"
+            layout="@layout/privacy_protection_mode_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 

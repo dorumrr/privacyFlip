@@ -142,9 +142,7 @@ class MainFragment : Fragment() {
                 FeatureConfig(PrivacyFeature.BLUETOOTH, bluetoothSettings, R.drawable.ic_bluetooth, "Bluetooth"),
                 FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
                 FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location"),
-                FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC"),
-                FeatureConfig(PrivacyFeature.BATTERY_SAVER, batterySaverSettings, R.drawable.ic_battery, "Battery Saver"),
-                FeatureConfig(PrivacyFeature.AIRPLANE_MODE, airplaneModeSettings, R.drawable.ic_airplane, "Airplane Mode ⚠️")
+                FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC")
             )
 
             featureConfigs.forEach { config ->
@@ -157,6 +155,21 @@ class MainFragment : Fragment() {
                     { viewModel.updateFeatureSetting(config.feature, enableOnUnlock = it) }
                 )
             }
+
+            // Setup protection mode features (Battery Saver, Airplane Mode)
+            // These use "Enable on lock" / "Disable on unlock" labels
+            setupProtectionModeFeature(
+                batterySaverSettings,
+                R.drawable.ic_battery,
+                "Battery Saver",
+                PrivacyFeature.BATTERY_SAVER
+            )
+            setupProtectionModeFeature(
+                airplaneModeSettings,
+                R.drawable.ic_airplane,
+                "Airplane Mode ⚠️",
+                PrivacyFeature.AIRPLANE_MODE
+            )
 
             cameraDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
@@ -403,21 +416,18 @@ class MainFragment : Fragment() {
             showOnlyIfUnused = false
         )
 
-        // Battery Saver and Airplane Mode - hide "only if unused" checkbox (not applicable)
-        updatePrivacyFeatureSetting(
+        // Battery Saver and Airplane Mode - protection modes (Enable on lock, Disable on unlock)
+        // These are not radios to disable, but protection modes to enable
+        updateProtectionModeFeatureSetting(
             binding.screenLockCard.batterySaverSettings,
             uiState.screenLockConfig.batterySaverDisableOnLock,
-            uiState.screenLockConfig.batterySaverEnableOnUnlock,
-            onlyIfUnused = false,
-            showOnlyIfUnused = false
+            uiState.screenLockConfig.batterySaverEnableOnUnlock
         )
 
-        updatePrivacyFeatureSetting(
+        updateProtectionModeFeatureSetting(
             binding.screenLockCard.airplaneModeSettings,
             uiState.screenLockConfig.airplaneModeDisableOnLock,
-            uiState.screenLockConfig.airplaneModeEnableOnUnlock,
-            onlyIfUnused = false,
-            showOnlyIfUnused = false
+            uiState.screenLockConfig.airplaneModeEnableOnUnlock
         )
 
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
@@ -835,6 +845,45 @@ class MainFragment : Fragment() {
         // But only if this feature supports the option
         featureBinding.onlyIfUnusedContainer.visibility = 
             if (showOnlyIfUnused && disableOnLock) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Setup a protection mode feature (Battery Saver, Airplane Mode).
+     * These use "Enable on lock" / "Disable on unlock" labels because they are
+     * protection MODES to enable, not radios to disable.
+     */
+    private fun setupProtectionModeFeature(
+        featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyProtectionModeRowBinding,
+        iconRes: Int,
+        name: String,
+        feature: PrivacyFeature
+    ) {
+        featureBinding.featureIcon.setImageResource(iconRes)
+        featureBinding.featureName.text = name
+        featureBinding.disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) {
+                viewModel.updateFeatureSetting(feature, disableOnLock = isChecked)
+            }
+        }
+        featureBinding.enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) {
+                viewModel.updateFeatureSetting(feature, enableOnUnlock = isChecked)
+            }
+        }
+        // Protection modes don't support "only if unused"
+        featureBinding.onlyIfUnusedContainer.visibility = View.GONE
+    }
+
+    /**
+     * Update protection mode feature setting state.
+     */
+    private fun updateProtectionModeFeatureSetting(
+        featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyProtectionModeRowBinding,
+        enableOnLock: Boolean,
+        disableOnUnlock: Boolean
+    ) {
+        featureBinding.disableOnLockSwitch.isChecked = enableOnLock
+        featureBinding.enableOnUnlockSwitch.isChecked = disableOnUnlock
     }
 
     private fun setupSeekBar(

@@ -1,0 +1,2 @@
+- Fixed the Airplane Mode and Battery Saver behaviour
+- Added debug logging capability (disabled by default)

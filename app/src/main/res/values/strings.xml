@@ -20,6 +20,20 @@
     <!-- Battery Saver Info -->
     <string name="battery_saver_info_message">Battery Saver reduces background activity and may limit some app features.\n\nIt does not directly disable radios (WiFi, Bluetooth, etc.) but can affect sync, location accuracy, and background processing.\n\nUseful for extending battery life when locked for long periods.</string>
 
+    <!-- Protection Mode Options -->
+    <string name="only_if_not_manually_set">Only if not manually set</string>
+
+    <!-- Debug Logs -->
+    <string name="debug_logs">Debug Logs</string>
+    <string name="debug_logs_description">Log privacy actions to file</string>
+    <string name="view_logs">View Logs</string>
+    <string name="share_logs">Share</string>
+    <string name="clear_logs">Clear</string>
+    <string name="no_logs_to_share">No logs to share</string>
+    <string name="no_logs_to_view">No logs available</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="debug_logs_title">Debug Logs</string>
+
     <!-- Footer -->
     <string name="open_source_message">Free, open source, no ads, for your privacy.\nConsider donating to support ongoing development.</string>
 </resources>

@@ -27,10 +27,13 @@ object Constants {
 
         const val KEY_BACKGROUND_SERVICE_ENABLED = "background_service_enabled"
         const val KEY_DEBUG_NOTIFICATIONS_ENABLED = "debug_notifications_enabled"
+        const val KEY_DEBUG_LOGS_ENABLED = "debug_logs_enabled"
 
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"
         fun getFeatureOnlyIfUnusedKey(featureName: String): String = "${featureName.lowercase()}_only_if_unused"
+        fun getFeatureOnlyIfNotManualKey(featureName: String): String = "${featureName.lowercase()}_only_if_not_manual"
+        fun getFeatureEnabledByAppKey(featureName: String): String = "${featureName.lowercase()}_enabled_by_app"
     }
     
     object Defaults {
@@ -40,6 +43,7 @@ object Constants {
 
         const val BACKGROUND_SERVICE_ENABLED = true
         const val DEBUG_NOTIFICATIONS_ENABLED = false
+        const val DEBUG_LOGS_ENABLED = false
 
         const val WIFI_DISABLE_ON_LOCK = true
         const val BLUETOOTH_DISABLE_ON_LOCK = true
@@ -79,6 +83,11 @@ object Constants {
         const val BATTERY_SAVER_DISABLE_ON_LOCK = false
         const val BATTERY_SAVER_ENABLE_ON_UNLOCK = false
         const val BATTERY_SAVER_ONLY_IF_UNUSED = false
+
+        // "Only if not manually set" defaults for protection modes
+        // When true, won't disable on unlock if user manually enabled the mode
+        const val AIRPLANE_MODE_ONLY_IF_NOT_MANUAL = true
+        const val BATTERY_SAVER_ONLY_IF_NOT_MANUAL = true
     }
 
     object Logging {

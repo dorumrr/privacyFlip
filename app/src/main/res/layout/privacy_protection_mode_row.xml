@@ -137,4 +137,31 @@
 
     </LinearLayout>
 
+    <!-- "Only if not manually set" option for protection modes -->
+    <LinearLayout
+        android:id="@+id/onlyIfNotManualContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="24dp"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/onlyIfNotManualCheckbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="32dp"
+            android:paddingStart="4dp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/only_if_not_manually_set"
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary" />
+
+    </LinearLayout>
+
 </LinearLayout>

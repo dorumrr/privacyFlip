@@ -16,6 +16,7 @@ import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.Constants
+import io.github.dorumrr.privacyflip.util.DebugLogHelper
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
@@ -428,9 +429,11 @@ class MainViewModel : ViewModel() {
     private fun loadGlobalPrivacyStatus() {
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
         val debugNotificationsEnabled = preferenceManager.debugNotificationsEnabled
+        val debugLogsEnabled = preferenceManager.debugLogsEnabled
         updateUiState { it.copy(
             isGlobalPrivacyEnabled = isEnabled,
-            debugNotificationsEnabled = debugNotificationsEnabled
+            debugNotificationsEnabled = debugNotificationsEnabled,
+            debugLogsEnabled = debugLogsEnabled
         ) }
     }
 
@@ -463,9 +466,11 @@ class MainViewModel : ViewModel() {
                 airplaneModeDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK),
                 airplaneModeEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK),
                 airplaneModeOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED),
+                airplaneModeOnlyIfNotManual = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotManualKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ONLY_IF_NOT_MANUAL),
                 batterySaverDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_DISABLE_ON_LOCK),
                 batterySaverEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ENABLE_ON_UNLOCK),
-                batterySaverOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED)
+                batterySaverOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED),
+                batterySaverOnlyIfNotManual = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotManualKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ONLY_IF_NOT_MANUAL)
             )
 
             updateUiState { it.copy(screenLockConfig = config) }
@@ -792,6 +797,18 @@ class MainViewModel : ViewModel() {
         updateUiState { it.copy(debugNotificationsEnabled = enabled) }
     }
 
+    fun setDebugLogsEnabled(enabled: Boolean) {
+        preferenceManager.debugLogsEnabled = enabled
+        updateUiState { it.copy(debugLogsEnabled = enabled) }
+        
+        // Log session start when enabling
+        if (enabled) {
+            context?.let { ctx ->
+                DebugLogHelper.getInstance(ctx).logSessionStart()
+            }
+        }
+    }
+
     private fun ensureBackgroundServiceRunning() {
         val context = this.context ?: return
 
@@ -888,11 +905,19 @@ class MainViewModel : ViewModel() {
         }
     }
 
-
-
-
-
-
+    /**
+     * Update "only if not manually set" preference for protection modes.
+     */
+    fun updateFeatureOnlyIfNotManual(feature: PrivacyFeature, onlyIfNotManual: Boolean) {
+        viewModelScope.launch {
+            handleError("updating only if not manual setting") {
+                preferenceManager.setFeatureOnlyIfNotManual(feature, onlyIfNotManual)
+                updateUiState {
+                    it.copy(screenLockConfig = it.screenLockConfig.updateFeatureOnlyIfNotManual(feature, onlyIfNotManual))
+                }
+            }
+        }
+    }
 
 
 }
@@ -922,9 +947,11 @@ data class ScreenLockConfig(
     val airplaneModeDisableOnLock: Boolean = Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK,
     val airplaneModeEnableOnUnlock: Boolean = Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK,
     val airplaneModeOnlyIfUnused: Boolean = Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED,
+    val airplaneModeOnlyIfNotManual: Boolean = Constants.Defaults.AIRPLANE_MODE_ONLY_IF_NOT_MANUAL,
     val batterySaverDisableOnLock: Boolean = Constants.Defaults.BATTERY_SAVER_DISABLE_ON_LOCK,
     val batterySaverEnableOnUnlock: Boolean = Constants.Defaults.BATTERY_SAVER_ENABLE_ON_UNLOCK,
-    val batterySaverOnlyIfUnused: Boolean = Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED
+    val batterySaverOnlyIfUnused: Boolean = Constants.Defaults.BATTERY_SAVER_ONLY_IF_UNUSED,
+    val batterySaverOnlyIfNotManual: Boolean = Constants.Defaults.BATTERY_SAVER_ONLY_IF_NOT_MANUAL
 ) {
     fun updateFeature(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean): ScreenLockConfig {
         return when (feature) {
@@ -994,6 +1021,22 @@ data class ScreenLockConfig(
             PrivacyFeature.BATTERY_SAVER -> batterySaverOnlyIfUnused
         }
     }
+
+    fun updateFeatureOnlyIfNotManual(feature: PrivacyFeature, onlyIfNotManual: Boolean): ScreenLockConfig {
+        return when (feature) {
+            PrivacyFeature.AIRPLANE_MODE -> copy(airplaneModeOnlyIfNotManual = onlyIfNotManual)
+            PrivacyFeature.BATTERY_SAVER -> copy(batterySaverOnlyIfNotManual = onlyIfNotManual)
+            else -> this // Not applicable to other features
+        }
+    }
+
+    fun getOnlyIfNotManual(feature: PrivacyFeature): Boolean {
+        return when (feature) {
+            PrivacyFeature.AIRPLANE_MODE -> airplaneModeOnlyIfNotManual
+            PrivacyFeature.BATTERY_SAVER -> batterySaverOnlyIfNotManual
+            else -> false // Not applicable to other features
+        }
+    }
 }
 
 data class UiState(
@@ -1023,5 +1066,7 @@ data class UiState(
     // Lock delay warning for camera/mic
     val showLockDelayWarning: Boolean = false,
     // Debug notifications toggle
-    val debugNotificationsEnabled: Boolean = Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED
+    val debugNotificationsEnabled: Boolean = Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED,
+    // Debug logs toggle
+    val debugLogsEnabled: Boolean = Constants.Defaults.DEBUG_LOGS_ENABLED
 )

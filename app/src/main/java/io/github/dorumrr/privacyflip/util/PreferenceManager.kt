@@ -38,6 +38,10 @@ class PreferenceManager private constructor(private val context: Context) {
     var debugNotificationsEnabled: Boolean
         get() = prefs.getBoolean(Constants.Preferences.KEY_DEBUG_NOTIFICATIONS_ENABLED, Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED)
         set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_DEBUG_NOTIFICATIONS_ENABLED, value).apply()
+
+    var debugLogsEnabled: Boolean
+        get() = prefs.getBoolean(Constants.Preferences.KEY_DEBUG_LOGS_ENABLED, Constants.Defaults.DEBUG_LOGS_ENABLED)
+        set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_DEBUG_LOGS_ENABLED, value).apply()
     
     fun getFeatureDisableOnLock(feature: PrivacyFeature): Boolean {
         val key = Constants.Preferences.getFeatureLockKey(feature.name)
@@ -99,6 +103,39 @@ class PreferenceManager private constructor(private val context: Context) {
 
     fun setFeatureOnlyIfUnused(feature: PrivacyFeature, value: Boolean) {
         val key = Constants.Preferences.getFeatureOnlyIfUnusedKey(feature.name)
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    /**
+     * Get "only if not manually set" preference for protection modes (Airplane Mode, Battery Saver).
+     * When true, the mode won't be disabled on unlock if it was already enabled before lock.
+     */
+    fun getFeatureOnlyIfNotManual(feature: PrivacyFeature): Boolean {
+        val key = Constants.Preferences.getFeatureOnlyIfNotManualKey(feature.name)
+        val default = when (feature) {
+            PrivacyFeature.AIRPLANE_MODE -> Constants.Defaults.AIRPLANE_MODE_ONLY_IF_NOT_MANUAL
+            PrivacyFeature.BATTERY_SAVER -> Constants.Defaults.BATTERY_SAVER_ONLY_IF_NOT_MANUAL
+            else -> false // Not applicable to other features
+        }
+        return prefs.getBoolean(key, default)
+    }
+
+    fun setFeatureOnlyIfNotManual(feature: PrivacyFeature, value: Boolean) {
+        val key = Constants.Preferences.getFeatureOnlyIfNotManualKey(feature.name)
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    /**
+     * Runtime state tracking: was this protection mode enabled by the app (not manually)?
+     * This is not a user preference, but a state flag used to determine unlock behavior.
+     */
+    fun getFeatureEnabledByApp(feature: PrivacyFeature): Boolean {
+        val key = Constants.Preferences.getFeatureEnabledByAppKey(feature.name)
+        return prefs.getBoolean(key, false)
+    }
+
+    fun setFeatureEnabledByApp(feature: PrivacyFeature, value: Boolean) {
+        val key = Constants.Preferences.getFeatureEnabledByAppKey(feature.name)
         prefs.edit().putBoolean(key, value).apply()
     }
 

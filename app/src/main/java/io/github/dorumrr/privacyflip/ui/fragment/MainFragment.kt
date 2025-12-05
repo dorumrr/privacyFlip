@@ -18,6 +18,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -31,6 +32,7 @@ import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
 import io.github.dorumrr.privacyflip.util.Constants
+import io.github.dorumrr.privacyflip.util.DebugLogHelper
 
 class MainFragment : Fragment() {
 
@@ -156,21 +158,6 @@ class MainFragment : Fragment() {
                 )
             }
 
-            // Setup protection mode features (Battery Saver, Airplane Mode)
-            // These use "Enable on lock" / "Disable on unlock" labels
-            setupProtectionModeFeature(
-                batterySaverSettings,
-                R.drawable.ic_battery,
-                "Battery Saver",
-                PrivacyFeature.BATTERY_SAVER
-            )
-            setupProtectionModeFeature(
-                airplaneModeSettings,
-                R.drawable.ic_airplane,
-                "Airplane Mode ⚠️",
-                PrivacyFeature.AIRPLANE_MODE
-            )
-
             cameraDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
                     viewModel.updateFeatureSetting(PrivacyFeature.CAMERA, disableOnLock = isChecked)
@@ -211,6 +198,28 @@ class MainFragment : Fragment() {
             microphoneInfoIcon.setOnClickListener {
                 showCameraMicInfoDialog()
             }
+        }
+
+        // Setup Extras card (Airplane Mode, Battery Saver)
+        setupExtrasCard()
+    }
+
+    private fun setupExtrasCard() {
+        with(binding.extrasCard) {
+            // Setup protection mode features (Battery Saver, Airplane Mode)
+            // These use "Enable on lock" / "Disable on unlock" labels
+            setupProtectionModeFeature(
+                airplaneModeSettings,
+                R.drawable.ic_airplane,
+                "Airplane Mode ⚠️",
+                PrivacyFeature.AIRPLANE_MODE
+            )
+            setupProtectionModeFeature(
+                batterySaverSettings,
+                R.drawable.ic_battery,
+                "Battery Saver",
+                PrivacyFeature.BATTERY_SAVER
+            )
 
             // Setup info icons for Airplane Mode and Battery Saver
             airplaneModeSettings.featureInfoIcon.visibility = View.VISIBLE
@@ -306,6 +315,21 @@ class MainFragment : Fragment() {
                         viewModel.setDebugNotificationsEnabled(false)
                     }
                 }
+            }
+
+            // Setup Debug Logs toggle
+            debugLogsSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.setDebugLogsEnabled(isChecked)
+                    // Toggle between description and links
+                    debugLogsDescription.visibility = if (isChecked) View.GONE else View.VISIBLE
+                    debugLogsLinksContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+                }
+            }
+
+            // Setup View Logs click
+            viewLogsText.setOnClickListener {
+                viewDebugLogs()
             }
         }
     }
@@ -419,15 +443,17 @@ class MainFragment : Fragment() {
         // Battery Saver and Airplane Mode - protection modes (Enable on lock, Disable on unlock)
         // These are not radios to disable, but protection modes to enable
         updateProtectionModeFeatureSetting(
-            binding.screenLockCard.batterySaverSettings,
+            binding.extrasCard.batterySaverSettings,
             uiState.screenLockConfig.batterySaverDisableOnLock,
-            uiState.screenLockConfig.batterySaverEnableOnUnlock
+            uiState.screenLockConfig.batterySaverEnableOnUnlock,
+            uiState.screenLockConfig.batterySaverOnlyIfNotManual
         )
 
         updateProtectionModeFeatureSetting(
-            binding.screenLockCard.airplaneModeSettings,
+            binding.extrasCard.airplaneModeSettings,
             uiState.screenLockConfig.airplaneModeDisableOnLock,
-            uiState.screenLockConfig.airplaneModeEnableOnUnlock
+            uiState.screenLockConfig.airplaneModeEnableOnUnlock,
+            uiState.screenLockConfig.airplaneModeOnlyIfNotManual
         )
 
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
@@ -460,10 +486,20 @@ class MainFragment : Fragment() {
 
             // Update Debug Notifications toggle
             debugNotificationsSwitch.isChecked = uiState.debugNotificationsEnabled
+
+            // Update Debug Logs toggle and visibility
+            debugLogsSwitch.isChecked = uiState.debugLogsEnabled
+            debugLogsDescription.visibility = if (uiState.debugLogsEnabled) View.GONE else View.VISIBLE
+            debugLogsLinksContainer.visibility = if (uiState.debugLogsEnabled) View.VISIBLE else View.GONE
         }
 
         // Clear flag
         isUpdatingUI = false
+    }
+
+    private fun viewDebugLogs() {
+        val intent = Intent(requireContext(), io.github.dorumrr.privacyflip.ui.LogViewerActivity::class.java)
+        startActivity(intent)
     }
 
     private fun openGitHubRepository() {
@@ -764,16 +800,20 @@ class MainFragment : Fragment() {
             locationSettings.enableOnUnlockSwitch.isEnabled = isEnabled
             nfcSettings.disableOnLockSwitch.isEnabled = isEnabled
             nfcSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            airplaneModeSettings.disableOnLockSwitch.isEnabled = isEnabled
-            airplaneModeSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            batterySaverSettings.disableOnLockSwitch.isEnabled = isEnabled
-            batterySaverSettings.enableOnUnlockSwitch.isEnabled = isEnabled
 
             // Camera and microphone (custom inline layouts)
             cameraDisableOnLockSwitch.isEnabled = isEnabled
             cameraEnableOnUnlockSwitch.isEnabled = isEnabled
             microphoneDisableOnLockSwitch.isEnabled = isEnabled
             microphoneEnableOnUnlockSwitch.isEnabled = isEnabled
+        }
+
+        // Extras card (Airplane Mode, Battery Saver)
+        with(binding.extrasCard) {
+            airplaneModeSettings.disableOnLockSwitch.isEnabled = isEnabled
+            airplaneModeSettings.enableOnUnlockSwitch.isEnabled = isEnabled
+            batterySaverSettings.disableOnLockSwitch.isEnabled = isEnabled
+            batterySaverSettings.enableOnUnlockSwitch.isEnabled = isEnabled
         }
 
         // Timer seekbars
@@ -868,6 +908,14 @@ class MainFragment : Fragment() {
         featureBinding.enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) {
                 viewModel.updateFeatureSetting(feature, enableOnUnlock = isChecked)
+                // Show/hide "only if not manually set" checkbox based on "disable on unlock" state
+                featureBinding.onlyIfNotManualContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+        }
+        // Setup "only if not manually set" checkbox
+        featureBinding.onlyIfNotManualCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) {
+                viewModel.updateFeatureOnlyIfNotManual(feature, isChecked)
             }
         }
         // Protection modes don't support "only if unused"
@@ -880,10 +928,14 @@ class MainFragment : Fragment() {
     private fun updateProtectionModeFeatureSetting(
         featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyProtectionModeRowBinding,
         enableOnLock: Boolean,
-        disableOnUnlock: Boolean
+        disableOnUnlock: Boolean,
+        onlyIfNotManual: Boolean
     ) {
         featureBinding.disableOnLockSwitch.isChecked = enableOnLock
         featureBinding.enableOnUnlockSwitch.isChecked = disableOnUnlock
+        featureBinding.onlyIfNotManualCheckbox.isChecked = onlyIfNotManual
+        // Show/hide "only if not manually set" checkbox based on "disable on unlock" state
+        featureBinding.onlyIfNotManualContainer.visibility = if (disableOnUnlock) View.VISIBLE else View.GONE
     }
 
     private fun setupSeekBar(

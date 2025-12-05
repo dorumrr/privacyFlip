@@ -65,6 +65,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp" />
 
+            <!-- Extras Card (Airplane Mode, Battery Saver) -->
+            <include
+                android:id="@+id/extrasCard"
+                layout="@layout/card_extras"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp" />
+
             <!-- Timer Settings Card -->
             <include
                 android:id="@+id/timerCard"

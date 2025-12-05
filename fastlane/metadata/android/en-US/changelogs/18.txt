@@ -1,0 +1,1 @@
+- Updated the labels for Battery Saver and Airplane Mode to better reflect the actions being taken

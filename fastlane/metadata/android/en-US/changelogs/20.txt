@@ -1,0 +1,2 @@
+Location can now be disabled only when not in use (experimental)
+Added preference manager initialization and conditional toast display

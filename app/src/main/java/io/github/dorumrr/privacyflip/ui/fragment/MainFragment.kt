@@ -48,6 +48,32 @@ class MainFragment : Fragment() {
     // Flag to prevent infinite loops when updating switches programmatically
     private var isUpdatingUI = false
 
+    /**
+     * Creates a styled label with "(experimental)" suffix.
+     * The feature name is bold, the "(experimental)" part is normal weight and smaller.
+     * Note: We explicitly set bold on the feature name since we need to remove textStyle="bold"
+     * from the TextView or use spans to control styling precisely.
+     */
+    private fun createExperimentalLabel(featureName: String): SpannableString {
+        val fullText = "$featureName (experimental)"
+        val spannable = SpannableString(fullText)
+        // Make the feature name bold
+        spannable.setSpan(
+            StyleSpan(Typeface.BOLD),
+            0,
+            featureName.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        // Make "(experimental)" slightly smaller (it will inherit normal weight from TextView)
+        spannable.setSpan(
+            RelativeSizeSpan(0.85f),
+            featureName.length,
+            fullText.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        return spannable
+    }
+
     // Permission launcher for notification permission (Android 13+)
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -143,7 +169,7 @@ class MainFragment : Fragment() {
                 FeatureConfig(PrivacyFeature.WIFI, wifiSettings, R.drawable.ic_wifi, "Wi-Fi"),
                 FeatureConfig(PrivacyFeature.BLUETOOTH, bluetoothSettings, R.drawable.ic_bluetooth, "Bluetooth"),
                 FeatureConfig(PrivacyFeature.MOBILE_DATA, mobileDataSettings, R.drawable.ic_signal_cellular, "Mobile Data"),
-                FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, "Location"),
+                FeatureConfig(PrivacyFeature.LOCATION, locationSettings, R.drawable.ic_location, createExperimentalLabel("Location")),
                 FeatureConfig(PrivacyFeature.NFC, nfcSettings, R.drawable.ic_nfc, "NFC")
             )
 
@@ -211,7 +237,7 @@ class MainFragment : Fragment() {
             setupProtectionModeFeature(
                 airplaneModeSettings,
                 R.drawable.ic_airplane,
-                "Airplane Mode ⚠️",
+                createExperimentalLabel("Airplane Mode"),
                 PrivacyFeature.AIRPLANE_MODE
             )
             setupProtectionModeFeature(
@@ -415,7 +441,7 @@ class MainFragment : Fragment() {
             showOnlyIfUnused = true
         )
 
-        // Mobile Data, Location, NFC - hide "only if unused" checkbox (detection not supported)
+        // Mobile Data, NFC - hide "only if unused" checkbox (detection not supported)
         updatePrivacyFeatureSetting(
             binding.screenLockCard.mobileDataSettings,
             uiState.screenLockConfig.mobileDataDisableOnLock,
@@ -424,12 +450,13 @@ class MainFragment : Fragment() {
             showOnlyIfUnused = false
         )
 
+        // Location - "only if unused" detects active location requests (e.g., navigation apps)
         updatePrivacyFeatureSetting(
             binding.screenLockCard.locationSettings,
             uiState.screenLockConfig.locationDisableOnLock,
             uiState.screenLockConfig.locationEnableOnUnlock,
-            onlyIfUnused = false,
-            showOnlyIfUnused = false
+            onlyIfUnused = uiState.screenLockConfig.locationOnlyIfUnused,
+            showOnlyIfUnused = true
         )
 
         updatePrivacyFeatureSetting(
@@ -829,15 +856,24 @@ class MainFragment : Fragment() {
     private fun setupPrivacyFeature(
         featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
         iconRes: Int,
-        name: String,
+        name: CharSequence,
         feature: PrivacyFeature,
         onDisableLockChange: (Boolean) -> Unit,
         onEnableUnlockChange: (Boolean) -> Unit
     ) {
         // Check if this feature supports "only if unused" detection
-        val supportsOnlyIfUnused = feature == PrivacyFeature.WIFI || feature == PrivacyFeature.BLUETOOTH
+        // WiFi/Bluetooth: checks active connections
+        // Location: checks for active location requests (e.g., navigation apps)
+        val supportsOnlyIfUnused = feature == PrivacyFeature.WIFI || 
+                                   feature == PrivacyFeature.BLUETOOTH ||
+                                   feature == PrivacyFeature.LOCATION
         
         featureBinding.featureIcon.setImageResource(iconRes)
+        // If using SpannableString (for experimental labels), set typeface to normal so spans control styling
+        // Otherwise keep the default bold from XML
+        if (name is SpannableString) {
+            featureBinding.featureName.setTypeface(null, Typeface.NORMAL)
+        }
         featureBinding.featureName.text = name
         featureBinding.disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) {
@@ -895,10 +931,15 @@ class MainFragment : Fragment() {
     private fun setupProtectionModeFeature(
         featureBinding: io.github.dorumrr.privacyflip.databinding.PrivacyProtectionModeRowBinding,
         iconRes: Int,
-        name: String,
+        name: CharSequence,
         feature: PrivacyFeature
     ) {
         featureBinding.featureIcon.setImageResource(iconRes)
+        // If using SpannableString (for experimental labels), set typeface to normal so spans control styling
+        // Otherwise keep the default bold from XML
+        if (name is SpannableString) {
+            featureBinding.featureName.setTypeface(null, Typeface.NORMAL)
+        }
         featureBinding.featureName.text = name
         featureBinding.disableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI) {
@@ -999,5 +1040,5 @@ private data class FeatureConfig(
     val feature: PrivacyFeature,
     val binding: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
     val iconRes: Int,
-    val displayName: String
+    val displayName: CharSequence
 )

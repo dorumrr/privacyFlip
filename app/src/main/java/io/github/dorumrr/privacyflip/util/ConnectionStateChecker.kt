@@ -13,6 +13,7 @@ import io.github.dorumrr.privacyflip.root.RootManager
  * Detection methods:
  * - WiFi: Uses dumpsys connectivity to check for active WIFI connection
  * - Bluetooth: Uses dumpsys bluetooth_manager to check ConnectionState
+ * - Location: Uses dumpsys location to check for active location requests (e.g., navigation apps)
  * - Microphone: Uses AudioManager to check call/communication mode
  */
 class ConnectionStateChecker(
@@ -34,9 +35,9 @@ class ConnectionStateChecker(
             PrivacyFeature.WIFI -> isWifiConnected()
             PrivacyFeature.BLUETOOTH -> isBluetoothConnected()
             PrivacyFeature.MICROPHONE -> isMicrophoneInUse()
+            PrivacyFeature.LOCATION -> isLocationInUse()
             // For features where we can't reliably detect usage, return false
             // (they will be disabled normally)
-            PrivacyFeature.LOCATION,
             PrivacyFeature.MOBILE_DATA,
             PrivacyFeature.NFC,
             PrivacyFeature.CAMERA,
@@ -105,6 +106,55 @@ class ConnectionStateChecker(
             isConnected
         } catch (e: Exception) {
             Log.e(TAG, "Error checking Bluetooth connection state", e)
+            false
+        }
+    }
+
+    /**
+     * Check if location is currently being used by any app.
+     * Uses dumpsys location to check for active location requests/listeners.
+     * This detects apps like navigation (Google Maps) actively requesting location.
+     */
+    private suspend fun isLocationInUse(): Boolean {
+        return try {
+            // Query dumpsys location for active requests and listeners
+            // Look for LocationRequest entries which indicate apps actively requesting location
+            val result = rootManager.executeCommand(
+                "dumpsys location | grep -E 'LocationRequest|UpdateRecord|Active|Listener.*\\[' | grep -v 'passive' | head -30"
+            )
+            
+            if (!result.success) {
+                Log.w(TAG, "Failed to check location usage state via dumpsys")
+                return false
+            }
+
+            val output = result.output.joinToString(" ").uppercase()
+            
+            // If output is empty or very short, no active requests found
+            if (output.length < 10) {
+                Log.i(TAG, "📍 Location usage check: NOT IN USE (no active requests)")
+                return false
+            }
+            
+            // Look for patterns indicating active location usage:
+            // - "LOCATIONREQUEST" with quality/interval indicates active requests
+            // - "UPDATERECORD" shows active update subscriptions
+            // - "ACTIVE" in context of listeners indicates ongoing use
+            val hasActiveRequest = output.contains("LOCATIONREQUEST") ||
+                                   output.contains("UPDATERECORD") ||
+                                   output.contains("ACTIVE")
+            
+            // Additional check: look for specific app patterns that indicate active navigation
+            val hasNavigationApp = output.contains("COM.GOOGLE.ANDROID.APPS.MAPS") ||
+                                  output.contains("COM.WAZE") ||
+                                  output.contains("MAPS") // Broader match for map apps
+
+            val isInUse = hasActiveRequest || hasNavigationApp
+
+            Log.i(TAG, "📍 Location usage check: ${if (isInUse) "IN USE" else "NOT IN USE"}")
+            isInUse
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking location usage state", e)
             false
         }
     }

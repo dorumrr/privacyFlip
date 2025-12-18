@@ -39,6 +39,10 @@ class PrivacyActionWorker(
         DebugLogHelper.getInstance(applicationContext)
     }
 
+    private val preferenceManager: PreferenceManager by lazy {
+        PreferenceManager.getInstance(applicationContext)
+    }
+
     private fun logDebug(message: String) {
         Log.i(TAG, message)
         debugLogger.i(TAG, message)
@@ -55,6 +59,10 @@ class PrivacyActionWorker(
     }
 
     private fun showToast(message: String) {
+        // Only show toast if debug notifications are enabled
+        if (!preferenceManager.debugNotificationsEnabled) {
+            return
+        }
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
         }
@@ -105,7 +113,6 @@ class PrivacyActionWorker(
             }
 
             val privacyManager = PrivacyManager.getInstance(applicationContext)
-            val preferenceManager = PreferenceManager.getInstance(applicationContext)
             val configManager = FeatureConfigurationManager(preferenceManager)
             val connectionChecker = ConnectionStateChecker(applicationContext, rootManager)
 

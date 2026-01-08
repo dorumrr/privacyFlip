@@ -19,7 +19,14 @@ enum class PrivilegeMethod {
      * Requires Shizuku app and wireless debugging or PC connection
      */
     SHIZUKU,
-    
+
+    /**
+     * Dhizuku with Device Owner privileges
+     * Requires Dhizuku app and Device Owner setup
+     * More stable than Shizuku, survives reboots
+     */
+    DHIZUKU,
+
     /**
      * Sui - Magisk module that provides Shizuku API with root privileges (UID 0)
      * Best of both worlds: automatic like root, uses Shizuku API
@@ -35,6 +42,11 @@ enum class PrivilegeMethod {
      * Returns true if this method provides ADB-level privileges (UID 2000)
      */
     fun isAdbLevel(): Boolean = this == SHIZUKU
+
+    /**
+     * Returns true if this method provides Device Owner privileges
+     */
+    fun isDeviceOwnerLevel(): Boolean = this == DHIZUKU
     
     /**
      * Returns true if any privilege is available
@@ -48,6 +60,7 @@ enum class PrivilegeMethod {
         NONE -> "No Privilege"
         ROOT -> "Root (Magisk/SuperSU)"
         SHIZUKU -> "Shizuku (ADB)"
+        DHIZUKU -> "Dhizuku (Device Owner)"
         SUI -> "Sui (Magisk Module)"
     }
     
@@ -55,9 +68,10 @@ enum class PrivilegeMethod {
      * Returns short description of this privilege method
      */
     fun getDescription(): String = when (this) {
-        NONE -> "Root or Shizuku required"
+        NONE -> "Root, Dhizuku, or Shizuku required"
         ROOT -> "Full root access via Magisk or SuperSU"
         SHIZUKU -> "ADB privileges via Shizuku app"
+        DHIZUKU -> "Device Owner privileges via Dhizuku app"
         SUI -> "Root privileges via Sui Magisk module"
     }
 }

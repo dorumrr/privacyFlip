@@ -102,7 +102,7 @@ class PrivacyActionWorker(
             val rootManager = RootManager.getInstance(Unit)
             rootManager.initialize(applicationContext)
 
-            // Check if privilege is granted (works for Root, Shizuku, and Sui)
+            // Check if privilege is granted (works for Root, Dhizuku, Shizuku, and Sui)
             val hasPrivilege = rootManager.isRootGranted()
 
             if (!hasPrivilege) {

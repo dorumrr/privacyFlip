@@ -18,6 +18,22 @@
 -keep class com.topjohnwu.superuser.** { *; }
 -dontwarn com.topjohnwu.superuser.**
 
+# Keep Shizuku classes
+-keep class rikka.shizuku.** { *; }
+-keep class moe.shizuku.** { *; }
+-dontwarn rikka.shizuku.**
+-dontwarn moe.shizuku.**
+
+# Keep Dhizuku classes
+-keep class com.rosan.dhizuku.** { *; }
+-dontwarn com.rosan.dhizuku.**
+
+# Keep AIDL interfaces (used by both Shizuku and Dhizuku)
+-keep class * implements android.os.IInterface { *; }
+-keepclassmembers class * implements android.os.IInterface {
+    <methods>;
+}
+
 # Production-ready rules for F-Droid compliance
 -keepattributes *Annotation*
 

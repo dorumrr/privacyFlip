@@ -17,7 +17,7 @@ abstract class BasePrivacyToggle(
     
     override suspend fun isSupported(): FeatureSupport {
         return try {
-            // Check if privilege is granted (works for Root, Shizuku, and Sui)
+            // Check if privilege is granted (works for Root, Dhizuku, Shizuku, and Sui)
             if (!rootManager.isRootGranted()) {
                 // Can't check support without permission - assume supported
                 // This is optimistic but prevents blocking UI before permission is granted

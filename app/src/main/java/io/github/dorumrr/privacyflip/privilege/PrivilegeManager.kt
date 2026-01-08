@@ -25,7 +25,7 @@ class PrivilegeManager private constructor(private val context: Context) {
     }
     
     private suspend fun detectBestPrivilegeMethod(): PrivilegeMethod {
-        // Priority: Sui > Root > Shizuku
+        // Priority: Sui > Root > Dhizuku > Shizuku
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 if (SuiDetector.detectAndInitialize(context)) {
@@ -54,6 +54,25 @@ class PrivilegeManager private constructor(private val context: Context) {
         } catch (e: Exception) {
             logManager.e(TAG, "Root detection failed: ${e.message}")
             // Continue to next method
+        }
+
+        // Try Dhizuku (Device Owner)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val dhizukuExecutor = DhizukuExecutor()
+                dhizukuExecutor.initialize(context)
+
+                if (dhizukuExecutor.isAvailable()) {
+                    logManager.d(TAG, "Dhizuku detected and available")
+                    currentExecutor = dhizukuExecutor
+                    return PrivilegeMethod.DHIZUKU
+                } else {
+                    logManager.d(TAG, "Dhizuku not available (service not running)")
+                }
+            } catch (e: Exception) {
+                logManager.d(TAG, "Dhizuku detection failed: ${e.message}")
+                // Continue to next method
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

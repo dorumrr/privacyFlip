@@ -89,10 +89,10 @@ class MainFragment : Fragment() {
         }
     }
 
-    // Broadcast receiver for Shizuku status changes
-    private val shizukuStatusReceiver = object : BroadcastReceiver() {
+    // Broadcast receiver for Shizuku/Dhizuku status changes
+    private val privilegeStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.i(TAG, "Shizuku status changed - refreshing UI")
+            Log.i(TAG, "Privilege status changed (Shizuku/Dhizuku) - refreshing UI")
             viewModel.refresh()
         }
     }
@@ -120,21 +120,24 @@ class MainFragment : Fragment() {
         // This ensures the UI reflects any changes made by the worker (e.g., after lock/unlock)
         viewModel.reloadScreenLockConfig()
 
-        // Refresh privilege status to detect if Shizuku/Root status changed while app was in background
+        // Refresh privilege status to detect if Shizuku/Dhizuku/Root status changed while app was in background
         viewModel.refresh()
 
-        // Register broadcast receiver for Shizuku status changes
-        val filter = IntentFilter("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
-        requireContext().registerReceiver(shizukuStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        Log.d(TAG, "Registered Shizuku status receiver")
+        // Register broadcast receiver for Shizuku/Dhizuku status changes
+        val filter = IntentFilter().apply {
+            addAction("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
+            addAction("io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED")
+        }
+        requireContext().registerReceiver(privilegeStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        Log.d(TAG, "Registered privilege status receiver (Shizuku/Dhizuku)")
     }
 
     override fun onPause() {
         super.onPause()
         // Unregister broadcast receiver
         try {
-            requireContext().unregisterReceiver(shizukuStatusReceiver)
-            Log.d(TAG, "Unregistered Shizuku status receiver")
+            requireContext().unregisterReceiver(privilegeStatusReceiver)
+            Log.d(TAG, "Unregistered privilege status receiver")
         } catch (e: Exception) {
             Log.w(TAG, "Error unregistering receiver: ${e.message}")
         }
@@ -712,6 +715,7 @@ class MainFragment : Fragment() {
                 rootStatusText.text = if (uiState.isRootAvailable) {
                     when (privilegeMethod) {
                         io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "Shizuku Available"
+                        io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "Dhizuku Available"
                         io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "Root Available"
                         io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "Sui Available"
                         else -> "Available - Grant Required"
@@ -724,17 +728,19 @@ class MainFragment : Fragment() {
                 privilegeAccessDescription.text = when (privilegeMethod) {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU ->
                         "Click 'Grant Shizuku Permission' to try again or uninstall and reinstall the app, then grant permission at first start."
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU ->
+                        "Click 'Grant Dhizuku Permission' to try again or uninstall and reinstall the app, then grant permission at first start."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT ->
                         "To properly grant root access, please uninstall and reinstall the app, then grant permission when prompted."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI ->
                         "Sui permission required. Please grant permission when prompted."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE ->
-                        "Privacy Flip requires Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
+                        "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
                 }
 
                 // Show/hide button based on privilege method
                 // ROOT method: Hide button (Magisk doesn't allow re-requesting), show instructions only
-                // SHIZUKU/SUI: Show button (can re-request permission)
+                // SHIZUKU/DHIZUKU/SUI: Show button (can re-request permission)
                 // NONE: Show button (to open Shizuku install page)
                 when (privilegeMethod) {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> {
@@ -742,15 +748,17 @@ class MainFragment : Fragment() {
                         rootActionsContainer.visibility = View.GONE
                     }
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU,
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU,
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI,
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> {
-                        // Show button for Shizuku/Sui/None
+                        // Show button for Shizuku/Dhizuku/Sui/None
                         rootActionsContainer.visibility = View.VISIBLE
 
                         grantRootButton.text = when (privilegeMethod) {
                             io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "GRANT SHIZUKU PERMISSION"
+                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "GRANT DHIZUKU PERMISSION"
                             io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "GRANT SUI PERMISSION"
-                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "INSTALL SHIZUKU OR ROOT DEVICE"
+                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "INSTALL DHIZUKU/SHIZUKU OR ROOT DEVICE"
                             else -> "GRANT PERMISSION"
                         }
 
@@ -765,6 +773,7 @@ class MainFragment : Fragment() {
                 Log.d(TAG, "updateSystemRequirementsCard() - Root IS granted, hiding grant UI")
                 rootStatusText.text = when (privilegeMethod) {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "Shizuku Granted"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "Dhizuku Granted"
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "Root Granted"
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "Sui Granted"
                     else -> "Granted"

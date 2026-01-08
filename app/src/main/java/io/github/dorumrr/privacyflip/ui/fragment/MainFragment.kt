@@ -430,6 +430,7 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.wifiDisableOnLock,
             uiState.screenLockConfig.wifiEnableOnUnlock,
             uiState.screenLockConfig.wifiOnlyIfUnused,
+            uiState.screenLockConfig.wifiOnlyIfNotEnabled,
             showOnlyIfUnused = true
         )
 
@@ -438,6 +439,7 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.bluetoothDisableOnLock,
             uiState.screenLockConfig.bluetoothEnableOnUnlock,
             uiState.screenLockConfig.bluetoothOnlyIfUnused,
+            uiState.screenLockConfig.bluetoothOnlyIfNotEnabled,
             showOnlyIfUnused = true
         )
 
@@ -447,6 +449,7 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.mobileDataDisableOnLock,
             uiState.screenLockConfig.mobileDataEnableOnUnlock,
             onlyIfUnused = false,
+            onlyIfNotEnabled = uiState.screenLockConfig.mobileDataOnlyIfNotEnabled,
             showOnlyIfUnused = false
         )
 
@@ -456,6 +459,7 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.locationDisableOnLock,
             uiState.screenLockConfig.locationEnableOnUnlock,
             onlyIfUnused = uiState.screenLockConfig.locationOnlyIfUnused,
+            onlyIfNotEnabled = uiState.screenLockConfig.locationOnlyIfNotEnabled,
             showOnlyIfUnused = true
         )
 
@@ -464,6 +468,7 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.nfcDisableOnLock,
             uiState.screenLockConfig.nfcEnableOnUnlock,
             onlyIfUnused = false,
+            onlyIfNotEnabled = uiState.screenLockConfig.nfcOnlyIfNotEnabled,
             showOnlyIfUnused = false
         )
 
@@ -886,11 +891,20 @@ class MainFragment : Fragment() {
             }
         }
         featureBinding.enableOnUnlockSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (!isUpdatingUI) onEnableUnlockChange(isChecked)
+            if (!isUpdatingUI) {
+                onEnableUnlockChange(isChecked)
+                // Show/hide the "only if not enabled" checkbox based on enable switch state
+                featureBinding.onlyIfNotEnabledContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
         }
         featureBinding.onlyIfUnusedCheckbox.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI && supportsOnlyIfUnused) {
                 viewModel.updateFeatureOnlyIfUnused(feature, isChecked)
+            }
+        }
+        featureBinding.onlyIfNotEnabledCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            if (!isUpdatingUI) {
+                viewModel.updateFeatureOnlyIfNotEnabled(feature, isChecked)
             }
         }
 
@@ -899,6 +913,9 @@ class MainFragment : Fragment() {
             if (supportsOnlyIfUnused) {
                 featureBinding.onlyIfUnusedCheckbox.toggle()
             }
+        }
+        featureBinding.onlyIfNotEnabledText.setOnClickListener {
+            featureBinding.onlyIfNotEnabledCheckbox.toggle()
         }
 
         // Hide the checkbox container for features that don't support detection
@@ -912,15 +929,20 @@ class MainFragment : Fragment() {
         disableOnLock: Boolean,
         enableOnUnlock: Boolean,
         onlyIfUnused: Boolean = false,
+        onlyIfNotEnabled: Boolean = true,
         showOnlyIfUnused: Boolean = true
     ) {
         featureBinding.disableOnLockSwitch.isChecked = disableOnLock
         featureBinding.enableOnUnlockSwitch.isChecked = enableOnUnlock
         featureBinding.onlyIfUnusedCheckbox.isChecked = onlyIfUnused
+        featureBinding.onlyIfNotEnabledCheckbox.isChecked = onlyIfNotEnabled
         // Show/hide the "only if unused" container based on disableOnLock state
         // But only if this feature supports the option
-        featureBinding.onlyIfUnusedContainer.visibility = 
+        featureBinding.onlyIfUnusedContainer.visibility =
             if (showOnlyIfUnused && disableOnLock) View.VISIBLE else View.GONE
+        // Show/hide the "only if not enabled" container based on enableOnUnlock state
+        featureBinding.onlyIfNotEnabledContainer.visibility =
+            if (enableOnUnlock) View.VISIBLE else View.GONE
     }
 
     /**

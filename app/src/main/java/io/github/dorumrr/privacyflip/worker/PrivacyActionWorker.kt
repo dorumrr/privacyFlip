@@ -296,8 +296,31 @@ class PrivacyActionWorker(
 
                         // Enable regular features (WiFi, Bluetooth, etc.)
                         if (regularFeatures.isNotEmpty()) {
-                            val regularResults = privacyManager.enableFeatures(regularFeatures.toSet())
-                            processResults(regularResults, regularFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                            // Filter features based on "only if not already enabled" setting
+                            // This prevents connection resets (e.g., WiFi/VPN disconnections)
+                            val currentStatus = privacyManager.getCurrentStatus()
+                            val filteredRegularFeatures = regularFeatures.filter { feature ->
+                                val onlyIfNotEnabled = preferenceManager.getFeatureOnlyIfNotEnabled(feature)
+                                if (!onlyIfNotEnabled) {
+                                    true // Always enable if "only if not enabled" is not set
+                                } else {
+                                    // Check current state
+                                    val currentState = currentStatus[feature]
+                                    val isAlreadyEnabled = currentState == FeatureState.ENABLED
+
+                                    if (isAlreadyEnabled) {
+                                        logDebug("⏸️ ${feature.displayName} already enabled - skipping enable (onlyIfNotEnabled=true)")
+                                        debugNotifier.notifyFeatureSkipped(feature.displayName, "already enabled")
+                                    }
+                                    !isAlreadyEnabled // Only include if NOT already enabled
+                                }
+                            }
+
+                            if (filteredRegularFeatures.isNotEmpty()) {
+                                logDebug("🔓 Enabling regular features: ${filteredRegularFeatures.map { it.displayName }}")
+                                val regularResults = privacyManager.enableFeatures(filteredRegularFeatures.toSet())
+                                processResults(regularResults, filteredRegularFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                            }
                         }
 
                         // DISABLE protection modes (Airplane Mode, Battery Saver) - note: DISABLE, not enable!

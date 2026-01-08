@@ -34,6 +34,7 @@ object Constants {
         fun getFeatureOnlyIfUnusedKey(featureName: String): String = "${featureName.lowercase()}_only_if_unused"
         fun getFeatureOnlyIfNotManualKey(featureName: String): String = "${featureName.lowercase()}_only_if_not_manual"
         fun getFeatureEnabledByAppKey(featureName: String): String = "${featureName.lowercase()}_enabled_by_app"
+        fun getFeatureOnlyIfNotEnabledKey(featureName: String): String = "${featureName.lowercase()}_only_if_not_enabled"
     }
     
     object Defaults {
@@ -64,6 +65,16 @@ object Constants {
         const val NFC_ONLY_IF_UNUSED = false
         const val CAMERA_ONLY_IF_UNUSED = false
         const val MICROPHONE_ONLY_IF_UNUSED = true // Microphone already had smart behavior
+
+        // "Only if not already enabled" defaults - when true, feature will only be
+        // enabled on unlock if it's currently disabled (prevents connection resets)
+        const val WIFI_ONLY_IF_NOT_ENABLED = true
+        const val BLUETOOTH_ONLY_IF_NOT_ENABLED = true
+        const val LOCATION_ONLY_IF_NOT_ENABLED = true
+        const val MOBILE_DATA_ONLY_IF_NOT_ENABLED = true
+        const val NFC_ONLY_IF_NOT_ENABLED = true
+        const val CAMERA_ONLY_IF_NOT_ENABLED = true
+        const val MICROPHONE_ONLY_IF_NOT_ENABLED = true
 
         const val WIFI_ENABLE_ON_UNLOCK = true
         const val BLUETOOTH_ENABLE_ON_UNLOCK = false

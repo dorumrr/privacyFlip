@@ -126,6 +126,32 @@ class PreferenceManager private constructor(private val context: Context) {
     }
 
     /**
+     * Get "only if not already enabled" preference for regular features.
+     * When true, the feature won't be enabled on unlock if it's already enabled.
+     * This prevents connection resets (e.g., WiFi/VPN disconnections).
+     */
+    fun getFeatureOnlyIfNotEnabled(feature: PrivacyFeature): Boolean {
+        val key = Constants.Preferences.getFeatureOnlyIfNotEnabledKey(feature.name)
+        val default = when (feature) {
+            PrivacyFeature.WIFI -> Constants.Defaults.WIFI_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.BLUETOOTH -> Constants.Defaults.BLUETOOTH_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.LOCATION -> Constants.Defaults.LOCATION_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.MOBILE_DATA -> Constants.Defaults.MOBILE_DATA_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.NFC -> Constants.Defaults.NFC_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.CAMERA -> Constants.Defaults.CAMERA_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.MICROPHONE -> Constants.Defaults.MICROPHONE_ONLY_IF_NOT_ENABLED
+            PrivacyFeature.AIRPLANE_MODE -> false // Not applicable to protection modes
+            PrivacyFeature.BATTERY_SAVER -> false // Not applicable to protection modes
+        }
+        return prefs.getBoolean(key, default)
+    }
+
+    fun setFeatureOnlyIfNotEnabled(feature: PrivacyFeature, value: Boolean) {
+        val key = Constants.Preferences.getFeatureOnlyIfNotEnabledKey(feature.name)
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    /**
      * Runtime state tracking: was this protection mode enabled by the app (not manually)?
      * This is not a user preference, but a state flag used to determine unlock behavior.
      */

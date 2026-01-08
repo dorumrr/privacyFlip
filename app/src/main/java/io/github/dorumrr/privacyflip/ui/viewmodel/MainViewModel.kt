@@ -323,6 +323,27 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    fun updateFeatureOnlyIfNotEnabled(feature: PrivacyFeature, onlyIfNotEnabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                logManager.i(TAG, "Updating onlyIfNotEnabled: feature=$feature, onlyIfNotEnabled=$onlyIfNotEnabled")
+
+                preferenceManager.setFeatureOnlyIfNotEnabled(feature, onlyIfNotEnabled)
+
+                val currentState = _uiState.value ?: UiState()
+                val currentConfig = currentState.screenLockConfig
+                val newConfig = currentConfig.updateFeatureOnlyIfNotEnabled(feature, onlyIfNotEnabled)
+
+                updateUiState { it.copy(screenLockConfig = newConfig) }
+
+                logManager.i(TAG, "✅ OnlyIfNotEnabled setting updated successfully for $feature")
+
+            } catch (e: Exception) {
+                logManager.e(TAG, "Failed to update onlyIfNotEnabled for $feature: ${e.message}")
+            }
+        }
+    }
+
     fun requestRootPermission() {
         viewModelScope.launch {
             logManager.d(TAG, "========== requestRootPermission() START ==========")
@@ -445,24 +466,31 @@ class MainViewModel : ViewModel() {
                 wifiDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("WIFI"), Constants.Defaults.WIFI_DISABLE_ON_LOCK),
                 wifiEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("WIFI"), Constants.Defaults.WIFI_ENABLE_ON_UNLOCK),
                 wifiOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("WIFI"), Constants.Defaults.WIFI_ONLY_IF_UNUSED),
+                wifiOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("WIFI"), Constants.Defaults.WIFI_ONLY_IF_NOT_ENABLED),
                 bluetoothDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("BLUETOOTH"), Constants.Defaults.BLUETOOTH_DISABLE_ON_LOCK),
                 bluetoothEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("BLUETOOTH"), Constants.Defaults.BLUETOOTH_ENABLE_ON_UNLOCK),
                 bluetoothOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("BLUETOOTH"), Constants.Defaults.BLUETOOTH_ONLY_IF_UNUSED),
+                bluetoothOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("BLUETOOTH"), Constants.Defaults.BLUETOOTH_ONLY_IF_NOT_ENABLED),
                 mobileDataDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK),
                 mobileDataEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK),
                 mobileDataOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_ONLY_IF_UNUSED),
+                mobileDataOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("MOBILE_DATA"), Constants.Defaults.MOBILE_DATA_ONLY_IF_NOT_ENABLED),
                 locationDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("LOCATION"), Constants.Defaults.LOCATION_DISABLE_ON_LOCK),
                 locationEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("LOCATION"), Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK),
                 locationOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("LOCATION"), Constants.Defaults.LOCATION_ONLY_IF_UNUSED),
+                locationOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("LOCATION"), Constants.Defaults.LOCATION_ONLY_IF_NOT_ENABLED),
                 nfcDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("NFC"), Constants.Defaults.NFC_DISABLE_ON_LOCK),
                 nfcEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("NFC"), Constants.Defaults.NFC_ENABLE_ON_UNLOCK),
                 nfcOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("NFC"), Constants.Defaults.NFC_ONLY_IF_UNUSED),
+                nfcOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("NFC"), Constants.Defaults.NFC_ONLY_IF_NOT_ENABLED),
                 cameraDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("CAMERA"), Constants.Defaults.CAMERA_DISABLE_ON_LOCK),
                 cameraEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("CAMERA"), Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK),
                 cameraOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("CAMERA"), Constants.Defaults.CAMERA_ONLY_IF_UNUSED),
+                cameraOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("CAMERA"), Constants.Defaults.CAMERA_ONLY_IF_NOT_ENABLED),
                 microphoneDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK),
                 microphoneEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK),
                 microphoneOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED),
+                microphoneOnlyIfNotEnabled = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotEnabledKey("MICROPHONE"), Constants.Defaults.MICROPHONE_ONLY_IF_NOT_ENABLED),
                 airplaneModeDisableOnLock = prefs.getBoolean(Constants.Preferences.getFeatureLockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK),
                 airplaneModeEnableOnUnlock = prefs.getBoolean(Constants.Preferences.getFeatureUnlockKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK),
                 airplaneModeOnlyIfUnused = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfUnusedKey("AIRPLANE_MODE"), Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED),
@@ -926,24 +954,31 @@ data class ScreenLockConfig(
     val wifiDisableOnLock: Boolean = Constants.Defaults.WIFI_DISABLE_ON_LOCK,
     val wifiEnableOnUnlock: Boolean = Constants.Defaults.WIFI_ENABLE_ON_UNLOCK,
     val wifiOnlyIfUnused: Boolean = Constants.Defaults.WIFI_ONLY_IF_UNUSED,
+    val wifiOnlyIfNotEnabled: Boolean = Constants.Defaults.WIFI_ONLY_IF_NOT_ENABLED,
     val bluetoothDisableOnLock: Boolean = Constants.Defaults.BLUETOOTH_DISABLE_ON_LOCK,
     val bluetoothEnableOnUnlock: Boolean = Constants.Defaults.BLUETOOTH_ENABLE_ON_UNLOCK,
     val bluetoothOnlyIfUnused: Boolean = Constants.Defaults.BLUETOOTH_ONLY_IF_UNUSED,
+    val bluetoothOnlyIfNotEnabled: Boolean = Constants.Defaults.BLUETOOTH_ONLY_IF_NOT_ENABLED,
     val mobileDataDisableOnLock: Boolean = Constants.Defaults.MOBILE_DATA_DISABLE_ON_LOCK,
     val mobileDataEnableOnUnlock: Boolean = Constants.Defaults.MOBILE_DATA_ENABLE_ON_UNLOCK,
     val mobileDataOnlyIfUnused: Boolean = Constants.Defaults.MOBILE_DATA_ONLY_IF_UNUSED,
+    val mobileDataOnlyIfNotEnabled: Boolean = Constants.Defaults.MOBILE_DATA_ONLY_IF_NOT_ENABLED,
     val locationDisableOnLock: Boolean = Constants.Defaults.LOCATION_DISABLE_ON_LOCK,
     val locationEnableOnUnlock: Boolean = Constants.Defaults.LOCATION_ENABLE_ON_UNLOCK,
     val locationOnlyIfUnused: Boolean = Constants.Defaults.LOCATION_ONLY_IF_UNUSED,
+    val locationOnlyIfNotEnabled: Boolean = Constants.Defaults.LOCATION_ONLY_IF_NOT_ENABLED,
     val nfcDisableOnLock: Boolean = Constants.Defaults.NFC_DISABLE_ON_LOCK,
     val nfcEnableOnUnlock: Boolean = Constants.Defaults.NFC_ENABLE_ON_UNLOCK,
     val nfcOnlyIfUnused: Boolean = Constants.Defaults.NFC_ONLY_IF_UNUSED,
+    val nfcOnlyIfNotEnabled: Boolean = Constants.Defaults.NFC_ONLY_IF_NOT_ENABLED,
     val cameraDisableOnLock: Boolean = Constants.Defaults.CAMERA_DISABLE_ON_LOCK,
     val cameraEnableOnUnlock: Boolean = Constants.Defaults.CAMERA_ENABLE_ON_UNLOCK,
     val cameraOnlyIfUnused: Boolean = Constants.Defaults.CAMERA_ONLY_IF_UNUSED,
+    val cameraOnlyIfNotEnabled: Boolean = Constants.Defaults.CAMERA_ONLY_IF_NOT_ENABLED,
     val microphoneDisableOnLock: Boolean = Constants.Defaults.MICROPHONE_DISABLE_ON_LOCK,
     val microphoneEnableOnUnlock: Boolean = Constants.Defaults.MICROPHONE_ENABLE_ON_UNLOCK,
     val microphoneOnlyIfUnused: Boolean = Constants.Defaults.MICROPHONE_ONLY_IF_UNUSED,
+    val microphoneOnlyIfNotEnabled: Boolean = Constants.Defaults.MICROPHONE_ONLY_IF_NOT_ENABLED,
     val airplaneModeDisableOnLock: Boolean = Constants.Defaults.AIRPLANE_MODE_DISABLE_ON_LOCK,
     val airplaneModeEnableOnUnlock: Boolean = Constants.Defaults.AIRPLANE_MODE_ENABLE_ON_UNLOCK,
     val airplaneModeOnlyIfUnused: Boolean = Constants.Defaults.AIRPLANE_MODE_ONLY_IF_UNUSED,
@@ -1035,6 +1070,34 @@ data class ScreenLockConfig(
             PrivacyFeature.AIRPLANE_MODE -> airplaneModeOnlyIfNotManual
             PrivacyFeature.BATTERY_SAVER -> batterySaverOnlyIfNotManual
             else -> false // Not applicable to other features
+        }
+    }
+
+    fun updateFeatureOnlyIfNotEnabled(feature: PrivacyFeature, onlyIfNotEnabled: Boolean): ScreenLockConfig {
+        return when (feature) {
+            PrivacyFeature.WIFI -> copy(wifiOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.BLUETOOTH -> copy(bluetoothOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.MOBILE_DATA -> copy(mobileDataOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.LOCATION -> copy(locationOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.NFC -> copy(nfcOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.CAMERA -> copy(cameraOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.MICROPHONE -> copy(microphoneOnlyIfNotEnabled = onlyIfNotEnabled)
+            PrivacyFeature.AIRPLANE_MODE -> this // Not applicable to protection modes
+            PrivacyFeature.BATTERY_SAVER -> this // Not applicable to protection modes
+        }
+    }
+
+    fun getOnlyIfNotEnabled(feature: PrivacyFeature): Boolean {
+        return when (feature) {
+            PrivacyFeature.WIFI -> wifiOnlyIfNotEnabled
+            PrivacyFeature.BLUETOOTH -> bluetoothOnlyIfNotEnabled
+            PrivacyFeature.MOBILE_DATA -> mobileDataOnlyIfNotEnabled
+            PrivacyFeature.LOCATION -> locationOnlyIfNotEnabled
+            PrivacyFeature.NFC -> nfcOnlyIfNotEnabled
+            PrivacyFeature.CAMERA -> cameraOnlyIfNotEnabled
+            PrivacyFeature.MICROPHONE -> microphoneOnlyIfNotEnabled
+            PrivacyFeature.AIRPLANE_MODE -> false // Not applicable to protection modes
+            PrivacyFeature.BATTERY_SAVER -> false // Not applicable to protection modes
         }
     }
 }

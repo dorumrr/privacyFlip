@@ -180,7 +180,16 @@ class PrivacyActionWorker(
 
                     // Handle regular features and protection modes after delay
                     if (regularFeatures.isNotEmpty() || protectionModes.isNotEmpty()) {
-                        val lockDelay = preferenceManager.lockDelaySeconds
+                        // If device is already locked, disable immediately (no delay)
+                        // User won't see the transition anyway since screen is off
+                        // This prevents race condition where user unlocks during delay
+                        val lockDelay = if (isDeviceLocked) {
+                            logDebug("⚡ Device already locked - disabling features immediately (no delay)")
+                            0
+                        } else {
+                            preferenceManager.lockDelaySeconds
+                        }
+
                         if (lockDelay > 0) {
                             logDebug("⏳ Waiting ${lockDelay}s before disabling other features")
                             delay(lockDelay * 1000L)
@@ -200,8 +209,9 @@ class PrivacyActionWorker(
                             }
                         }
 
-                        // Disable regular features (WiFi, Bluetooth, etc.)
+                        // Disable regular features (WiFi, Bluetooth, NFC, etc.)
                         if (regularFeatures.isNotEmpty()) {
+                            logDebug("🔒 Disabling regular features: ${regularFeatures.map { it.displayName }}")
                             val regularResults = privacyManager.disableFeatures(regularFeatures.toSet())
                             processResults(regularResults, regularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
                         }

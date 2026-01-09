@@ -1,0 +1,4 @@
+Fixed a bug that was preventing NFC disabling to work consistently
+Added support for Dhizuku
+Added app exemption feature
+Added "only if not already enabled" option to prevent connection resets

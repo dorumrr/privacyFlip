@@ -187,6 +187,65 @@ class PreferenceManager private constructor(private val context: Context) {
         updates(editor)
         editor.apply()
     }
-    
+
     fun getRawPreferences(): SharedPreferences = prefs
+
+    // ========== App Exemption Methods ==========
+
+    /**
+     * Get the set of package names that are exempt from privacy toggles.
+     * When these apps are in the foreground, privacy features won't be disabled.
+     *
+     * @return Set of exempt package names
+     */
+    fun getExemptApps(): Set<String> {
+        val exemptAppsString = prefs.getString(Constants.Preferences.KEY_EXEMPT_APPS, "") ?: ""
+        return if (exemptAppsString.isEmpty()) {
+            emptySet()
+        } else {
+            exemptAppsString.split(",").toSet()
+        }
+    }
+
+    /**
+     * Set the list of apps that are exempt from privacy toggles.
+     *
+     * @param packageNames Set of package names to exempt
+     */
+    fun setExemptApps(packageNames: Set<String>) {
+        val exemptAppsString = packageNames.joinToString(",")
+        prefs.edit().putString(Constants.Preferences.KEY_EXEMPT_APPS, exemptAppsString).apply()
+    }
+
+    /**
+     * Add an app to the exemption list.
+     *
+     * @param packageName Package name to add
+     */
+    fun addExemptApp(packageName: String) {
+        val currentExempt = getExemptApps().toMutableSet()
+        currentExempt.add(packageName)
+        setExemptApps(currentExempt)
+    }
+
+    /**
+     * Remove an app from the exemption list.
+     *
+     * @param packageName Package name to remove
+     */
+    fun removeExemptApp(packageName: String) {
+        val currentExempt = getExemptApps().toMutableSet()
+        currentExempt.remove(packageName)
+        setExemptApps(currentExempt)
+    }
+
+    /**
+     * Check if an app is exempt from privacy toggles.
+     *
+     * @param packageName Package name to check
+     * @return true if the app is exempt, false otherwise
+     */
+    fun isAppExempt(packageName: String): Boolean {
+        return getExemptApps().contains(packageName)
+    }
 }

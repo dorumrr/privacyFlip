@@ -71,6 +71,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/divider_color" />
+
+        <!-- App Exemptions Button -->
+        <Button
+            android:id="@+id/exemptAppsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚙️ Manage App Exemptions"
+            android:textAllCaps="false"
+            style="?android:attr/borderlessButtonStyle" />
+
     </LinearLayout>
 
 </androidx.cardview.widget.CardView>

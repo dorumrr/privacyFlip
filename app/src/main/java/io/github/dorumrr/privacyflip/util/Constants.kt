@@ -29,6 +29,8 @@ object Constants {
         const val KEY_DEBUG_NOTIFICATIONS_ENABLED = "debug_notifications_enabled"
         const val KEY_DEBUG_LOGS_ENABLED = "debug_logs_enabled"
 
+        const val KEY_EXEMPT_APPS = "exempt_apps"
+
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"
         fun getFeatureOnlyIfUnusedKey(featureName: String): String = "${featureName.lowercase()}_only_if_unused"

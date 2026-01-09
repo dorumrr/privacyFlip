@@ -29,6 +29,7 @@ import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.data.TimerSettings
 import io.github.dorumrr.privacyflip.databinding.FragmentMainBinding
+import io.github.dorumrr.privacyflip.ui.dialog.ExemptAppsDialogFragment
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
 import io.github.dorumrr.privacyflip.util.Constants
@@ -258,6 +259,11 @@ class MainFragment : Fragment() {
             batterySaverSettings.featureInfoIcon.visibility = View.VISIBLE
             batterySaverSettings.featureInfoIcon.setOnClickListener {
                 showBatterySaverInfoDialog()
+            }
+
+            // Setup App Exemptions button
+            exemptAppsButton.setOnClickListener {
+                showExemptAppsDialog()
             }
         }
     }
@@ -583,6 +589,11 @@ class MainFragment : Fragment() {
             .setMessage(getString(R.string.battery_saver_info_message))
             .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    private fun showExemptAppsDialog() {
+        val dialog = ExemptAppsDialogFragment()
+        dialog.show(parentFragmentManager, ExemptAppsDialogFragment.TAG)
     }
 
     private fun requestBackgroundServicePermission() {

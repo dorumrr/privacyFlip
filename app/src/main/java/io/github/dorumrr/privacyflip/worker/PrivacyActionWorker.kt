@@ -20,6 +20,7 @@ import io.github.dorumrr.privacyflip.util.DebugLogHelper
 import io.github.dorumrr.privacyflip.util.DebugNotificationHelper
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.FeatureConfigurationManager
+import io.github.dorumrr.privacyflip.util.ForegroundAppDetector
 import kotlinx.coroutines.delay
 
 class PrivacyActionWorker(
@@ -115,11 +116,26 @@ class PrivacyActionWorker(
             val privacyManager = PrivacyManager.getInstance(applicationContext)
             val configManager = FeatureConfigurationManager(preferenceManager)
             val connectionChecker = ConnectionStateChecker(applicationContext, rootManager)
+            val foregroundAppDetector = ForegroundAppDetector(applicationContext)
 
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
             if (!isGlobalPrivacyEnabled) {
                 logDebug("🚫 Global privacy is disabled - skipping all privacy actions")
                 debugNotifier.notifyGlobalPrivacyDisabled()
+                return Result.success()
+            }
+
+            // Check if any exempt app is in foreground
+            val exemptApps = preferenceManager.getExemptApps()
+            val foregroundExemptApp = if (exemptApps.isNotEmpty()) {
+                foregroundAppDetector.getFirstForegroundApp(exemptApps)
+            } else {
+                null
+            }
+
+            if (foregroundExemptApp != null) {
+                logDebug("🛡️ Exempt app '$foregroundExemptApp' is in foreground - skipping ALL privacy actions")
+                debugNotifier.notifyFeatureSkipped("All features", "exempt app in foreground: $foregroundExemptApp")
                 return Result.success()
             }
 

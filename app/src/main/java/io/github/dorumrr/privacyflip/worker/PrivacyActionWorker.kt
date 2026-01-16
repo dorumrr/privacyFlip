@@ -196,6 +196,10 @@ class PrivacyActionWorker(
 
                     // Handle regular features and protection modes after delay
                     if (regularFeatures.isNotEmpty() || protectionModes.isNotEmpty()) {
+                        logDebug("📍 CHECKPOINT: Entering regular features/protection modes block")
+                        logDebug("📊 regularFeatures count: ${regularFeatures.size}, protectionModes count: ${protectionModes.size}")
+                        logDebug("📊 regularFeatures: ${regularFeatures.map { it.displayName }}")
+
                         // If device is already locked, disable immediately (no delay)
                         // User won't see the transition anyway since screen is off
                         // This prevents race condition where user unlocks during delay
@@ -206,30 +210,61 @@ class PrivacyActionWorker(
                             preferenceManager.lockDelaySeconds
                         }
 
+                        logDebug("⏱️ Lock delay calculated: ${lockDelay}s (isDeviceLocked=$isDeviceLocked)")
+
                         if (lockDelay > 0) {
                             logDebug("⏳ Waiting ${lockDelay}s before disabling other features")
                             delay(lockDelay * 1000L)
 
+                            logDebug("⏱️ Delay completed, now validating screen state...")
+
                             // Validate screen is still locked after delay
-                            if (!isScreenCurrentlyLocked()) {
+                            val isStillLocked = isScreenCurrentlyLocked()
+                            logDebug("🔍 Screen lock validation: isStillLocked=$isStillLocked")
+
+                            if (!isStillLocked) {
                                 logWarning("⚠️ Screen is no longer locked after delay - cancelling disable action")
+                                try {
+                                    val km = applicationContext.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                                    val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                                    logWarning("🔍 KeyguardManager.isKeyguardLocked: ${km.isKeyguardLocked}")
+                                    logWarning("🔍 PowerManager.isInteractive: ${pm.isInteractive}")
+                                } catch (e: Exception) {
+                                    logError("Error logging lock state details", e)
+                                }
                                 debugNotifier.notifyActionCancelled("Screen unlocked during delay - disable cancelled")
                                 return Result.success()
                             }
 
+                            logDebug("🔍 Checking global privacy setting...")
+
                             // Re-check global privacy setting after delay
-                            if (!preferenceManager.isGlobalPrivacyEnabled) {
+                            val isGlobalPrivacyStillEnabled = preferenceManager.isGlobalPrivacyEnabled
+                            logDebug("🔍 Global privacy enabled: $isGlobalPrivacyStillEnabled")
+
+                            if (!isGlobalPrivacyStillEnabled) {
                                 logDebug("🚫 Global privacy disabled during delay - cancelling disable action")
                                 debugNotifier.notifyActionCancelled("Global privacy disabled during delay")
                                 return Result.success()
                             }
+                        } else {
+                            logDebug("⚡ Skipping delay (lockDelay=0), proceeding directly to disable features")
                         }
+
+                        logDebug("📍 CHECKPOINT: Passed all validations, proceeding to disable features")
 
                         // Disable regular features (WiFi, Bluetooth, NFC, etc.)
                         if (regularFeatures.isNotEmpty()) {
-                            logDebug("🔒 Disabling regular features: ${regularFeatures.map { it.displayName }}")
+                            logDebug("🔒 Disabling regular features (count=${regularFeatures.size}): ${regularFeatures.map { it.displayName }}")
+                            logDebug("🔒 About to call privacyManager.disableFeatures()...")
+
                             val regularResults = privacyManager.disableFeatures(regularFeatures.toSet())
+
+                            logDebug("🔒 privacyManager.disableFeatures() returned ${regularResults.size} results")
+
                             processResults(regularResults, regularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                        } else {
+                            logDebug("ℹ️ No regular features to disable (list is empty)")
                         }
 
                         // ENABLE protection modes (Airplane Mode, Battery Saver) - note: ENABLE, not disable!

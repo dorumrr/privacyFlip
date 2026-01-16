@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.DebugLogHelper
 import io.github.dorumrr.privacyflip.util.SingletonHolder
 import kotlinx.coroutines.*
 
@@ -19,6 +20,25 @@ class PrivacyManager private constructor(
         )
     }) {
         private const val TAG = "privacyFlip-PrivacyManager"
+    }
+
+    private val debugLogger: DebugLogHelper by lazy {
+        DebugLogHelper.getInstance(context)
+    }
+
+    private fun logDebug(message: String) {
+        Log.i(TAG, message)
+        debugLogger.i(TAG, message)
+    }
+
+    private fun logWarning(message: String) {
+        Log.w(TAG, message)
+        debugLogger.w(TAG, message)
+    }
+
+    private fun logError(message: String, e: Exception? = null) {
+        Log.e(TAG, message, e)
+        debugLogger.e(TAG, message, e)
     }
     
     private val toggles = mutableMapOf<PrivacyFeature, PrivacyToggle>()
@@ -87,15 +107,25 @@ class PrivacyManager private constructor(
         val action = if (enable) "enable" else "disable"
         val results = mutableListOf<PrivacyResult>()
 
+        logDebug("📍 executeFeatureAction START: action=$action, features=${features.map { it.displayName }}")
+
         features.forEach { feature ->
+            logDebug("🔄 Attempting to $action ${feature.displayName}...")
+
             val toggle = toggles[feature]
             if (toggle != null) {
                 try {
                     val result = if (enable) toggle.enable() else toggle.disable()
                     results.add(result)
-                    Log.d(TAG, "${action.replaceFirstChar { it.uppercase() }} result for $feature: ${result.success}")
+
+                    val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
+                    logDebug("$status $action ${feature.displayName}: ${result.message}")
+                    if (!result.success) {
+                        logWarning("❌ Command used: ${result.commandUsed}")
+                        logWarning("❌ Error details: ${result.message}")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error ${action}ing $feature", e)
+                    logError("❌ EXCEPTION ${action}ing $feature", e)
                     results.add(
                         PrivacyResult(
                             feature = feature,
@@ -105,6 +135,7 @@ class PrivacyManager private constructor(
                     )
                 }
             } else {
+                logError("❌ Toggle not found for $feature")
                 results.add(
                     PrivacyResult(
                         feature = feature,
@@ -114,6 +145,10 @@ class PrivacyManager private constructor(
                 )
             }
         }
+
+        val successCount = results.count { it.success }
+        val failCount = results.count { !it.success }
+        logDebug("📍 executeFeatureAction END: $successCount succeeded, $failCount failed")
 
         return@withContext results
     }

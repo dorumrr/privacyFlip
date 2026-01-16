@@ -47,9 +47,21 @@ abstract class BasePrivacyToggle(
     
     private suspend fun executeCommand(commands: List<CommandSet>, action: String): PrivacyResult {
         return try {
-            Log.d(TAG, "${action.replaceFirstChar { it.uppercase() }} $featureName")
+            Log.d(TAG, "📍 ${action.replaceFirstChar { it.uppercase() }} $featureName - attempting ${commands.size} command(s)")
+            commands.forEachIndexed { index, cmd ->
+                Log.d(TAG, "  Command ${index + 1}: ${cmd.primary}")
+            }
+
             val result = rootManager.executeWithFallbacks(commands.map { it.primary })
-            
+
+            Log.d(TAG, "📊 Command execution result: success=${result.success}, exitCode=${result.exitCode}")
+            if (result.output.isNotEmpty()) {
+                Log.d(TAG, "📊 Command output: ${result.output.joinToString("; ")}")
+            }
+            if (result.error != null) {
+                Log.w(TAG, "⚠️ Command error: ${result.error}")
+            }
+
             PrivacyResult(
                 feature = feature,
                 success = result.success,
@@ -61,7 +73,7 @@ abstract class BasePrivacyToggle(
                 commandUsed = if (result.success) commands.first().primary else null
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error ${action}ing $featureName", e)
+            Log.e(TAG, "❌ EXCEPTION ${action}ing $featureName", e)
             PrivacyResult(
                 feature = feature,
                 success = false,

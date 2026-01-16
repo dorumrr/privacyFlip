@@ -1,0 +1,1 @@
+Enhanced the NFC command execution (also added extra logging for device specific cases)

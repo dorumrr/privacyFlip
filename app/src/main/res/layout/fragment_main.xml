@@ -81,6 +81,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp" />
 
+            <!-- Accessibility Service Card (Experimental) -->
+            <include
+                android:id="@+id/accessibilityServiceCard"
+                layout="@layout/card_accessibility_service"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
             <!-- Background Permission Error Card (shown only when permission missing) -->
             <include
                 android:id="@+id/backgroundPermissionErrorCard"

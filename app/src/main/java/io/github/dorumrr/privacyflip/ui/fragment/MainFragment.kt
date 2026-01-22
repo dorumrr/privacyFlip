@@ -157,6 +157,7 @@ class MainFragment : Fragment() {
         // Setup privacy feature cards
         setupScreenLockCard()
         setupTimerCard()
+        setupAccessibilityServiceCard()
         setupBackgroundPermissionErrorCard()
         setupGlobalPrivacyCard()
         setupSystemRequirementsCard()
@@ -418,6 +419,9 @@ class MainFragment : Fragment() {
         updateSystemRequirementsCard(uiState)
         updateBackgroundPermissionErrorCard(uiState)
         updatePrivilegeErrorAlert(uiState)
+
+        // Update accessibility service card (refreshes on resume, config change, etc.)
+        updateAccessibilityServiceUI()
 
         // Update interactive elements state (enable/disable based on privilege)
         updateInteractiveElementsState(uiState)
@@ -1067,6 +1071,65 @@ class MainFragment : Fragment() {
         )
 
         return spannable
+    }
+
+    private fun setupAccessibilityServiceCard() {
+        with(binding.accessibilityServiceCard) {
+            // Setup switch
+            accessibilityServiceSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    viewModel.updateAccessibilityServicePreference(isChecked)
+                    // Update UI immediately to show status/button
+                    updateAccessibilityServiceUI()
+                }
+            }
+
+            // Setup "Open Settings" button
+            openAccessibilitySettingsButton.setOnClickListener {
+                io.github.dorumrr.privacyflip.util.AccessibilityServiceManager.openAccessibilitySettings(requireContext())
+            }
+        }
+    }
+
+    private fun updateAccessibilityServiceUI() {
+        val preferenceManager = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext())
+        val featureEnabled = preferenceManager.accessibilityServiceEnabled
+        val serviceActive = io.github.dorumrr.privacyflip.util.AccessibilityServiceManager.isAccessibilityServiceEnabled(requireContext())
+        
+        with(binding.accessibilityServiceCard) {
+            // Always show card (experimental feature for power users)
+            root.visibility = View.VISIBLE
+            
+            isUpdatingUI = true
+            accessibilityServiceSwitch.isChecked = featureEnabled
+            isUpdatingUI = false
+            
+            when {
+                !featureEnabled -> {
+                    // Feature disabled in preferences
+                    accessibilityServiceStatus.visibility = View.GONE
+                    openAccessibilitySettingsButton.visibility = View.GONE
+                }
+                serviceActive -> {
+                    // Feature enabled AND service active in system settings
+                    accessibilityServiceStatus.visibility = View.VISIBLE
+                    accessibilityServiceStatus.text = "✅ Service Active - Side button support enabled"
+                    accessibilityServiceStatus.setTextColor(
+                        androidx.core.content.ContextCompat.getColor(requireContext(), R.color.trust_blue)
+                    )
+                    openAccessibilitySettingsButton.visibility = View.GONE
+                }
+                else -> {
+                    // Feature enabled but service NOT active yet
+                    accessibilityServiceStatus.visibility = View.VISIBLE
+                    accessibilityServiceStatus.text = "⚠️ Please enable in Accessibility Settings"
+                    accessibilityServiceStatus.setTextColor(
+                        androidx.core.content.ContextCompat.getColor(requireContext(), R.color.warning_text)
+                    )
+                    openAccessibilitySettingsButton.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
 

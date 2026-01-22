@@ -828,12 +828,24 @@ class MainViewModel : ViewModel() {
     fun setDebugLogsEnabled(enabled: Boolean) {
         preferenceManager.debugLogsEnabled = enabled
         updateUiState { it.copy(debugLogsEnabled = enabled) }
-        
+
         // Log session start when enabling
         if (enabled) {
             context?.let { ctx ->
                 DebugLogHelper.getInstance(ctx).logSessionStart()
             }
+        }
+    }
+
+    /**
+     * Update accessibility service preference.
+     * This controls whether the app should use the accessibility service for early lock detection.
+     * The actual service must still be enabled in Android Settings > Accessibility.
+     */
+    fun updateAccessibilityServicePreference(enabled: Boolean) {
+        handleError("updating accessibility service preference") {
+            preferenceManager.accessibilityServiceEnabled = enabled
+            logManager.i(TAG, "Accessibility service preference updated: $enabled")
         }
     }
 

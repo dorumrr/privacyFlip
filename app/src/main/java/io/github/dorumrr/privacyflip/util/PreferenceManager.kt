@@ -42,6 +42,27 @@ class PreferenceManager private constructor(private val context: Context) {
     var debugLogsEnabled: Boolean
         get() = prefs.getBoolean(Constants.Preferences.KEY_DEBUG_LOGS_ENABLED, Constants.Defaults.DEBUG_LOGS_ENABLED)
         set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_DEBUG_LOGS_ENABLED, value).apply()
+
+    /**
+     * Samsung NFC auto-retry preference.
+     * When enabled, the app will automatically retry disabling NFC if Samsung's payment
+     * framework overrides the initial disable command. This may cause slight battery drain
+     * but ensures NFC is properly disabled on Samsung devices.
+     * Default: false (opt-in)
+     */
+    var samsungNfcAutoRetry: Boolean
+        get() = prefs.getBoolean(Constants.Preferences.KEY_SAMSUNG_NFC_AUTO_RETRY, false)
+        set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_SAMSUNG_NFC_AUTO_RETRY, value).apply()
+
+    /**
+     * Accessibility service preference.
+     * Tracks whether the user has chosen to enable the accessibility service feature.
+     * The actual service must be enabled in Android Settings > Accessibility.
+     * Default: false (opt-in)
+     */
+    var accessibilityServiceEnabled: Boolean
+        get() = prefs.getBoolean(Constants.Preferences.KEY_ACCESSIBILITY_SERVICE_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_ACCESSIBILITY_SERVICE_ENABLED, value).apply()
     
     fun getFeatureDisableOnLock(feature: PrivacyFeature): Boolean {
         val key = Constants.Preferences.getFeatureLockKey(feature.name)

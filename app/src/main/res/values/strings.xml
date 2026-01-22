@@ -36,4 +36,8 @@
 
     <!-- Footer -->
     <string name="open_source_message">Free, open source, no ads, for your privacy.\nConsider donating to support ongoing development.</string>
+
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_label">Privacy Flip - Side Button Support</string>
+    <string name="accessibility_service_description">Allows Privacy Flip to detect side/power button locks earlier, enabling camera and microphone privacy features to work with instant-lock. This service does not read screen content or passwords. It only detects lock screen appearance to trigger privacy actions before keyguard fully engages.</string>
 </resources>

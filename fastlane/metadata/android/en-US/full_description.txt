@@ -7,8 +7,13 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Manage your device privacy based on lock/unlock state
 • Dual privilege support: Root OR Shizuku (no root required!)
 • Automatic privilege detection (Sui > Root > Shizuku)
-• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone)
+• Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone, Airplane Mode, Battery Saver)
 • Customizable timing delays (0-60 seconds granular, 2 minutes, or 5 minutes)
+• Smart "only if unused/not connected" modes for WiFi, Bluetooth, Location
+• App exemption system (skip privacy for specific foreground apps)
+• Samsung NFC payment override detection with opt-in auto-retry
+• Optional Accessibility Service for side button instant-lock support
+• Advanced multi-tier Bluetooth connection detection
 • Background service for persistent monitoring
 • Quick Settings tile integration
 
@@ -21,6 +26,8 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • NFC - Control NFC sensor
 • Camera - Disable/enable camera sensor privacy (Android 12+)
 • Microphone - Disable/enable microphone sensor privacy (Android 12+)
+• Airplane Mode - Enable on lock (opt-in, disables all radios at once)
+• Battery Saver - Enable on lock (opt-in, reduces background activity)
 
 Note: Camera and microphone ignore custom delays and trigger immediately (if not in use to avoid interrupting calls), due to Android limitations
 
@@ -40,7 +47,13 @@ Note: Camera and microphone ignore custom delays and trigger immediately (if not
 • Root access via Magisk, SuperSU, or similar
 • Best performance with UID 0 privileges
 
-<b>Option 3: Sui</b> (Best of both worlds)
+<b>Option 3: Dhizuku</b> (Device Owner method)
+• Device set as Device Owner or Profile Owner
+• No root required, no ADB after setup
+• Persistent privileges across reboots
+• Perfect for enterprise/privacy-focused setups
+
+<b>Option 4: Sui</b> (Best of both worlds)
 • Rooted device with Magisk
 • Sui Magisk module installed
 • Best user experience - automatic startup, no prompts

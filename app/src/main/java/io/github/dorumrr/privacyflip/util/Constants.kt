@@ -30,6 +30,12 @@ object Constants {
         const val KEY_DEBUG_LOGS_ENABLED = "debug_logs_enabled"
 
         const val KEY_EXEMPT_APPS = "exempt_apps"
+        
+        // Samsung NFC auto-retry preference
+        const val KEY_SAMSUNG_NFC_AUTO_RETRY = "samsung_nfc_auto_retry"
+        
+        // Accessibility service preference
+        const val KEY_ACCESSIBILITY_SERVICE_ENABLED = "accessibility_service_enabled"
 
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"

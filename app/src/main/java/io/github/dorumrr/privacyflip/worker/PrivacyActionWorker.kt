@@ -181,16 +181,37 @@ class PrivacyActionWorker(
                         it !in PrivacyFeature.getSystemModeFeatures()
                     }
 
-                    // Disable camera/microphone IMMEDIATELY (no delay)
-                    // BUT only if device is NOT locked yet (keyguard not engaged)
+                    // Disable camera/microphone with stabilization delay
+                    // The 75ms delay prevents race condition where keyguard engages during command execution
                     if (sensorFeatures.isNotEmpty()) {
                         if (!isDeviceLocked) {
-                            logDebug("⚡ Device unlocked - disabling sensors immediately: ${sensorFeatures.map { it.displayName }}")
-                            val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
-                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                            // Add stabilization delay for keyguard to fully engage
+                            // This prevents race condition where keyguard locks during command execution
+                            logDebug("⏱️ Waiting 75ms for keyguard stabilization before disabling sensors: ${sensorFeatures.map { it.displayName }}")
+                            delay(75) // Small delay to let keyguard fully engage
+                            
+                            // CRITICAL: Double-check lock state after stabilization
+                            val isNowLocked = isScreenCurrentlyLocked()
+                            
+                            if (!isNowLocked) {
+                                // Safe to proceed - keyguard hasn't engaged
+                                logDebug("✅ Keyguard stable, device still unlocked - disabling sensors: ${sensorFeatures.map { it.displayName }}")
+                                val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
+                                processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                            } else {
+                                // Keyguard engaged during stabilization - expected behavior
+                                logDebug("🔒 Keyguard engaged during stabilization - skipping sensors (by design)")
+                                debugNotifier.notifyFeatureSkipped(
+                                    sensorFeatures.map { it.displayName }.joinToString(", "),
+                                    "device locked before sensors could be disabled"
+                                )
+                            }
                         } else {
-                            logWarning("⚠️ Device already locked - CANNOT disable sensors (Android restriction): ${sensorFeatures.map { it.displayName }}")
-                            debugNotifier.notifyActionCancelled("Device already locked - cannot disable ${sensorFeatures.map { it.displayName }.joinToString(", ")}")
+                            logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${sensorFeatures.map { it.displayName }}")
+                            debugNotifier.notifyFeatureSkipped(
+                                sensorFeatures.map { it.displayName }.joinToString(", "),
+                                "device already locked"
+                            )
                         }
                     }
 

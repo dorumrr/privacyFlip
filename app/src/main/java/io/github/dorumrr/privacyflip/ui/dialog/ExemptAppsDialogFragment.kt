@@ -102,29 +102,12 @@ class ExemptAppsDialogFragment : DialogFragment() {
 
         android.util.Log.d(TAG, "Total installed packages: ${packages.size}")
 
-        // List of common system packages to exclude
-        val systemPackagePrefixes = listOf(
-            "com.android.",
-            "com.google.android.",
-            "android",
-            "com.qualcomm.",
-            "org.codeaurora.",
-            "com.qti.",
-            "com.sec.android.",
-            "com.samsung.android."
-        )
-
+        // Show ALL apps except PrivacyFlip itself
+        // This allows users to exempt system apps (Phone, Messaging, etc.) if needed
         val apps = packages
             .filter { appInfo ->
-                // Exclude PrivacyFlip itself
-                if (appInfo.packageName == ourPackageName) return@filter false
-
-                // Exclude common system packages
-                val isSystemPackage = systemPackagePrefixes.any {
-                    appInfo.packageName.startsWith(it)
-                }
-
-                !isSystemPackage
+                // Only exclude PrivacyFlip itself
+                appInfo.packageName != ourPackageName
             }
             .mapNotNull { appInfo ->
                 try {
@@ -199,4 +182,3 @@ class ExemptAppsDialogFragment : DialogFragment() {
         const val TAG = "ExemptAppsDialog"
     }
 }
-

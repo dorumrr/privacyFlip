@@ -78,35 +78,222 @@ class ConnectionStateChecker(
 
     /**
      * Check if Bluetooth is connected to any device.
-     * Uses dumpsys bluetooth_manager to check connection state.
+     * Uses multiple detection methods with fallbacks for maximum reliability.
      */
     private suspend fun isBluetoothConnected(): Boolean {
+        Log.d(TAG, "🔵 Starting Bluetooth connection check...")
+        
         return try {
-            val result = rootManager.executeCommand("dumpsys bluetooth_manager | grep -E 'ConnectionState:|mConnectionState:' | head -10")
+            // Method 1: Try primary detection (bluetooth_manager)
+            val method1Result = checkBluetoothManager()
+            if (method1Result != null) {
+                Log.i(TAG, "🔵 Bluetooth check - Method 1 (bluetooth_manager): ${if (method1Result) "CONNECTED" else "NOT CONNECTED"}")
+                return method1Result
+            }
+            
+            // Method 2: Try audio output detection
+            Log.d(TAG, "🔵 Method 1 failed, trying Method 2 (audio output)...")
+            val method2Result = checkAudioOutput()
+            if (method2Result != null) {
+                Log.i(TAG, "🔵 Bluetooth check - Method 2 (audio output): ${if (method2Result) "CONNECTED" else "NOT CONNECTED"}")
+                return method2Result
+            }
+            
+            // Method 3: Try media session detection
+            Log.d(TAG, "🔵 Method 2 failed, trying Method 3 (media session)...")
+            val method3Result = checkMediaSession()
+            if (method3Result != null) {
+                Log.i(TAG, "🔵 Bluetooth check - Method 3 (media session): ${if (method3Result) "CONNECTED" else "NOT CONNECTED"}")
+                return method3Result
+            }
+            
+            // Method 4: Try generic bluetooth service dump
+            Log.d(TAG, "🔵 Method 3 failed, trying Method 4 (bluetooth service)...")
+            val method4Result = checkBluetoothService()
+            if (method4Result != null) {
+                Log.i(TAG, "🔵 Bluetooth check - Method 4 (bluetooth service): ${if (method4Result) "CONNECTED" else "NOT CONNECTED"}")
+                return method4Result
+            }
+            
+            // All methods failed
+            Log.w(TAG, "🔵 All Bluetooth detection methods failed - assuming NOT CONNECTED")
+            false
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "🔵 Error checking Bluetooth connection state", e)
+            false
+        }
+    }
+
+    /**
+     * Method 1: Check Bluetooth connection via bluetooth_manager.
+     * Most reliable method for detecting Bluetooth connections.
+     * 
+     * @return true if connected, false if not connected, null if detection failed
+     */
+    private suspend fun checkBluetoothManager(): Boolean? {
+        return try {
+            val result = rootManager.executeCommand(
+                "dumpsys bluetooth_manager | grep -i -E 'ConnectionState.*CONNECTED|profile.*CONNECTED|A2DP.*CONNECTED|HFP.*CONNECTED'"
+            )
             
             if (!result.success) {
-                Log.w(TAG, "Failed to check Bluetooth connection state via dumpsys")
-                return false
+                Log.w(TAG, "🔵 Method 1: bluetooth_manager command failed")
+                return null
             }
 
-            val output = result.output.joinToString(" ").uppercase()
+            val output = result.output.joinToString("\n")
+            Log.d(TAG, "🔵 Method 1 output (first 200 chars): ${output.take(200)}")
             
-            // Look for any CONNECTED state (not STATE_DISCONNECTED)
-            // ConnectionState: STATE_CONNECTED indicates an active connection
-            // mConnectionState: CONNECTED also indicates connection
-            val hasConnectedState = output.contains("STATE_CONNECTED") ||
-                                   output.contains("MCONNECTIONSTATE: CONNECTED")
+            if (output.isEmpty()) {
+                Log.d(TAG, "🔵 Method 1: Empty output, trying next method")
+                return null
+            }
+            
+            val outputUpper = output.uppercase()
+            
+            // Check for connected state
+            val hasConnected = outputUpper.contains("STATE_CONNECTED") ||
+                              outputUpper.contains("MCONNECTIONSTATE: CONNECTED") ||
+                              outputUpper.contains("CONNECTIONSTATE: CONNECTED") ||
+                              outputUpper.contains("PROFILE: CONNECTED") ||
+                              outputUpper.contains("A2DP: CONNECTED") ||
+                              outputUpper.contains("HFP: CONNECTED")
             
             // Make sure we're not just seeing DISCONNECTED
-            val hasDisconnectedOnly = output.contains("DISCONNECTED") && !hasConnectedState
-
-            val isConnected = hasConnectedState && !hasDisconnectedOnly
-
-            Log.i(TAG, "🔵 Bluetooth connection check: ${if (isConnected) "CONNECTED" else "NOT CONNECTED"}")
+            val hasDisconnectedOnly = outputUpper.contains("DISCONNECTED") && !hasConnected
+            
+            val isConnected = hasConnected && !hasDisconnectedOnly
+            
+            Log.d(TAG, "🔵 Method 1: hasConnected=$hasConnected, hasDisconnectedOnly=$hasDisconnectedOnly, result=$isConnected")
+            
             isConnected
+            
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking Bluetooth connection state", e)
-            false
+            Log.e(TAG, "🔵 Method 1 exception", e)
+            null
+        }
+    }
+
+    /**
+     * Method 2: Check Bluetooth connection via audio subsystem.
+     * Detects active Bluetooth audio output devices.
+     * 
+     * @return true if connected, false if not connected, null if detection failed
+     */
+    private suspend fun checkAudioOutput(): Boolean? {
+        return try {
+            val result = rootManager.executeCommand(
+                "dumpsys audio | grep -i -E 'DEVICE_OUT.*BLUETOOTH|Output Device.*BLUETOOTH|mBluetoothA2dp.*true'"
+            )
+            
+            if (!result.success) {
+                Log.w(TAG, "🔵 Method 2: audio command failed")
+                return null
+            }
+
+            val output = result.output.joinToString("\n")
+            Log.d(TAG, "🔵 Method 2 output (first 200 chars): ${output.take(200)}")
+            
+            if (output.isEmpty()) {
+                return null
+            }
+            
+            val outputUpper = output.uppercase()
+            
+            val hasBluetoothOutput = outputUpper.contains("DEVICE_OUT_BLUETOOTH") ||
+                                    outputUpper.contains("OUTPUT DEVICE: BLUETOOTH") ||
+                                    outputUpper.contains("BLUETOOTHA2DP: TRUE") ||
+                                    outputUpper.contains("BLUETOOTH_A2DP")
+            
+            Log.d(TAG, "🔵 Method 2: hasBluetoothOutput=$hasBluetoothOutput")
+            
+            hasBluetoothOutput
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "🔵 Method 2 exception", e)
+            null
+        }
+    }
+
+    /**
+     * Method 3: Check Bluetooth connection via media session.
+     * Detects active Bluetooth media playback sessions.
+     * 
+     * @return true if connected, false if not connected, null if detection failed
+     */
+    private suspend fun checkMediaSession(): Boolean? {
+        return try {
+            val result = rootManager.executeCommand(
+                "dumpsys media_session | grep -i -A 5 'bluetooth'"
+            )
+            
+            if (!result.success) {
+                Log.w(TAG, "🔵 Method 3: media_session command failed")
+                return null
+            }
+
+            val output = result.output.joinToString("\n")
+            Log.d(TAG, "🔵 Method 3 output (first 200 chars): ${output.take(200)}")
+            
+            if (output.isEmpty()) {
+                return null
+            }
+            
+            val outputUpper = output.uppercase()
+            
+            val hasBluetoothMedia = (outputUpper.contains("BLUETOOTH") && 
+                                    outputUpper.contains("ACTIVE")) ||
+                                   (outputUpper.contains("BLUETOOTH") && 
+                                    outputUpper.contains("PLAYING"))
+            
+            Log.d(TAG, "🔵 Method 3: hasBluetoothMedia=$hasBluetoothMedia")
+            
+            hasBluetoothMedia
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "🔵 Method 3 exception", e)
+            null
+        }
+    }
+
+    /**
+     * Method 4: Check Bluetooth connection via bluetooth service.
+     * Broad detection of any connected Bluetooth devices.
+     * 
+     * @return true if connected, false if not connected, null if detection failed
+     */
+    private suspend fun checkBluetoothService(): Boolean? {
+        return try {
+            val result = rootManager.executeCommand(
+                "dumpsys bluetooth | grep -i -E 'connected devices|bonded.*connected'"
+            )
+            
+            if (!result.success) {
+                Log.w(TAG, "🔵 Method 4: bluetooth service command failed")
+                return null
+            }
+
+            val output = result.output.joinToString("\n")
+            Log.d(TAG, "🔵 Method 4 output (first 200 chars): ${output.take(200)}")
+            
+            if (output.isEmpty()) {
+                return null
+            }
+            
+            val outputUpper = output.uppercase()
+            
+            val hasConnectedDevices = (outputUpper.contains("CONNECTED DEVICES") && 
+                                       !outputUpper.contains("CONNECTED DEVICES: NONE")) ||
+                                      outputUpper.contains("BONDED AND CONNECTED")
+            
+            Log.d(TAG, "🔵 Method 4: hasConnectedDevices=$hasConnectedDevices")
+            
+            hasConnectedDevices
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "🔵 Method 4 exception", e)
+            null
         }
     }
 

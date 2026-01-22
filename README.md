@@ -34,6 +34,19 @@
 - 📳 **NFC** - Control Near Field Communication sensor
 - 📷 **Camera** - Disable/enable camera sensor privacy (Android 12+)
 - 🎤 **Microphone** - Disable/enable microphone sensor privacy (Android 12+)
+- ✈️ **Airplane Mode** - Enable airplane mode on lock (opt-in, disables all radios)
+- 🔋 **Battery Saver** - Enable battery saver mode on lock (opt-in)
+
+### **Advanced Features**
+- **Smart Disable Options**:
+  - **"Only if unused/not connected"** - Don't disable WiFi, Bluetooth, or Location if actively in use
+  - **"Only if not already enabled"** - Prevent connection resets by not re-enabling features that are already on
+  - **"Only if not manually set"** - Respect manually enabled protection modes on unlock
+
+- **App Exemptions** - Exclude specific apps from privacy actions when in foreground
+- **Samsung NFC Auto-Retry** - Opt-in feature to combat Samsung payment framework NFC override (for Galaxy S, Note, Z series)
+- **Accessibility Service** - Experimental support for side/power button instant-lock (opt-in, requires Accessibility permission)
+- **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 
 ### **Customizable Timing**
 - **Lock Delay**: 0-60 seconds (granular), 2 minutes, or 5 minutes before privacy actions trigger
@@ -57,7 +70,13 @@
 - **Root access** via Magisk, SuperSU, or similar
 - **Best performance** with UID 0 privileges
 
-### **Option 3: Sui** (Best of both worlds)
+### **Option 3: Dhizuku** (Device Owner method)
+- **Device Owner** or **Profile Owner** status
+- **No root required**, no ADB needed after initial setup
+- **Persistent privileges** - survives reboots
+- **Best for**: Enterprise devices, work profiles, privacy-focused setups
+
+### **Option 4: Sui** (Best of both worlds)
 - **Rooted device** with Magisk installed
 - **Sui Magisk** module installed
 - **Best user experience** - no permission prompts, automatic startup
@@ -65,7 +84,8 @@
 ### **Privilege Detection Priority**
 1. **Sui** - Magisk module providing Shizuku API with root (best UX)
 2. **Root** - Traditional root access via Magisk/SuperSU
-3. **Shizuku** - ADB privileges via Shizuku app
+3. **Dhizuku** - Device Owner method (no root or ADB needed after setup)
+4. **Shizuku** - ADB privileges via Shizuku app
 
 ## 🤝 Contributing
 

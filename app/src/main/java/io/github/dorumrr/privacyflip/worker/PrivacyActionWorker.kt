@@ -327,8 +327,22 @@ class PrivacyActionWorker(
                             // that opted into "only if unused" need re-testing; an unconditionally
                             // included feature's presence here never depended on that snapshot.
                             val filteredRegularFeatures = if (lockDelay > 0) {
+                                // Re-check hotspot state too (#B1): the pre-delay check above
+                                // (line ~166) only sampled this once, before the wait, so a
+                                // hotspot started during the delay window specifically was never
+                                // caught - WiFi/Mobile Data could still get disabled underneath
+                                // it at the end of the wait, exactly what that earlier check
+                                // exists to prevent. Same unconditional rule, re-applied here.
+                                val hotspotActiveNow = (PrivacyFeature.WIFI in regularFeatures || PrivacyFeature.MOBILE_DATA in regularFeatures) &&
+                                    connectionChecker.isHotspotActive()
+                                if (hotspotActiveNow) {
+                                    logDebug("📡 Hotspot became active during the delay - keeping WiFi and Mobile Data on")
+                                    debugNotifier.notifyFeatureSkipped("WiFi and Mobile Data", "hotspot is active")
+                                }
                                 regularFeatures.filter { feature ->
-                                    if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
+                                    if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActiveNow) {
+                                        false
+                                    } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
                                         true
                                     } else {
                                         val stillInUse = connectionChecker.isFeatureInUse(feature)

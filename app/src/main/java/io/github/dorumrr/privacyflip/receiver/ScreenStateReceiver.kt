@@ -49,6 +49,20 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
             Intent.ACTION_USER_PRESENT -> {
                 logDebug(context, "🔓 Screen UNLOCKED (user authenticated) - triggering privacy actions")
+                // Cancel any still-pending lock-side work (#B2). Unlike ACTION_SCREEN_ON, this
+                // broadcast has no "still locked" ambiguity to guard against - Android only
+                // sends it on a genuine, confirmed unlock - so whatever the lock delay was
+                // waiting to disable should never fire after this. Without this, a pending
+                // disable only gets caught later by accident (the post-delay re-checks further
+                // down this same file), which a lockDelay of 0 skips entirely, and which never
+                // covers the camera/mic path, which runs with no delay at all.
+                // Skipped only while a sensor disable is actively in flight (#G1) - cancelling
+                // that would interrupt it mid-command with sensors left on and no error shown
+                // anywhere, the same race the other producers already guard against before
+                // they'd REPLACE this same unique work.
+                if (!PrivacyActionWorker.sensorDisableInProgress) {
+                    cancelPendingLockWork(context)
+                }
                 triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen Unlock")
             }
 

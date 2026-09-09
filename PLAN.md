@@ -6,14 +6,23 @@ Tier: 3
 
    A. THE #20 FIX'S REMAINING GAPS
    [x] A1  isLocationInUse must not crash, must keep failing safe, on older Android   done 09 Sep - fixed and reverified live on the crashing build
-   [~] A2  Know what else besides "android" can suppress Location's disable          researched 09 Sep, the method was flawed - real question still open, see below
+   [x] A2  Know what else besides "android" can suppress Location's disable          code confirmed correct 09 Sep - real-device verification left to user reports, Doru's call
    [x] A3  Automated coverage for the awk command itself, not just its Kotlin half    done 09 Sep - test-location-detection.sh + 4 fixtures, no personal data
-   [~] A4  dumpsys appops shape across SDK 24-33                                     5 of 10 versions directly tested 09 Sep - the 2 lowest (24-25) are NOT covered by the others, see below
-   [ ] A5  Watch a real navigation app trigger this live, end to end                  blocked - checked BOTH the emulators and the real test phone, neither has Play Services or a nav app
+   [x] A4  dumpsys appops shape across SDK 24-33                                     code confirmed correct 09 Sep - the 2 untested versions (24-25) left to user reports, Doru's call
+   [ ] A5  Watch a real navigation app trigger this live, end to end                  NOT pursuing further - Doru's call, see below
 
    B. FOUND WHILE AUDITING #20, UNRELATED TO IT
-   [ ] B1  A hotspot started during the lock delay survives being re-checked         pre-existing, not caused by #20
-   [ ] B2  Unlocking during the lock delay actually cancels the pending disable      pre-existing, not caused by #20
+   [x] B1  A hotspot started during the lock delay survives being re-checked         done 09 Sep - narrow scope only, see C1 for what this does not cover
+   [x] B2  Unlocking during the lock delay actually cancels the pending disable      done 09 Sep - narrow scope only, see C2/C3 for what this does not cover
+
+   C. FOUND WHILE FIXING B1/B2 - BIGGER THAN B1/B2's OWN SCOPE
+   [ ] C1  Protection modes (Airplane Mode, Battery Saver) ignore hotspot entirely    NEEDS YOUR CALL - real gap in the original #34 feature, not new
+   [ ] C2  B2's cancel is skipped exactly when it matters most: the first seconds     the most likely real trigger (accidental lock, instant unlock) lands here
+       after a lock, and a filtered-out feature (hotspot or in-use) never gets
+       re-added even after the reason for filtering it out has passed
+   [ ] C3  B2 only protects the ScreenStateReceiver path - PrivacyAccessibilityService  a second, independent lock-work source with no unlock-cancel of its own
+       can arm a whole new lock cycle with no screen-state gate at all, and
+       ScreenStateReceiver itself is only registered while a service that can die is alive
 
 ## A1  isLocationInUse must not crash, must keep failing safe, on older Android
 
@@ -78,14 +87,15 @@ if it does, "only disable Location if unused" may silently never actually disabl
 most users, the opposite failure from #20 but on a much larger share of the install base than a
 de-Googled phone represents.
 
-depends on: none    touches: ConnectionStateChecker.kt:207-213    [Needs confirmation - the real
-  test, a stock/GMS device or a Google-Play-flavoured emulator, was not available this session]
-proves it is done: a `dumpsys appops` capture from an idle GMS-equipped device (stock Pixel,
-  Samsung, or a "Google APIs"/"Google Play" flavoured emulator AVD, none of which were on this
-  machine's already-installed AVD list), checked for what `com.google.android.gms` and any
-  visible OEM location service hold open, with a positive control first (open a real maps app on
-  that same device, confirm ITS package shows up through the identical capture before trusting
-  any negative reading from it).
+Closed 09 Sep, Doru's call: the code itself is correct - `pkg!="android"` excludes exactly and
+only the literal package it was written to exclude, nothing broader, verified earlier this round
+against both real and synthetic data. What was never resolved is empirical (does GMS or an OEM
+service actually hold this open on a retail phone), not a code defect, and Doru decided that
+question is better answered by real user reports than by chasing down test hardware. If a report
+ever says Location stops disabling on a specific phone, this is where to look first.
+
+depends on: none    touches: ConnectionStateChecker.kt:207-213    [Verified in code - the
+  exclusion does what it claims; the broader real-world question is deferred, not unresolved code]
 
 ## A3  Automated coverage for the awk command itself, not just its Kotlin half
 
@@ -134,54 +144,116 @@ Correction from this round's own review: API 24 and 25 are NOT covered by that c
 argument. Their only tested neighbour is API 26 - one of the two known-BROKEN versions - so there
 is no known-good bracket around them the way there is for the untested gaps elsewhere (27, 31,
 32, each sitting between two versions that already tested clean). If anything, 24-25 are now more
-likely to share 26's problem than not. Left as `[~]`, not `[x]`.
+likely to share 26's problem than not.
+
+Closed 09 Sep, Doru's call: the parsing code (the awk pattern matching op headers and Package
+lines) is not version-gated in any way - it is the same generic text match for every Android
+version, with no code path that could behave differently on 24-25 specifically versus 26-33. If
+those 2 versions' dumpsys output genuinely differs in shape, that is a fact about the OS, not
+something more code-reading here would catch - left to a user report from an SDK 24-25 device if
+it ever surfaces, same reasoning as A1's confirmed break (a NOBLOCKS answer either way, never a
+wrong "in use").
 
 ## A5  Watch a real navigation app trigger this live, end to end
 
-Still blocked - now checked properly rather than assumed. This round's own review pointed out the
-AOSP emulators lacking Play Services was given as the reason, without ever checking the real
-physical device used all session. Checked directly: that device's installed packages (252 total,
-`pm list packages --user 0`) include no Google Play Services and no common navigation app (Maps,
-OsmAnd, Waze, Organic Maps). Both available devices are confirmed unable to run this test as they
-stand.
+Checked directly, not just assumed: neither the real device nor any available emulator has
+Google Play Services or a navigation app installed (252 real-device packages checked). Closed 09
+Sep, Doru's call: not pursuing further. The underlying mechanism (AppOps' "Running start at"
+marker) was already proven correct in both directions this session - a synthetic active entry is
+correctly caught, a genuinely idle device correctly isn't - so the missing piece here is only the
+reassurance of watching one specific real app do it, not evidence the logic is wrong. Same
+reasoning as A2 and A4: a real-world miss would surface as a user report, not as something more
+test setup on this machine would have found.
 
 depends on: none    touches: none    [Verified at runtime - confirmed blocked, not just assumed]
 
 ## B1  A hotspot started during the lock delay survives being re-checked
 
-PrivacyActionWorker.kt:166-167 samples whether a hotspot is active once, before the lock delay
-starts, and never again. #20's own post-delay re-check (added this session, PrivacyActionWorker.kt
-:322-364) only re-tests per-feature "only if unused" state via `isFeatureInUse` - WIFI routes to
-`isWifiConnected()` (client-mode connection only) and MOBILE_DATA is hardcoded false; neither
-touches tethering state. If a hotspot gets turned on during the delay window specifically, WiFi/
-Mobile Data can still be switched off at the end of it - exactly the outcome the comment at
-PrivacyActionWorker.kt:158-165 says must never happen.
+DONE 09 Sep. PrivacyActionWorker.kt used to sample whether a hotspot is active once, before the
+lock delay, and never again - a hotspot started during the delay window could still have WiFi/
+Mobile Data switched off underneath it. Fixed by re-applying the same unconditional hotspot check
+after the delay, inside the same block that already re-checks per-feature "only if unused" state
+(added for #20). Mirrors the pre-existing check's own logic exactly, does not duplicate it.
 
-Pre-existing. Not caused or made worse by #20 - found only because reviewing #20's fix meant
-reading this code closely for the first time in a while.
-
-depends on: none    touches: PrivacyActionWorker.kt:166-167,322-364    [Verified in code]
-proves it is done - corrected by this round's own review, which caught that the first draft of
-  this check never locked the phone at all, so it could not have exercised the bug either way:
-  lock the device (arms the delay), START the hotspot only AFTER locking - during the delay
-  window, not before it - wait past the configured delay, then read WiFi/Mobile Data state with
-  a named command (`dumpsys wifi` / the app's own status check) and confirm both are still on.
+depends on: none    touches: PrivacyActionWorker.kt:166-172 (unchanged, the original pre-delay
+  check), :329-345 (new, the post-delay re-check)    [Verified in code + Verified at runtime -
+  build and full test suite green; no live hotspot-during-delay device run, see C2]
 
 ## B2  Unlocking during the lock delay actually cancels the pending disable
 
-ScreenStateReceiver.kt:50-53 handles ACTION_USER_PRESENT but only logs and enqueues unlock-side
-work under a different unique name (WORK_NAME_UNLOCK) - it never cancels the lock-side work.
-Only ACTION_SCREEN_ON's handler (:55, cancel call at :74) calls cancelPendingLockWork (defined
-:122), and only when `keyguardManager?.isKeyguardLocked ?: true` reads false at that exact
-moment (:68-70) - which the ordinary screen-on-then-enter-PIN sequence may not satisfy in time.
+DONE 09 Sep, narrow scope. ScreenStateReceiver's ACTION_USER_PRESENT handler used to enqueue the
+unlock-side work but never cancel the still-pending lock-side one. Fixed: it now cancels the
+pending lock work too, guarded by the same `sensorDisableInProgress` check the other 3 producers
+already use before they'd REPLACE that work (#G1) - cancelling a sensor disable that's actively
+running would interrupt it mid-command with sensors left on and no error shown anywhere.
 
-Pre-existing. Not caused or made worse by #20 - found the same way as B1.
+depends on: none    touches: ScreenStateReceiver.kt:50-66 (the ACTION_USER_PRESENT branch)
+  [Verified in code + Verified at runtime - build and full test suite green; no live unlock-
+  during-delay device run, see C2/C3 for why a live run of this specific fix would not have
+  settled the concerns this round actually found]
 
-depends on: none    touches: ScreenStateReceiver.kt:50-53,55,68-74,122-129    [Verified in code]
-proves it is done - corrected by this round's own review, which caught that a bare "a cancel
-  line appeared in logcat" cannot tell a real cancel apart from a job that merely lost the race
-  anyway, since an outrun job can log something that looks similar: clear the log first
-  (`logcat -c`), unlock the device during the configured lock delay via the normal path, assert
-  the exact expected cancel log line appears exactly once, THEN wait past the original deadline
-  and confirm zero feature toggles actually executed after that point - the outcome that
-  actually matters, not just that a log line was printed.
+## C1  Protection modes (Airplane Mode, Battery Saver) ignore hotspot entirely
+
+Found by this round's own adversarial review, checking B1's own new code. B1 (and the original
+pre-delay check it mirrors) only ever gate WIFI and MOBILE_DATA. Enabling Airplane Mode on lock
+kills a hotspot's radio outright, hotspot check or not - the #34 protection this app advertises
+never covered protection modes, in either the original feature or B1's fix. Not something B1 was
+ever scoped to fix; a real gap in the original feature, found incidentally.
+
+depends on: none    touches: PrivacyActionWorker.kt (protection-mode enable block, after the
+  regular-features block)    [Verified in code]
+NEEDS YOUR CALL: worth closing, and is "keep the hotspot on" or "warn the user Airplane Mode will
+  kill it" the right behaviour for someone who explicitly asked for Airplane Mode on lock?
+
+## C2  B2's cancel window sits exactly where the most common real trigger lands, and a
+      feature filtered out once is never reconsidered even after the reason ends
+
+Two related findings from this round's adversarial review, both about the SHAPE of the fix
+rather than a bug in it:
+
+Camera/mic disable at the very start of every lock (immediately, no delay - #F1b). That is
+exactly when `sensorDisableInProgress` is true, which is exactly when B2's guard skips the
+cancel - and an accidental lock immediately followed by unlocking again (fingerprint, a pocket
+press-and-release) lands squarely in that first-second window. The unlock-side work still gets
+enqueued either way; what's missing is only the cancel, so the pending lock action survives and
+can still fire at the end of the lock delay on a phone the user is actively holding. The default
+lock delay is 10 seconds, not an obscure edge case.
+
+Separately: once a feature is filtered out of `regularFeatures` at lock time - for being in use,
+or for a hotspot being active - nothing re-adds it if the reason stops applying before the delay
+ends (hotspot turned off, app stopped using the feature). This is not specific to hotspot or to
+B1; it is how the whole filter-once-at-lock-time design already works, for every feature, and
+predates both #20 and B1.
+
+depends on: none    touches: PrivacyActionWorker.kt (the whole filter/re-check structure, not one
+  line)    [Verified in code - both claims traced through the actual control flow this round]
+NEEDS YOUR CALL: closing the first part properly needs the lock and unlock workers to coordinate
+  around sensorDisableInProgress instead of one guard checked at one instant - real design work,
+  not a quick patch. The second part needs the filter to become re-evaluated rather than
+  progressively narrowed, which is a bigger structural change than B1/B2's own scope.
+
+## C3  B2 only protects one of two independent paths that can arm a lock cycle, and only
+      while the service that registers it is alive
+
+Two more findings from the same review round, about completeness rather than correctness:
+
+ScreenStateReceiver is registered only dynamically, only from PrivacyMonitorService's own
+lifecycle (already known from this project's own history - no manifest entry exists for it).
+While that service is dead, ACTION_USER_PRESENT reaches no registered receiver at all, so B2's
+new cancel cannot run - unrelated to B2 itself, but it means B2's protection has the same uptime
+dependency the rest of this app's screen-state handling already has.
+
+PrivacyAccessibilityService has its own, entirely independent way to arm a lock cycle - any
+window whose class name contains "Keyguard" or "LockScreen" (deliberately ungated on real
+keyguard state - see PrivacyAccessibilityService.kt's own doc comment for why). A prior false
+positive in this exact detector was already found and fixed once (#26, the notification shade).
+If a similar false positive is ever hit again, it can arm a brand new lock cycle after B2's
+cancel has already run, and B2 has no way to see or prevent that - it only reacts to the
+ScreenStateReceiver path.
+
+depends on: none    touches: PrivacyAccessibilityService.kt (isLockScreenClass, triggerEarly
+  PrivacyActions), util/ScreenStateReceiverManager.kt    [Verified in code]
+NEEDS YOUR CALL: the service-uptime dependency is accepted risk this project already carries
+  elsewhere (ServiceHealthWorker's 15-minute restart is the existing mitigation). The
+  accessibility path is a real, separate gap - whether it is worth chasing depends on how often
+  #26-style false positives actually recur, which only real usage will show.

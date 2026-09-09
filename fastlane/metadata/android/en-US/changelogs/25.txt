@@ -1,0 +1,7 @@
+- Added the missing Samsung Auto-Retry setting for NFC
+- Fixed dual-SIM phones reading the wrong SIM's status
+- Fixed a rare lock-detection race condition
+- Bluetooth permission (added last update) is now re-checked every open, not just once
+- Hotspot protection now also covers Mobile Data, not just WiFi
+- Fixed camera/mic not disabling on lock for some users (the normal path, not the instant-lock feature)
+- Added a warning when your lock delay blocks camera/mic protection

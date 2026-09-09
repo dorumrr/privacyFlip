@@ -17,8 +17,8 @@ Tier: 3
 
    C. FOUND WHILE FIXING B1/B2 - BIGGER THAN B1/B2's OWN SCOPE
    [x] C1  Protection modes (Airplane Mode) ignore hotspot entirely                   done 09 Sep - Airplane Mode only; Battery Saver reasoned safe, not verified live
-   [~] C2  B2's cancel is skipped exactly when it matters most, and a filtered-out     investigated 09 Sep, recommended solution written up below - NEEDS YOUR YES to implement
-       feature never gets re-added even after the reason for filtering ends
+   [x] C2  B2's cancel is skipped exactly when it matters most, and a filtered-out     done 10 Sep - both parts built. 6 more findings surfaced while
+       feature never gets re-added even after the reason for filtering ends            checking it, all pre-existing/adjacent - NEEDS A /phi:plan PASS
    [x] C3  B2 only protected the ScreenStateReceiver path                             done 09 Sep - PrivacyAccessibilityService and the service restart path now covered too
 
 ## A1  isLocationInUse must not crash, must keep failing safe, on older Android
@@ -223,55 +223,76 @@ bullets, not touched, flagged here rather than edited without asking.
 ## C2  B2's cancel window sits exactly where the most common real trigger lands, and a
       feature filtered out once is never reconsidered even after the reason ends
 
-INVESTIGATED 09 Sep, not yet implemented - recommended solution below, needs a yes.
+DONE 10 Sep, both parts. Adversarial round found nothing wrong in either part itself - it found 6
+real things adjacent to them instead, all pre-existing or needing a decision beyond this fix's own
+scope, filed below rather than fixed. Read that list before assuming this is fully closed.
 
-**Part 1: the timing window.** Camera/mic disable at the very start of every lock, no delay
-(#F1b). That is exactly when `sensorDisableInProgress` is true, which is exactly when every
-unlock-cancel path (B2's ScreenStateReceiver handler, and now C3's other two) skips the cancel -
-and an accidental lock immediately followed by unlocking again lands squarely in that
-first-second window. The pending lock action survives and can still fire at the end of the lock
-delay (10s default) on a phone the user is actively holding.
+**Part 1, built as recommended.** `PrivacyActionWorker`'s companion object gained
+`@Volatile var lastUnlockAtMillis: Long`. A new shared function, `PendingLockWork.recordUnlock()`,
+writes it via `SystemClock.elapsedRealtime()` (immune to the wall clock moving, and unlike
+`uptimeMillis` survives deep sleep); all 4 real unlock-detection call sites now call it
+unconditionally, before their own `sensorDisableInProgress`-guarded cancel - ScreenStateReceiver's
+ACTION_USER_PRESENT and ACTION_SCREEN_ON handlers, PrivacyAccessibilityService's unlock branch,
+and PrivacyMonitorService's restart catch-up. `doWork()` records its own `thisLockCycleStartedAt`
+at the very start of the lock branch and checks `lastUnlockAtMillis > thisLockCycleStartedAt` at
+one checkpoint, placed right after the delay-or-no-delay branch converges - this covers both the
+`lockDelay==0` path (its only re-validation of any kind) and, for `lockDelay>0`, acts as a second
+signal alongside the existing `isStillLocked` re-check, in one place instead of two.
 
-Recommended fix: a second, complementary signal alongside the existing cancel-the-WorkManager-job
-approach. Add `@Volatile var lastUnlockAtMillis: Long` to PrivacyActionWorker's companion object.
-Every unlock-detector (all 3, after C3) updates it unconditionally, any time, regardless of
-`sensorDisableInProgress` - safe, because writing a timestamp cannot interrupt anything mid-flight
-the way an external cancel can, so it needs none of G1's guarding. `doWork()` records its OWN
-lock cycle's start time, then checks `lastUnlockAtMillis > thisLockCycleStartedAt` at two new
-safe checkpoints: right after the sensor block finishes (closing the window described above), and
-on the `lockDelay == 0` path specifically (which currently has no re-check of any kind). A
-timestamp comparison avoids the reset/staleness problems a shared boolean flag would have - each
-new lock cycle compares only against its own start time, so a stale notification from a previous
-cycle can never wrongly abort a new one, with no explicit reset needed anywhere.
+Found and fixed while wiring this up: ACTION_SCREEN_ON's own cancel call had no
+`sensorDisableInProgress` guard at all, unlike the other 3 call sites - a screen-on fast enough
+could have interrupted an in-flight sensor disable via `cancelUniqueWork()`, the same race #G1
+already guards everywhere else. Now guarded the same way.
 
-**Part 2: filtered-out-never-reconsidered.** Once a feature is filtered out of `regularFeatures`
-at lock time - for being in use, or (after B1) for a hotspot being active - nothing re-adds it if
-the reason stops applying before the delay ends. Not specific to hotspot; it is how the whole
-filter-once-at-lock-time design works, for every feature, and predates #20 and B1 both.
+**Part 2, built as recommended.** `featuresToDisable` is now categorised by type only, unfiltered,
+in one pass. The sensor group gets its own immediate `filterByOnlyIfUnused()` call, right before
+its no-delay disable - functionally identical to before (this is what the shared pre-delay filter
+already amounted to for sensors, just now explicit). Regular features and protection modes are
+filtered together exactly once, in the same shared `filterByOnlyIfUnused()` function, at the
+latest safe moment - the point B1/C1's hotspot re-check already ran at. The pre-delay filter and
+the old post-delay re-narrowing pass are both gone; there is one filter, one moment, and it can
+re-include a feature that was excluded earlier in the same cycle if the reason no longer applies,
+closing the subtract-only defect at its root rather than patching around it again.
 
-Recommended fix, and the reason it is bigger than Part 1: stop filtering regular features and
-protection modes BEFORE the delay at all, and filter them exactly once, at the latest safe
-moment (post-delay, or immediately if `lockDelay == 0`) - the same moment B1/C1's hotspot
-re-check and #20's onlyIfUnused re-check already run. This removes the "two-pass, can-only-
-subtract" shape at its root instead of patching around it again. The complication: `sensorFeatures`
-(camera/mic) currently gets computed FROM the same pre-delay filtered list, and microphone does
-support "only if unused" (confirmed: `ConnectionStateChecker.kt:51` routes MICROPHONE to a real
-in-use check, unlike CAMERA which is hardcoded false) - so sensor categorisation cannot simply
-move wholesale to the same late-filtering point without changing when the sensor block itself
-decides what to disable. The clean split: categorise ALL of `featuresToDisable` by TYPE only
-(sensor / protection / regular) immediately, unfiltered; filter the sensor group immediately,
-right before its own no-delay disable, exactly as it implicitly does today; filter the regular
-and protection groups together, once, at the post-delay checkpoint, replacing today's two-pass
-version. Bigger than Part 1 - touches the categorisation this whole function is built around, not
-just one checkpoint - but it is the version that actually removes the defect rather than adding a
-third narrower patch on top of B1 and C1's two.
+depends on: none    touches: worker/PrivacyActionWorker.kt (both parts), util/PendingLockWork.kt
+  (new recordUnlock()), receiver/ScreenStateReceiver.kt (2 call sites + the missing guard),
+  accessibility/PrivacyAccessibilityService.kt (1 call site), service/PrivacyMonitorService.kt
+  (1 call site)    [Verified in code + Verified at runtime - build and all 17 existing tests plus
+  the awk regression script green; both invariants (unlock-during-cycle always caught; filter
+  runs exactly once and can re-include) held against all 3 adversarial reviewers; no live
+  lock/unlock device run, same depth as B1/C1/C3's own verification]
 
-depends on: none    touches: PrivacyActionWorker.kt (Part 1: 2 new checkpoints in doWork();
-  Part 2: the featuresToDisable categorisation and both filter passes)    [Verified in code -
-  both root causes traced through the actual control flow; the recommended fixes are Inferred
-  from that tracing, not yet built or tested]
-NEEDS YOUR YES: implement Part 1 (small, additive, low risk), Part 2 (bigger, touches core
-  structure), both, or neither for now?
+**6 real findings surfaced while checking this, all filed rather than fixed** - each is either
+pre-existing (in code this fix did not touch, or inherited unchanged from C1/C3) or needs a
+decision beyond a timestamp-style safety net, so none cleared the bar to fix inline this round.
+NEEDS A /phi:plan PASS to give these their own IDs:
+
+- ScreenStateReceiver's ACTION_SCREEN_ON "not locked" branch cancels the pending lock job but,
+  unlike the other 3 detectors, never enqueues the unlock-side re-enable - if the device is woken
+  during Android's own pre-keyguard grace period (so ACTION_USER_PRESENT never follows), whatever
+  the immediate sensor block already disabled can stay off indefinitely
+- ACTION_USER_PRESENT enqueues the unlock-side re-enable as a separate, concurrent job while
+  correctly leaving an in-flight sensor disable running (#G1) - the re-enable can finish first,
+  leaving camera/mic off after a real, confirmed unlock
+- PrivacyAccessibilityService's unlock branch can miss an unlock permanently, with no retry, if
+  the window-class-change event is delivered before KeyguardManager's own state catches up -
+  matters only when PrivacyMonitorService is dead, which is this detector's whole reason to exist
+- `PendingLockWork.cancel()` logs "Cancelled pending lock work" even when nothing was pending
+  (the common case), and never reads the async `Operation` WorkManager's cancel returns, so a
+  genuine cancel failure can never be logged either
+- `PrivacyMonitorService.isScreenCurrentlyLocked()` defaults to "unlocked" on an exception reading
+  KeyguardManager/PowerManager, unlike every other lock-state read in this app (which defaults to
+  "locked"). Pre-existing, but this round's own wiring means that wrong default can now also
+  stamp `lastUnlockAtMillis` and cancel real pending protection, not just skip a re-enable. Small,
+  ready fix for later: change that one `false` to `true`
+- The hotspot check in the lock branch is sampled once, then used both for the regularFeatures
+  filter and, after a real `disableFeatures()` round-trip, the protection-modes loop's Airplane
+  Mode decision - a hotspot starting or stopping in that gap gets the stale verdict. Inherited
+  unchanged from C1, not introduced or worsened by this round's restructure
+- `lock_delay_warning_message` (and the matching fastlane store-listing line) says camera
+  "triggers immediately (if it is not in use)" - camera has no in-use detection at all
+  (`ConnectionStateChecker.kt` hardcodes it to never be "in use"), so this promises an interlock
+  that does not exist and will cut the camera mid video-call. Unrelated to C2, found incidentally
 
 ## C3  B2 only protected the ScreenStateReceiver path
 

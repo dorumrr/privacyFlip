@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.work.CoroutineWorker
@@ -40,6 +41,22 @@ class PrivacyActionWorker(
         @Volatile
         var sensorDisableInProgress: Boolean = false
             private set
+
+        // #C2 Part 1: when an unlock is confirmed while sensorDisableInProgress is true, it is
+        // deliberately NOT cancelled above (the same #G1 reason) - but nothing recorded that the
+        // unlock happened, so this same lock cycle's own later regular-features/protection-modes
+        // stage had no way to know and could still act on a phone the user had already unlocked.
+        // Every unlock-detector (util/PendingLockWork.kt's recordUnlock(), called from all 4 call
+        // sites) writes this UNCONDITIONALLY, regardless of sensorDisableInProgress - a plain
+        // timestamp write can never interrupt anything mid-flight the way an external
+        // WorkManager cancel can, so it needs none of that guard. doWork() compares it against
+        // its OWN lock cycle's start time, so a stale write from an earlier, unrelated cycle can
+        // never wrongly cancel a new one - no explicit reset needed anywhere. SystemClock.
+        // elapsedRealtime(), not System.currentTimeMillis(): immune to the wall clock itself
+        // moving (NTP sync, the user changing the clock, DST), which a plain timestamp
+        // comparison would otherwise be exposed to.
+        @Volatile
+        var lastUnlockAtMillis: Long = 0L
     }
 
     private val debugNotifier: DebugNotificationHelper by lazy {
@@ -100,7 +117,35 @@ class PrivacyActionWorker(
             false // Default to unlocked if we can't determine state
         }
     }
-    
+
+    /**
+     * Applies "only if unused" to a group of features, with an optional hotspot exception for
+     * WIFI/MOBILE_DATA (#C1/#34 - the only two that participate in it; CAMERA/MICROPHONE never
+     * are). Shared by the sensor group's immediate filter and the regular group's single filter
+     * (#C2 Part 2) so the two can never drift into checking this differently - each group used
+     * to run its own copy of this same logic at two different pre/post-delay checkpoints.
+     */
+    private suspend fun filterByOnlyIfUnused(
+        features: List<PrivacyFeature>,
+        connectionChecker: ConnectionStateChecker,
+        hotspotActiveNow: Boolean
+    ): List<PrivacyFeature> {
+        return features.filter { feature ->
+            if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActiveNow) {
+                false // caller already logged/notified this once, in its aggregate hotspot message
+            } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
+                true // Always disable if "only if unused" is not enabled
+            } else {
+                val inUse = connectionChecker.isFeatureInUse(feature)
+                if (inUse) {
+                    logDebug("⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
+                    debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
+                }
+                !inUse // Only include if NOT in use
+            }
+        }
+    }
+
     override suspend fun doWork(): Result {
         try {
             val isLocking = inputData.getBoolean("is_locking", false)
@@ -155,56 +200,26 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     logDebug("Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
-                    // Never disable WiFi or Mobile Data while an active hotspot is running,
-                    // regardless of the per-feature "only if unused" setting. WiFi shares its
-                    // radio with the hotspot's access point, so turning WiFi off silently kills
-                    // the hotspot for anyone tethered to it (#34). Mobile Data is the hotspot's
-                    // own upstream internet connection on a phone - a WiFi hotspot can't also be
-                    // fed by the phone's own WiFi client radio, so leaving WiFi on but cutting
-                    // Mobile Data leaves the hotspot broadcasting with nothing to share (found in
-                    // this project's own post-release audit, not part of the original #34 fix).
-                    val hotspotActive = (PrivacyFeature.WIFI in featuresToDisable || PrivacyFeature.MOBILE_DATA in featuresToDisable) &&
-                        connectionChecker.isHotspotActive()
-                    if (hotspotActive) {
-                        logDebug("📡 Hotspot is active - keeping WiFi and Mobile Data on despite lock")
-                        debugNotifier.notifyFeatureSkipped("WiFi and Mobile Data", "hotspot is active")
-                    }
+                    // #C2 Part 1: this lock cycle's own start time, compared against
+                    // lastUnlockAtMillis at the checkpoint below. Recorded before anything else
+                    // in this cycle runs, so any unlock recorded from this point on - including
+                    // one that lands during the sensor block just below, which deliberately does
+                    // NOT cancel (#G1) - is caught there instead.
+                    val thisLockCycleStartedAt = SystemClock.elapsedRealtime()
 
-                    // Filter features based on "only if unused/not connected" setting
-                    val skippedFeatures = mutableListOf<String>()
-                    val filteredFeatures = featuresToDisable.filter { feature ->
-                        if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActive) {
-                            false // Hotspot check above already decided this one
-                        } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
-                            true // Always disable if "only if unused" is not enabled
-                        } else {
-                            // Check if feature is in use
-                            val inUse = connectionChecker.isFeatureInUse(feature)
-                            if (inUse) {
-                                logDebug("⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
-                                skippedFeatures.add(feature.displayName)
-                                debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
-                            }
-                            !inUse // Only include if NOT in use
-                        }
-                    }
-
-                    logDebug("Features to disable after filtering: ${filteredFeatures.map { it.displayName }}")
-
-                    // Split features into three groups:
-                    // 1. Camera/Microphone - must be disabled IMMEDIATELY (before device locks)
-                    //    because Android blocks changing sensor privacy while locked
-                    // 2. Protection modes (Airplane Mode, Battery Saver) - must be ENABLED (not disabled)
-                    // 3. Other regular features - disabled after the configured delay
-                    val sensorFeatures = filteredFeatures.filter {
-                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
-                    }
-                    val protectionModes = filteredFeatures.filter {
-                        it in PrivacyFeature.getSystemModeFeatures()
-                    }
-                    val regularFeatures = filteredFeatures.filter {
-                        it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE &&
-                        it !in PrivacyFeature.getSystemModeFeatures()
+                    // Categorise by TYPE ONLY, unfiltered (#C2 Part 2). Filtering used to happen
+                    // here too, in a shared pass, before the lock delay - narrowing this list
+                    // once, then (for regular features) narrowing it again after the delay, only
+                    // ever able to subtract. A feature excluded at THIS point (in use, or
+                    // hotspot active) could then never be re-added even if the reason stopped
+                    // applying before the delay ended. Each group below is now filtered exactly
+                    // once, at the latest moment safe for that group: sensors immediately, since
+                    // they act with no delay anyway and always have; regular features and
+                    // protection modes together after the delay (or immediately if lockDelay==0).
+                    val sensorFeatures = featuresToDisable.filter { it in PrivacyFeature.getSensorFeatures() }
+                    val protectionModes = featuresToDisable.filter { it in PrivacyFeature.getSystemModeFeatures() }
+                    val regularFeatures = featuresToDisable.filter {
+                        it !in PrivacyFeature.getSensorFeatures() && it !in PrivacyFeature.getSystemModeFeatures()
                     }
 
                     // Disable camera/microphone - attempted immediately, no artificial delay.
@@ -229,35 +244,38 @@ class PrivacyActionWorker(
                     // and that's reported honestly - it no longer gets silently pre-decided by a
                     // heuristic that was measuring the wrong thing.
                     if (sensorFeatures.isNotEmpty()) {
-                      // sensorDisableInProgress stays true for this whole block, not just the
-                      // actual disable call - the other two triggers check it before they'd
-                      // REPLACE this same unique work, and the danger window is "could this
-                      // enqueue cancel something already underway", which starts as soon as this
-                      // block starts (#G1). Cleared in every exit path via finally, so a crash or
-                      // an external cancellation can never leave it stuck true.
-                      sensorDisableInProgress = true
-                      try {
-                        if (!isDeviceLocked) {
-                            logDebug("🔒 Attempting to disable sensors immediately (no delay): ${sensorFeatures.map { it.displayName }}")
-                            val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
-                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
-                            val stillFailed = sensorResults.filter { !it.success }
-                            if (stillFailed.isNotEmpty()) {
-                                logWarning("⚠️ Sensor disable failed, keyguard likely won the race: ${stillFailed.map { it.feature.displayName }}")
-                                debugNotifier.notifyFeatureSkipped(
-                                    stillFailed.map { it.feature.displayName }.joinToString(", "),
-                                    "device locked before sensors could be disabled"
-                                )
-                            }
-                        } else {
-                            logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${sensorFeatures.map { it.displayName }}")
-                            debugNotifier.notifyFeatureSkipped(
-                                sensorFeatures.map { it.displayName }.joinToString(", "),
-                                "device already locked"
-                            )
+                      val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, connectionChecker, hotspotActiveNow = false)
+                      if (filteredSensorFeatures.isNotEmpty()) {
+                        // sensorDisableInProgress stays true for this whole block, not just the
+                        // actual disable call - the other two triggers check it before they'd
+                        // REPLACE this same unique work, and the danger window is "could this
+                        // enqueue cancel something already underway", which starts as soon as this
+                        // block starts (#G1). Cleared in every exit path via finally, so a crash or
+                        // an external cancellation can never leave it stuck true.
+                        sensorDisableInProgress = true
+                        try {
+                          if (!isDeviceLocked) {
+                              logDebug("🔒 Attempting to disable sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
+                              val sensorResults = privacyManager.disableFeatures(filteredSensorFeatures.toSet())
+                              processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                              val stillFailed = sensorResults.filter { !it.success }
+                              if (stillFailed.isNotEmpty()) {
+                                  logWarning("⚠️ Sensor disable failed, keyguard likely won the race: ${stillFailed.map { it.feature.displayName }}")
+                                  debugNotifier.notifyFeatureSkipped(
+                                      stillFailed.map { it.feature.displayName }.joinToString(", "),
+                                      "device locked before sensors could be disabled"
+                                  )
+                              }
+                          } else {
+                              logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${filteredSensorFeatures.map { it.displayName }}")
+                              debugNotifier.notifyFeatureSkipped(
+                                  filteredSensorFeatures.map { it.displayName }.joinToString(", "),
+                                  "device already locked"
+                              )
+                          }
+                        } finally {
+                          sensorDisableInProgress = false
                         }
-                      } finally {
-                        sensorDisableInProgress = false
                       }
                     }
 
@@ -316,60 +334,53 @@ class PrivacyActionWorker(
                             logDebug("⚡ Skipping delay (lockDelay=0), proceeding directly to disable features")
                         }
 
+                        // #C2 Part 1: catches an unlock that this cycle's own sensor block above
+                        // deliberately did not cancel for (#G1), plus - since this is the ONLY
+                        // check on the lockDelay==0 path - is that path's sole re-validation of
+                        // any kind. On the lockDelay>0 path this is a second, independent signal
+                        // alongside isStillLocked just above: that already catches a LASTING
+                        // unlock by the time the delay ends, this also catches one that happened
+                        // and was recorded during the sensor block, closing the window before it
+                        // rather than only after the wait.
+                        if (lastUnlockAtMillis > thisLockCycleStartedAt) {
+                            logWarning("⚠️ Unlocked during this lock cycle - cancelling remaining disable actions")
+                            debugNotifier.notifyActionCancelled("Unlocked during lock cycle - disable cancelled")
+                            return Result.success()
+                        }
+
                         logDebug("📍 CHECKPOINT: Passed all validations, proceeding to disable features")
 
-                        // Re-check hotspot state once, shared below (#B1, #C1). The pre-delay
-                        // check above (line ~166) only sampled this once, before the wait, so a
-                        // hotspot started during the delay window specifically was never caught -
-                        // for WiFi/Mobile Data, only worth re-testing if a wait actually happened.
-                        // Airplane Mode never had a hotspot check AT ALL before #C1, at any delay,
-                        // so its half of this must run even when lockDelay==0 - corrected by this
-                        // round's own review, which caught the first version of #C1 gating this
-                        // whole check behind lockDelay>0 and silently losing hotspot protection
-                        // for Airplane Mode specifically whenever the user's delay is 0.
-                        // Computed here rather than nested inside the regularFeatures block below,
-                        // so it still runs for someone who only has Airplane Mode configured to
-                        // enable on lock and no regular features at all - nesting it would have
-                        // silently skipped it for exactly that case too.
-                        val needsHotspotCheck = (lockDelay > 0 && (PrivacyFeature.WIFI in regularFeatures || PrivacyFeature.MOBILE_DATA in regularFeatures)) ||
+                        // Re-check hotspot state once, here - the latest safe moment (#B1, #C1),
+                        // and now the ONLY moment (#C2 Part 2) rather than a pre-delay sample
+                        // plus a post-delay re-sample. WiFi shares its radio with the hotspot's
+                        // access point (#34); Mobile Data is the hotspot's own upstream
+                        // connection, so cutting it leaves the hotspot broadcasting with nothing
+                        // to share; Airplane Mode is a full radio kill switch with no per-feature
+                        // "only if unused" setting of its own, so this check is the only thing
+                        // standing between it and taking a live hotspot down outright (#C1).
+                        val needsHotspotCheck = PrivacyFeature.WIFI in regularFeatures ||
+                            PrivacyFeature.MOBILE_DATA in regularFeatures ||
                             PrivacyFeature.AIRPLANE_MODE in protectionModes
                         val hotspotActiveNow = needsHotspotCheck && connectionChecker.isHotspotActive()
                         if (hotspotActiveNow) {
-                            logDebug("📡 Hotspot became active during the delay - keeping WiFi/Mobile Data on and skipping Airplane Mode")
-                            debugNotifier.notifyFeatureSkipped("WiFi, Mobile Data and Airplane Mode", "hotspot is active")
+                            val keptOn = buildList {
+                                if (PrivacyFeature.WIFI in regularFeatures) add("WiFi")
+                                if (PrivacyFeature.MOBILE_DATA in regularFeatures) add("Mobile Data")
+                                if (PrivacyFeature.AIRPLANE_MODE in protectionModes) add("Airplane Mode")
+                            }
+                            logDebug("📡 Hotspot is active - keeping ${keptOn.joinToString(", ")} on despite lock")
+                            debugNotifier.notifyFeatureSkipped(keptOn.joinToString(", "), "hotspot is active")
                         }
 
-                        // Disable regular features (WiFi, Bluetooth, NFC, etc.)
+                        // Disable regular features (WiFi, Bluetooth, NFC, etc.) - filtered
+                        // exactly once, here (#C2 Part 2): "only if unused" needs re-testing at
+                        // whatever point actually precedes the disable call, since a feature
+                        // reported free earlier could be in genuine active use by now - e.g.
+                        // navigation started during the wait. An unconditionally included
+                        // feature's presence here never depended on any snapshot to begin with.
                         if (regularFeatures.isNotEmpty()) {
-                            // Re-check "only if unused" features if we waited (#20 audit finding):
-                            // the filter earlier in this function sampled "in use" BEFORE this
-                            // delay, so a feature reported free then could be in genuine active
-                            // use now - e.g. navigation started during the wait. Only features
-                            // that opted into "only if unused" need re-testing; an unconditionally
-                            // included feature's presence here never depended on that snapshot.
-                            val filteredRegularFeatures = if (lockDelay > 0) {
-                                regularFeatures.filter { feature ->
-                                    if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActiveNow) {
-                                        false
-                                    } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
-                                        true
-                                    } else {
-                                        val stillInUse = connectionChecker.isFeatureInUse(feature)
-                                        if (stillInUse) {
-                                            logDebug("⏸️ ${feature.displayName} became in use during the delay - skipping disable")
-                                            debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
-                                        }
-                                        !stillInUse
-                                    }
-                                }
-                            } else {
-                                regularFeatures
-                            }
+                            val filteredRegularFeatures = filterByOnlyIfUnused(regularFeatures, connectionChecker, hotspotActiveNow)
 
-                            // The re-check above can filter every last one out (all of them
-                            // became in use during the wait) - guard the empty case the same
-                            // way the unlock-side equivalent already does, rather than calling
-                            // disableFeatures on an empty set.
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔒 Disabling regular features (count=${filteredRegularFeatures.size}): ${filteredRegularFeatures.map { it.displayName }}")
                                 logDebug("🔒 About to call privacyManager.disableFeatures()...")
@@ -380,7 +391,7 @@ class PrivacyActionWorker(
 
                                 processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
                             } else {
-                                logDebug("ℹ️ No regular features left to disable after the in-use re-check")
+                                logDebug("ℹ️ No regular features left to disable after the in-use/hotspot check")
                             }
                         } else {
                             logDebug("ℹ️ No regular features to disable (list is empty)")
@@ -390,10 +401,10 @@ class PrivacyActionWorker(
                         // Also track whether we enabled them (for "only if not manually set" feature)
                         if (protectionModes.isNotEmpty()) {
                             logDebug("🛡️ Enabling protection modes on lock: ${protectionModes.map { it.displayName }}")
-                            
+
                             // Get current status to check if already enabled
                             val currentStatus = privacyManager.getCurrentStatus()
-                            
+
                             for (mode in protectionModes) {
                                 // #C1: Airplane Mode is a full radio kill switch - unlike WiFi/
                                 // Mobile Data it has no per-feature "only if unused" setting to
@@ -533,11 +544,11 @@ class PrivacyActionWorker(
                         // Check "only if not manually set" preference before disabling
                         if (protectionModes.isNotEmpty()) {
                             logDebug("🛡️ Disabling protection modes on unlock: ${protectionModes.map { it.displayName }}")
-                            
+
                             for (mode in protectionModes) {
                                 val onlyIfNotManual = preferenceManager.getFeatureOnlyIfNotManual(mode)
                                 val wasEnabledByApp = preferenceManager.getFeatureEnabledByApp(mode)
-                                
+
                                 if (onlyIfNotManual && !wasEnabledByApp) {
                                     // "Only if not manually set" is enabled AND we didn't enable it
                                     // Skip disabling - user had it enabled manually
@@ -557,7 +568,7 @@ class PrivacyActionWorker(
             }
 
             return Result.success()
-            
+
         } catch (e: kotlinx.coroutines.CancellationException) {
             // Work was cancelled (e.g., screen state changed during delay)
             // This is expected behavior, not an error

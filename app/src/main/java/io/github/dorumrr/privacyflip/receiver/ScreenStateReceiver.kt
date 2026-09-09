@@ -50,6 +50,12 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
             Intent.ACTION_USER_PRESENT -> {
                 logDebug(context, "🔓 Screen UNLOCKED (user authenticated) - triggering privacy actions")
+                // Record the unlock unconditionally, before anything else (#C2 Part 1) - even
+                // when the cancel below is skipped, so a lock cycle that could not safely be
+                // cancelled at this moment still finds out about this unlock at its own later
+                // checkpoint. A plain timestamp write cannot interrupt anything mid-flight, so it
+                // needs none of the guard the cancel itself needs.
+                PendingLockWork.recordUnlock()
                 // Cancel any still-pending lock-side work (#B2). Unlike ACTION_SCREEN_ON, this
                 // broadcast has no "still locked" ambiguity to guard against - Android only
                 // sends it on a genuine, confirmed unlock - so whatever the lock delay was
@@ -86,7 +92,20 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     logDebug(context, "💡 Screen turned ON but still locked - keeping pending lock work")
                 } else {
                     logDebug(context, "💡 Screen turned ON and not locked - cancelling pending lock work")
-                    PendingLockWork.cancel(context, TAG)
+                    // Recorded unconditionally (#C2 Part 1), same reason as ACTION_USER_PRESENT
+                    // above - this branch only reaches here once isStillLocked is already
+                    // confirmed false, so it is always a genuine unlock signal.
+                    PendingLockWork.recordUnlock()
+                    // Found while wiring up recordUnlock() here: unlike every other cancel call
+                    // site in this app, this one had no sensorDisableInProgress guard (#G1) - a
+                    // screen-on this fast could in principle land while this same lock cycle's
+                    // own sensor block is still running, and cancelUniqueWork() can interrupt a
+                    // running coroutine worker the same way an ExistingWorkPolicy.REPLACE can.
+                    // Matches the guard ACTION_USER_PRESENT, PrivacyAccessibilityService and
+                    // PrivacyMonitorService's restart catch-up all already had.
+                    if (!PrivacyActionWorker.sensorDisableInProgress) {
+                        PendingLockWork.cancel(context, TAG)
+                    }
                 }
             }
 

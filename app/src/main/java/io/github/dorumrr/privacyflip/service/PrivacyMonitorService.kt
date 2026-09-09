@@ -208,8 +208,14 @@ class PrivacyMonitorService : Service() {
             // different unique work name. Whenever this service was dead (the only time this
             // catch-up path runs at all), that pending disable had no other way to be
             // cancelled: ScreenStateReceiver is only registered while this service is alive.
-            if (isUnlocking && !PrivacyActionWorker.sensorDisableInProgress) {
-                io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(this, TAG)
+            if (isUnlocking) {
+                // Recorded unconditionally (#C2 Part 1), same reason as the other 3 call sites:
+                // a plain timestamp write cannot interrupt anything mid-flight, so it needs none
+                // of the sensorDisableInProgress guard the cancel itself needs just below.
+                io.github.dorumrr.privacyflip.util.PendingLockWork.recordUnlock()
+                if (!PrivacyActionWorker.sensorDisableInProgress) {
+                    io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(this, TAG)
+                }
             }
 
             // Check if device is currently locked to pass correct flag to worker

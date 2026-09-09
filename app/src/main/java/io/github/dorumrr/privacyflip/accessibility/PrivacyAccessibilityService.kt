@@ -191,6 +191,11 @@ class PrivacyAccessibilityService : AccessibilityService() {
      */
     private fun triggerEarlyUnlockActions() {
         try {
+            // Recorded unconditionally (#C2 Part 1), even when the cancel below is skipped - a
+            // plain timestamp write cannot interrupt anything mid-flight, so it needs none of
+            // that guard, and it is what lets a lock cycle this could not safely cancel for
+            // still notice the unlock at its own later checkpoint.
+            PendingLockWork.recordUnlock()
             // Same guard the lock branch above already uses (#G1): a sensor disable that's
             // actively running for THIS lock must not be interrupted mid-command.
             if (!PrivacyActionWorker.sensorDisableInProgress) {

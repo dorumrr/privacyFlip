@@ -318,6 +318,27 @@ class PrivacyActionWorker(
 
                         logDebug("📍 CHECKPOINT: Passed all validations, proceeding to disable features")
 
+                        // Re-check hotspot state once, shared below (#B1, #C1). The pre-delay
+                        // check above (line ~166) only sampled this once, before the wait, so a
+                        // hotspot started during the delay window specifically was never caught -
+                        // for WiFi/Mobile Data, only worth re-testing if a wait actually happened.
+                        // Airplane Mode never had a hotspot check AT ALL before #C1, at any delay,
+                        // so its half of this must run even when lockDelay==0 - corrected by this
+                        // round's own review, which caught the first version of #C1 gating this
+                        // whole check behind lockDelay>0 and silently losing hotspot protection
+                        // for Airplane Mode specifically whenever the user's delay is 0.
+                        // Computed here rather than nested inside the regularFeatures block below,
+                        // so it still runs for someone who only has Airplane Mode configured to
+                        // enable on lock and no regular features at all - nesting it would have
+                        // silently skipped it for exactly that case too.
+                        val needsHotspotCheck = (lockDelay > 0 && (PrivacyFeature.WIFI in regularFeatures || PrivacyFeature.MOBILE_DATA in regularFeatures)) ||
+                            PrivacyFeature.AIRPLANE_MODE in protectionModes
+                        val hotspotActiveNow = needsHotspotCheck && connectionChecker.isHotspotActive()
+                        if (hotspotActiveNow) {
+                            logDebug("📡 Hotspot became active during the delay - keeping WiFi/Mobile Data on and skipping Airplane Mode")
+                            debugNotifier.notifyFeatureSkipped("WiFi, Mobile Data and Airplane Mode", "hotspot is active")
+                        }
+
                         // Disable regular features (WiFi, Bluetooth, NFC, etc.)
                         if (regularFeatures.isNotEmpty()) {
                             // Re-check "only if unused" features if we waited (#20 audit finding):
@@ -327,18 +348,6 @@ class PrivacyActionWorker(
                             // that opted into "only if unused" need re-testing; an unconditionally
                             // included feature's presence here never depended on that snapshot.
                             val filteredRegularFeatures = if (lockDelay > 0) {
-                                // Re-check hotspot state too (#B1): the pre-delay check above
-                                // (line ~166) only sampled this once, before the wait, so a
-                                // hotspot started during the delay window specifically was never
-                                // caught - WiFi/Mobile Data could still get disabled underneath
-                                // it at the end of the wait, exactly what that earlier check
-                                // exists to prevent. Same unconditional rule, re-applied here.
-                                val hotspotActiveNow = (PrivacyFeature.WIFI in regularFeatures || PrivacyFeature.MOBILE_DATA in regularFeatures) &&
-                                    connectionChecker.isHotspotActive()
-                                if (hotspotActiveNow) {
-                                    logDebug("📡 Hotspot became active during the delay - keeping WiFi and Mobile Data on")
-                                    debugNotifier.notifyFeatureSkipped("WiFi and Mobile Data", "hotspot is active")
-                                }
                                 regularFeatures.filter { feature ->
                                     if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActiveNow) {
                                         false
@@ -386,8 +395,22 @@ class PrivacyActionWorker(
                             val currentStatus = privacyManager.getCurrentStatus()
                             
                             for (mode in protectionModes) {
+                                // #C1: Airplane Mode is a full radio kill switch - unlike WiFi/
+                                // Mobile Data it has no per-feature "only if unused" setting to
+                                // check, so the hotspot re-check above is the only thing standing
+                                // between it and taking a live hotspot down outright. Battery
+                                // Saver does NOT get the same treatment: Android documents it as
+                                // throttling background activity, not disabling radios - unlike
+                                // the Airplane Mode case, this was not verified live against a
+                                // real hotspot (this device's shell lacks the permission to start
+                                // one), so it rests on documented platform behaviour, not a test.
+                                if (mode == PrivacyFeature.AIRPLANE_MODE && hotspotActiveNow) {
+                                    logDebug("🛡️ Skipping Airplane Mode - hotspot is active")
+                                    continue
+                                }
+
                                 val wasAlreadyEnabled = currentStatus[mode] == FeatureState.ENABLED
-                                
+
                                 if (wasAlreadyEnabled) {
                                     // Already enabled (manually by user) - don't enable, mark as not enabled by app
                                     logDebug("🛡️ ${mode.displayName} already enabled (manually set) - skipping")

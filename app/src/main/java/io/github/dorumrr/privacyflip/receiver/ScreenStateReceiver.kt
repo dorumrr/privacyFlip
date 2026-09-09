@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
 class ScreenStateReceiver : BroadcastReceiver() {
@@ -61,7 +62,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 // anywhere, the same race the other producers already guard against before
                 // they'd REPLACE this same unique work.
                 if (!PrivacyActionWorker.sensorDisableInProgress) {
-                    cancelPendingLockWork(context)
+                    PendingLockWork.cancel(context, TAG)
                 }
                 triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen Unlock")
             }
@@ -85,7 +86,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     logDebug(context, "💡 Screen turned ON but still locked - keeping pending lock work")
                 } else {
                     logDebug(context, "💡 Screen turned ON and not locked - cancelling pending lock work")
-                    cancelPendingLockWork(context)
+                    PendingLockWork.cancel(context, TAG)
                 }
             }
 
@@ -130,15 +131,6 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
         } catch (e: Exception) {
             logError(context, "Failed to trigger privacy action", e)
-        }
-    }
-
-    private fun cancelPendingLockWork(context: Context) {
-        try {
-            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_LOCK)
-            logDebug(context, "🚫 Cancelled pending lock work due to screen turning back on")
-        } catch (e: Exception) {
-            logError(context, "Failed to cancel pending lock work", e)
         }
     }
 

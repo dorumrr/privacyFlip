@@ -15,7 +15,7 @@
     <string name="lock_delay_warning_message">Android prevents changing camera or microphone privacy while locked. For this reason, camera and microphone ignore custom lock/unlock delays and trigger immediately (if they are not in use).\n\nTo ensure automatic disabling on lock:\n\n1. Go to Settings → Security → Screen Lock\n2. Tap the gear icon ⚙️ next to your lock method\n3. Set \"Automatically lock\" to 5 seconds or more\n4. Disable \"Power button instantly locks\" (if present)</string>
 
     <!-- Airplane Mode Info -->
-    <string name="airplane_mode_info_message">Enabling Airplane Mode will disable WiFi, Bluetooth, Mobile Data, and NFC regardless of their individual settings.\n\nUse this for maximum privacy when the device is locked.</string>
+    <string name="airplane_mode_info_message">Enabling Airplane Mode will disable WiFi, Bluetooth, Mobile Data, and NFC regardless of their individual settings.\n\nException: if a WiFi hotspot is active, Airplane Mode is skipped on lock so tethered devices stay connected - the same exception WiFi and Mobile Data already have.\n\nUse this for maximum privacy when the device is locked.</string>
 
     <!-- Battery Saver Info -->
     <string name="battery_saver_info_message">Battery Saver reduces background activity and may limit some app features.\n\nIt does not directly disable radios (WiFi, Bluetooth, etc.) but can affect sync, location accuracy, and background processing.\n\nUseful for extending battery life when locked for long periods.</string>
@@ -39,5 +39,5 @@
 
     <!-- Accessibility Service -->
     <string name="accessibility_service_label">Privacy Flip - Side Button Support</string>
-    <string name="accessibility_service_description">Allows Privacy Flip to detect side/power button locks earlier, enabling camera and microphone privacy features to work with instant-lock. This service does not read screen content or passwords. It only detects lock screen appearance to trigger privacy actions before keyguard fully engages.</string>
+    <string name="accessibility_service_description">Allows Privacy Flip to detect side/power button locks earlier, enabling camera and microphone privacy features to work with instant-lock. This service does not read screen content or passwords. It detects lock screen appearance to trigger privacy actions before keyguard fully engages, and detects when the lock screen is replaced by another window (a genuine unlock) to cancel privacy actions that are no longer needed.</string>
 </resources>

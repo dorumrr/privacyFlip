@@ -98,7 +98,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Allows Privacy Flip to detect side/power button locks before keyguard fully engages. Enables camera and microphone privacy even with instant-lock. This service only detects lock screen appearance and does not read screen content."
+            android:text="Allows Privacy Flip to detect side/power button locks before keyguard fully engages, and detects when you unlock again to cancel actions that are no longer needed. Enables camera and microphone privacy even with instant-lock. Does not read screen content."
             android:textSize="11sp"
             android:textColor="@color/text_secondary" />
 

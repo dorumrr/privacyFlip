@@ -202,6 +202,16 @@ class PrivacyMonitorService : Service() {
                 return
             }
 
+            // #C3: this restart catch-up finds the device unlocked but, unlike
+            // ScreenStateReceiver's own ACTION_USER_PRESENT handler (#B2), never cancelled a
+            // still-pending lock-side job - only ever REPLACEs the unlock-side one below, a
+            // different unique work name. Whenever this service was dead (the only time this
+            // catch-up path runs at all), that pending disable had no other way to be
+            // cancelled: ScreenStateReceiver is only registered while this service is alive.
+            if (isUnlocking && !PrivacyActionWorker.sensorDisableInProgress) {
+                io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(this, TAG)
+            }
+
             // Check if device is currently locked to pass correct flag to worker
             val isDeviceLocked = isScreenCurrentlyLocked()
 

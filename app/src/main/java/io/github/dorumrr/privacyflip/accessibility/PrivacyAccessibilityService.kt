@@ -9,6 +9,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
@@ -31,12 +32,22 @@ class PrivacyAccessibilityService : AccessibilityService() {
         
         @Volatile
         private var isServiceRunning = false
-        
+
         /**
          * Check if the accessibility service is currently running.
          * Used by UI to show service status.
          */
         fun isRunning(): Boolean = isServiceRunning
+
+        // Tracks whether the last window this service saw was the lock screen (#C3). This
+        // service has its own, fully independent way to arm a lock cycle - it never relied
+        // on ScreenStateReceiver being alive, so it should not rely on it to notice an unlock
+        // either. Set true the moment a lock screen class is seen; the next window event that
+        // is NOT a lock screen class, while this is still true, is the same "the lock screen
+        // just went away" signal ACTION_USER_PRESENT represents, just observed through this
+        // service's own event stream instead of a broadcast.
+        @Volatile
+        private var wasShowingKeyguard = false
     }
 
     override fun onServiceConnected() {
@@ -79,7 +90,29 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 // actually identify it - without this, a false-positive report would be very
                 // hard to track down to its cause.
                 Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className, package: ${event.packageName}, isKeyguardLocked=${keyguardManager?.isKeyguardLocked})")
+                wasShowingKeyguard = true
                 triggerEarlyPrivacyActions()
+            } else if (wasShowingKeyguard) {
+                // #C3, corrected by this round's own adversarial review: a non-keyguard window
+                // can appear while the device is genuinely still locked - an incoming call, the
+                // lock screen's own camera shortcut, an alarm, the notification shade pulled
+                // down ON the lock screen, an always-on-display or OEM overlay. None of those
+                // are an unlock. Unlike the lock branch above, there is no timing pressure here
+                // forcing a guess - Android's restriction is on CHANGING sensor privacy while
+                // locked, not on READING keyguard state - so this confirms the real state before
+                // acting, the same way ScreenStateReceiver's own ACTION_SCREEN_ON handler already
+                // does. A first version of this fix skipped that check and could cancel a
+                // genuine pending disable, and re-enable sensors, on a phone that was never
+                // actually unlocked.
+                val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                val isStillLocked = keyguardManager?.isKeyguardLocked ?: true // fail closed
+                if (isStillLocked) {
+                    Log.d(TAG, "Window changed (class: $className) but keyguard is still locked - not an unlock, staying armed")
+                } else {
+                    Log.d(TAG, "🔓 Lock screen replaced by another window (class: $className), keyguard confirmed unlocked")
+                    wasShowingKeyguard = false
+                    triggerEarlyUnlockActions()
+                }
             }
 
         } catch (e: Exception) {
@@ -144,9 +177,47 @@ class PrivacyAccessibilityService : AccessibilityService() {
             )
             
             Log.i(TAG, "✅ Early privacy actions triggered (unique work: privacy_action_lock)")
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger early privacy actions", e)
+        }
+    }
+
+    /**
+     * Cancels whatever the lock-screen branch above may have armed, and triggers the normal
+     * unlock-side re-enable (#C3). This service has no ScreenStateReceiver-style broadcast to
+     * lean on for "the user is genuinely back" - this IS that signal, for this service's own
+     * independent lock-detection path.
+     */
+    private fun triggerEarlyUnlockActions() {
+        try {
+            // Same guard the lock branch above already uses (#G1): a sensor disable that's
+            // actively running for THIS lock must not be interrupted mid-command.
+            if (!PrivacyActionWorker.sensorDisableInProgress) {
+                PendingLockWork.cancel(applicationContext, TAG)
+            }
+
+            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
+                .setInputData(
+                    workDataOf(
+                        "is_locking" to false,
+                        "is_device_locked" to false,
+                        "trigger" to "accessibility_service",
+                        "reason" to "Early Unlock Detection (Accessibility)"
+                    )
+                )
+                .build()
+
+            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK,
+                ExistingWorkPolicy.REPLACE,
+                workRequest
+            )
+
+            Log.i(TAG, "✅ Early unlock actions triggered (unique work: privacy_action_unlock)")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger early unlock actions", e)
         }
     }
 

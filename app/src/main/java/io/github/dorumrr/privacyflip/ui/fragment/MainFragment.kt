@@ -219,6 +219,22 @@ class MainFragment : Fragment() {
                 )
             }
 
+            // Samsung's payment/wallet framework can silently re-enable NFC right after this
+            // app disables it, on flagship models (#22). NFCToggle has always been able to
+            // detect that and retry, but until now there was no way to actually turn it on -
+            // the code has been recommending it in its own log message since v2.1.1, with
+            // nothing in the UI to act on that advice. Only shown on models where the override
+            // can actually happen, so it doesn't clutter the screen for everyone else.
+            val preferenceManager = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext())
+            samsungNfcAutoRetryContainer.visibility =
+                if (io.github.dorumrr.privacyflip.util.DeviceDetector.isSamsungWithPaymentOverride()) View.VISIBLE else View.GONE
+            samsungNfcAutoRetryCheckbox.isChecked = preferenceManager.samsungNfcAutoRetry
+            samsungNfcAutoRetryCheckbox.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    preferenceManager.samsungNfcAutoRetry = isChecked
+                }
+            }
+
             cameraDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
                     viewModel.updateFeatureSetting(PrivacyFeature.CAMERA, disableOnLock = isChecked)

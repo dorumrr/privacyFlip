@@ -109,6 +109,56 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <!-- Samsung NFC Auto-Retry (#22): Samsung's own payment/wallet framework can silently
+             re-enable NFC right after this app disables it, on flagship devices. The app has
+             always been able to detect that and retry, but this setting had no way to turn it
+             on until now - the code has been recommending it in its own log message since
+             v2.1.1, nobody could actually follow that advice. Shown only on the Samsung models
+             where this override can happen (see DeviceDetector.isSamsungWithPaymentOverride()). -->
+        <LinearLayout
+            android:id="@+id/samsungNfcAutoRetryContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <CheckBox
+                    android:id="@+id/samsungNfcAutoRetryCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="32dp"
+                    android:paddingStart="4dp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Samsung Auto-Retry"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="32dp"
+                android:layout_marginBottom="4dp"
+                android:text="If Samsung Wallet/Pay re-enables NFC right after this app turns it off, retry disabling it up to 3 times"
+                android:textSize="10sp"
+                android:textColor="@color/text_secondary" />
+
+        </LinearLayout>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

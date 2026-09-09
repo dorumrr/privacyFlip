@@ -90,6 +90,21 @@ class MainFragment : Fragment() {
         }
     }
 
+    // Permission launcher for Bluetooth connection state (Android 12+, #28)
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.i(TAG, "Bluetooth connect permission granted")
+            viewModel.updateFeatureOnlyIfUnused(PrivacyFeature.BLUETOOTH, true)
+        } else {
+            Log.w(TAG, "Bluetooth connect permission denied - leaving 'only if not connected' off")
+            // Reflect the denial in the checkbox itself, not just the preference,
+            // since the checkbox was optimistically left checked when tapped.
+            binding.screenLockCard.bluetoothSettings.onlyIfUnusedCheckbox.isChecked = false
+        }
+    }
+
     // Broadcast receiver for Shizuku/Dhizuku status changes
     private val privilegeStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -116,10 +131,16 @@ class MainFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "onResume() called - reloading screen lock configuration and privilege status")
+        Log.d(TAG, "onResume() called - reloading screen lock configuration, global privacy status and privilege status")
         // Reload screen lock configuration from preferences when fragment resumes
         // This ensures the UI reflects any changes made by the worker (e.g., after lock/unlock)
         viewModel.reloadScreenLockConfig()
+
+        // Reload global privacy on/off state from preferences when fragment resumes.
+        // The Quick Settings tile and the home screen widget both write this value
+        // directly, bypassing the ViewModel, so without this the screen can show a
+        // stale state after either of them is used while the app was in the background.
+        viewModel.reloadGlobalPrivacyStatus()
 
         // Refresh privilege status to detect if Shizuku/Dhizuku/Root status changed while app was in background
         viewModel.refresh()
@@ -923,6 +944,21 @@ class MainFragment : Fragment() {
         }
         featureBinding.onlyIfUnusedCheckbox.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI && supportsOnlyIfUnused) {
+                // Bluetooth's connection check needs BLUETOOTH_CONNECT on Android 12+
+                // (#28 - it no longer parses dumpsys text). WiFi and Location need no
+                // extra permission, so only Bluetooth needs this branch.
+                if (feature == PrivacyFeature.BLUETOOTH && isChecked &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    ContextCompat.checkSelfPermission(
+                        requireContext(),
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    // Result handler turns the setting on if granted, or reverts the
+                    // checkbox if denied - same pattern as debug notifications above.
+                    bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    return@setOnCheckedChangeListener
+                }
                 viewModel.updateFeatureOnlyIfUnused(feature, isChecked)
             }
         }

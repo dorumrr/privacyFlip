@@ -1,8 +1,14 @@
 package io.github.dorumrr.privacyflip.util
 
+import android.Manifest
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.root.RootManager
 
@@ -12,7 +18,9 @@ import io.github.dorumrr.privacyflip.root.RootManager
  * 
  * Detection methods:
  * - WiFi: Uses dumpsys connectivity to check for active WIFI connection
- * - Bluetooth: Uses dumpsys bluetooth_manager to check ConnectionState
+ * - Bluetooth: Uses BluetoothAdapter's own connection-state API (needs BLUETOOTH_CONNECT
+ *   on Android 12+) - no dumpsys parsing, see isBluetoothConnected()
+ * - Hotspot: Uses dumpsys tethering to check for an active tethered interface
  * - Location: Uses dumpsys location to check for active location requests (e.g., navigation apps)
  * - Microphone: Uses AudioManager to check call/communication mode
  */
@@ -77,223 +85,93 @@ class ConnectionStateChecker(
     }
 
     /**
-     * Check if Bluetooth is connected to any device.
-     * Uses multiple detection methods with fallbacks for maximum reliability.
+     * Check if a WiFi hotspot (tethering) is currently active and serving a device.
+     *
+     * WiFi client mode and hotspot/AP mode share the same radio, so disabling WiFi
+     * on lock also kills a running hotspot for anyone tethered to it (#34). Uses
+     * Android's own tethering service (dumpsys tethering), which is a stable,
+     * OEM-independent part of the platform since Android 11, unlike the WiFi
+     * AP-state fields in "dumpsys wifi" which vary by manufacturer and ROM.
+     *
+     * "TetheredState" is the interface state Android uses specifically for an
+     * active, serving hotspot (confirmed on a real device: the idle state reads
+     * "ap0 - AvailableState"). Only that exact state counts, so a device merely
+     * capable of tethering (but not doing it) is never mistaken for an active one.
      */
-    private suspend fun isBluetoothConnected(): Boolean {
-        Log.d(TAG, "🔵 Starting Bluetooth connection check...")
-        
+    suspend fun isHotspotActive(): Boolean {
         return try {
-            // Method 1: Try primary detection (bluetooth_manager)
-            val method1Result = checkBluetoothManager()
-            if (method1Result != null) {
-                Log.i(TAG, "🔵 Bluetooth check - Method 1 (bluetooth_manager): ${if (method1Result) "CONNECTED" else "NOT CONNECTED"}")
-                return method1Result
+            val result = rootManager.executeCommand(
+                "dumpsys tethering | grep -A6 'Tether state:'"
+            )
+
+            if (!result.success) {
+                Log.w(TAG, "📡 Failed to check hotspot state via dumpsys tethering")
+                return false
             }
-            
-            // Method 2: Try audio output detection
-            Log.d(TAG, "🔵 Method 1 failed, trying Method 2 (audio output)...")
-            val method2Result = checkAudioOutput()
-            if (method2Result != null) {
-                Log.i(TAG, "🔵 Bluetooth check - Method 2 (audio output): ${if (method2Result) "CONNECTED" else "NOT CONNECTED"}")
-                return method2Result
-            }
-            
-            // Method 3: Try media session detection
-            Log.d(TAG, "🔵 Method 2 failed, trying Method 3 (media session)...")
-            val method3Result = checkMediaSession()
-            if (method3Result != null) {
-                Log.i(TAG, "🔵 Bluetooth check - Method 3 (media session): ${if (method3Result) "CONNECTED" else "NOT CONNECTED"}")
-                return method3Result
-            }
-            
-            // Method 4: Try generic bluetooth service dump
-            Log.d(TAG, "🔵 Method 3 failed, trying Method 4 (bluetooth service)...")
-            val method4Result = checkBluetoothService()
-            if (method4Result != null) {
-                Log.i(TAG, "🔵 Bluetooth check - Method 4 (bluetooth service): ${if (method4Result) "CONNECTED" else "NOT CONNECTED"}")
-                return method4Result
-            }
-            
-            // All methods failed
-            Log.w(TAG, "🔵 All Bluetooth detection methods failed - assuming NOT CONNECTED")
+
+            val output = result.output.joinToString("\n")
+            // Tetherable WiFi interfaces per AOSP: wlan\d, softap\d, ap\d, swlan0
+            val isActive = Regex("(?:wlan\\d+|softap\\d+|ap\\d+|swlan0)\\s*-\\s*TetheredState", RegexOption.IGNORE_CASE)
+                .containsMatchIn(output)
+
+            Log.i(TAG, "📡 Hotspot check: ${if (isActive) "ACTIVE" else "NOT ACTIVE"}")
+            isActive
+        } catch (e: Exception) {
+            Log.e(TAG, "📡 Error checking hotspot state", e)
             false
-            
+        }
+    }
+
+    /**
+     * Check if Bluetooth is connected to any device, using Android's own
+     * BluetoothAdapter API - not dumpsys text. #28 traced back to the old
+     * approach (4 stacked guesses at raw dumpsys wording) silently failing on
+     * some phone makers whose dumpsys output doesn't match any of the guessed
+     * patterns. getProfileConnectionState() is the same synchronous, no-root
+     * API real launcher/accessory apps use, and needs no shell access at all.
+     *
+     * Needs BLUETOOTH_CONNECT (a runtime-prompted permission from Android 12+,
+     * requested from the settings screen when this feature is turned on - see
+     * MainFragment's onlyIfUnusedCheckbox listener). Below Android 12 the older,
+     * non-prompting BLUETOOTH permission covers it.
+     */
+    private fun isBluetoothConnected(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "🔵 BLUETOOTH_CONNECT not granted - cannot check Bluetooth connection state")
+                return false
+            }
+
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val adapter = bluetoothManager?.adapter
+            if (adapter == null || !adapter.isEnabled) {
+                Log.d(TAG, "🔵 Bluetooth adapter unavailable or off - NOT CONNECTED")
+                return false
+            }
+
+            // The profiles a real accessory (headphones, a car kit, a hearing aid)
+            // actually connects through. Not an exhaustive list of every profile
+            // Android has - just the ones relevant to "is something in active use".
+            val profiles = listOf(
+                BluetoothProfile.A2DP to "A2DP (audio)",
+                BluetoothProfile.HEADSET to "HEADSET (calls)",
+                BluetoothProfile.HEARING_AID to "HEARING_AID"
+            )
+            val connectedOn = profiles.firstOrNull { (profile, _) ->
+                adapter.getProfileConnectionState(profile) == BluetoothProfile.STATE_CONNECTED
+            }
+
+            Log.i(TAG, "🔵 Bluetooth connection check: ${if (connectedOn != null) "CONNECTED (${connectedOn.second})" else "NOT CONNECTED"}")
+            connectedOn != null
+        } catch (e: SecurityException) {
+            Log.w(TAG, "🔵 Missing Bluetooth permission when checking connection state", e)
+            false
         } catch (e: Exception) {
             Log.e(TAG, "🔵 Error checking Bluetooth connection state", e)
             false
-        }
-    }
-
-    /**
-     * Method 1: Check Bluetooth connection via bluetooth_manager.
-     * Most reliable method for detecting Bluetooth connections.
-     * 
-     * @return true if connected, false if not connected, null if detection failed
-     */
-    private suspend fun checkBluetoothManager(): Boolean? {
-        return try {
-            val result = rootManager.executeCommand(
-                "dumpsys bluetooth_manager | grep -i -E 'ConnectionState.*CONNECTED|profile.*CONNECTED|A2DP.*CONNECTED|HFP.*CONNECTED'"
-            )
-            
-            if (!result.success) {
-                Log.w(TAG, "🔵 Method 1: bluetooth_manager command failed")
-                return null
-            }
-
-            val output = result.output.joinToString("\n")
-            Log.d(TAG, "🔵 Method 1 output (first 200 chars): ${output.take(200)}")
-            
-            if (output.isEmpty()) {
-                Log.d(TAG, "🔵 Method 1: Empty output, trying next method")
-                return null
-            }
-            
-            val outputUpper = output.uppercase()
-            
-            // Check for connected state
-            val hasConnected = outputUpper.contains("STATE_CONNECTED") ||
-                              outputUpper.contains("MCONNECTIONSTATE: CONNECTED") ||
-                              outputUpper.contains("CONNECTIONSTATE: CONNECTED") ||
-                              outputUpper.contains("PROFILE: CONNECTED") ||
-                              outputUpper.contains("A2DP: CONNECTED") ||
-                              outputUpper.contains("HFP: CONNECTED")
-            
-            // Make sure we're not just seeing DISCONNECTED
-            val hasDisconnectedOnly = outputUpper.contains("DISCONNECTED") && !hasConnected
-            
-            val isConnected = hasConnected && !hasDisconnectedOnly
-            
-            Log.d(TAG, "🔵 Method 1: hasConnected=$hasConnected, hasDisconnectedOnly=$hasDisconnectedOnly, result=$isConnected")
-            
-            isConnected
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "🔵 Method 1 exception", e)
-            null
-        }
-    }
-
-    /**
-     * Method 2: Check Bluetooth connection via audio subsystem.
-     * Detects active Bluetooth audio output devices.
-     * 
-     * @return true if connected, false if not connected, null if detection failed
-     */
-    private suspend fun checkAudioOutput(): Boolean? {
-        return try {
-            val result = rootManager.executeCommand(
-                "dumpsys audio | grep -i -E 'DEVICE_OUT.*BLUETOOTH|Output Device.*BLUETOOTH|mBluetoothA2dp.*true'"
-            )
-            
-            if (!result.success) {
-                Log.w(TAG, "🔵 Method 2: audio command failed")
-                return null
-            }
-
-            val output = result.output.joinToString("\n")
-            Log.d(TAG, "🔵 Method 2 output (first 200 chars): ${output.take(200)}")
-            
-            if (output.isEmpty()) {
-                return null
-            }
-            
-            val outputUpper = output.uppercase()
-            
-            val hasBluetoothOutput = outputUpper.contains("DEVICE_OUT_BLUETOOTH") ||
-                                    outputUpper.contains("OUTPUT DEVICE: BLUETOOTH") ||
-                                    outputUpper.contains("BLUETOOTHA2DP: TRUE") ||
-                                    outputUpper.contains("BLUETOOTH_A2DP")
-            
-            Log.d(TAG, "🔵 Method 2: hasBluetoothOutput=$hasBluetoothOutput")
-            
-            hasBluetoothOutput
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "🔵 Method 2 exception", e)
-            null
-        }
-    }
-
-    /**
-     * Method 3: Check Bluetooth connection via media session.
-     * Detects active Bluetooth media playback sessions.
-     * 
-     * @return true if connected, false if not connected, null if detection failed
-     */
-    private suspend fun checkMediaSession(): Boolean? {
-        return try {
-            val result = rootManager.executeCommand(
-                "dumpsys media_session | grep -i -A 5 'bluetooth'"
-            )
-            
-            if (!result.success) {
-                Log.w(TAG, "🔵 Method 3: media_session command failed")
-                return null
-            }
-
-            val output = result.output.joinToString("\n")
-            Log.d(TAG, "🔵 Method 3 output (first 200 chars): ${output.take(200)}")
-            
-            if (output.isEmpty()) {
-                return null
-            }
-            
-            val outputUpper = output.uppercase()
-            
-            val hasBluetoothMedia = (outputUpper.contains("BLUETOOTH") && 
-                                    outputUpper.contains("ACTIVE")) ||
-                                   (outputUpper.contains("BLUETOOTH") && 
-                                    outputUpper.contains("PLAYING"))
-            
-            Log.d(TAG, "🔵 Method 3: hasBluetoothMedia=$hasBluetoothMedia")
-            
-            hasBluetoothMedia
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "🔵 Method 3 exception", e)
-            null
-        }
-    }
-
-    /**
-     * Method 4: Check Bluetooth connection via bluetooth service.
-     * Broad detection of any connected Bluetooth devices.
-     * 
-     * @return true if connected, false if not connected, null if detection failed
-     */
-    private suspend fun checkBluetoothService(): Boolean? {
-        return try {
-            val result = rootManager.executeCommand(
-                "dumpsys bluetooth | grep -i -E 'connected devices|bonded.*connected'"
-            )
-            
-            if (!result.success) {
-                Log.w(TAG, "🔵 Method 4: bluetooth service command failed")
-                return null
-            }
-
-            val output = result.output.joinToString("\n")
-            Log.d(TAG, "🔵 Method 4 output (first 200 chars): ${output.take(200)}")
-            
-            if (output.isEmpty()) {
-                return null
-            }
-            
-            val outputUpper = output.uppercase()
-            
-            val hasConnectedDevices = (outputUpper.contains("CONNECTED DEVICES") && 
-                                       !outputUpper.contains("CONNECTED DEVICES: NONE")) ||
-                                      outputUpper.contains("BONDED AND CONNECTED")
-            
-            Log.d(TAG, "🔵 Method 4: hasConnectedDevices=$hasConnectedDevices")
-            
-            hasConnectedDevices
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "🔵 Method 4 exception", e)
-            null
         }
     }
 

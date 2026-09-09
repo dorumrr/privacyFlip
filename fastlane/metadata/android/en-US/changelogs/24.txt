@@ -1,0 +1,5 @@
+Fixed instant lock (side/function key) so camera and mic actually get blocked, without misfiring on the notification shade
+Fixed lock delay being skipped when the phone was already locked
+App exemption list now sees every installed app
+Fixed WiFi disable turning off an active hotspot
+Bluetooth "only if not connected" now uses Android's own API (asks for a one-time permission) for better handling

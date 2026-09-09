@@ -53,9 +53,26 @@ class ScreenStateReceiver : BroadcastReceiver() {
             }
 
             Intent.ACTION_SCREEN_ON -> {
-                logDebug(context, "💡 Screen turned ON (but may still be locked - waiting for USER_PRESENT)")
-                // Cancel any pending lock workers since screen is back on
-                cancelPendingLockWork(context)
+                // Only cancel the pending lock work if the phone is genuinely back in
+                // use (no keyguard, or none configured). A screen that merely wakes
+                // while still locked - a notification, raise-to-wake, a glance at the
+                // lock screen - is not a real return to use, and used to cancel the
+                // whole pending disable outright even though the phone was still
+                // locked the entire time. On an already-locked phone the lock delay
+                // is now always honoured (#30), so this blip window got a lot easier
+                // to hit than when the already-locked case used to skip the wait.
+                val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                // Same conservative default as the SCREEN_OFF handler above: if the
+                // lock state genuinely can't be read, assume still locked rather than
+                // cancel protection on a guess.
+                val isStillLocked = keyguardManager?.isKeyguardLocked ?: true
+
+                if (isStillLocked) {
+                    logDebug(context, "💡 Screen turned ON but still locked - keeping pending lock work")
+                } else {
+                    logDebug(context, "💡 Screen turned ON and not locked - cancelling pending lock work")
+                    cancelPendingLockWork(context)
+                }
             }
 
             else -> {

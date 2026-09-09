@@ -16,7 +16,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
-    
+
+    <!-- Lets the Exempt Apps picker see every installed app, not just ones with a
+         launcher icon - the picker's own text promises "exempt ANY app including
+         system apps" (ExemptAppsDialogFragment.kt), and a narrower <queries> block
+         could not keep that promise. Android 11+ hides installed apps from each
+         other by default unless the app declares it needs to see everything. #30 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Bluetooth connection-state check for "disable on lock only if not connected"
+         (#28). BLUETOOTH_CONNECT is a runtime-prompted permission from Android 12+;
+         below that, the older BLUETOOTH permission covers it with no prompt. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -89,12 +102,18 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="io.github.dorumrr.privacyflip.TOGGLE_PRIVACY" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/privacy_flip_widget_info" />
         </receiver>
+
+        <!-- Handles the widget's toggle tap only. Not exported: only this
+             app's own widget tap (a PendingIntent it built itself) can reach
+             it, so no other app on the phone can flip protection off. -->
+        <receiver
+            android:name=".widget.PrivacyFlipWidgetToggleReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".receiver.BootReceiver"

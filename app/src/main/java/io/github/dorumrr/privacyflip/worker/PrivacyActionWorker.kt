@@ -145,11 +145,22 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     logDebug("Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
+                    // Never disable WiFi while an active hotspot is running, regardless of the
+                    // per-feature "only if unused" setting - the radio is shared, so turning WiFi
+                    // off silently kills the hotspot for anyone tethered to it (#34).
+                    val hotspotActive = PrivacyFeature.WIFI in featuresToDisable &&
+                        connectionChecker.isHotspotActive()
+                    if (hotspotActive) {
+                        logDebug("📡 Hotspot is active - keeping WiFi on despite lock")
+                        debugNotifier.notifyFeatureSkipped("WiFi", "hotspot is active")
+                    }
+
                     // Filter features based on "only if unused/not connected" setting
                     val skippedFeatures = mutableListOf<String>()
                     val filteredFeatures = featuresToDisable.filter { feature ->
-                        val onlyIfUnused = preferenceManager.getFeatureOnlyIfUnused(feature)
-                        if (!onlyIfUnused) {
+                        if (feature == PrivacyFeature.WIFI && hotspotActive) {
+                            false // Hotspot check above already decided this one
+                        } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
                             true // Always disable if "only if unused" is not enabled
                         } else {
                             // Check if feature is in use
@@ -221,17 +232,15 @@ class PrivacyActionWorker(
                         logDebug("📊 regularFeatures count: ${regularFeatures.size}, protectionModes count: ${protectionModes.size}")
                         logDebug("📊 regularFeatures: ${regularFeatures.map { it.displayName }}")
 
-                        // If device is already locked, disable immediately (no delay)
-                        // User won't see the transition anyway since screen is off
-                        // This prevents race condition where user unlocks during delay
-                        val lockDelay = if (isDeviceLocked) {
-                            logDebug("⚡ Device already locked - disabling features immediately (no delay)")
-                            0
-                        } else {
-                            preferenceManager.lockDelaySeconds
-                        }
+                        // Always honour the user's configured delay, even if the device is
+                        // already locked by the time this job runs (#30). Most phones lock
+                        // instantly on screen-off, so skipping the delay in that case used to
+                        // mean the delay setting rarely applied at all. Safe to always wait:
+                        // the isStillLocked check right below already cancels the whole action
+                        // if the user unlocks again during the wait.
+                        val lockDelay = preferenceManager.lockDelaySeconds
 
-                        logDebug("⏱️ Lock delay calculated: ${lockDelay}s (isDeviceLocked=$isDeviceLocked)")
+                        logDebug("⏱️ Lock delay: ${lockDelay}s (isDeviceLocked=$isDeviceLocked, always honoured)")
 
                         if (lockDelay > 0) {
                             logDebug("⏳ Waiting ${lockDelay}s before disabling other features")

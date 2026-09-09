@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
+import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.work.ExistingWorkPolicy
@@ -60,13 +62,21 @@ class PrivacyAccessibilityService : AccessibilityService() {
             }
             
             val className = event.className?.toString() ?: ""
-            
-            // Detect if this is a lock screen window
+
+            // Detect if this is a lock screen window. This has to fire and act
+            // immediately, with no confirmation step: by the time
+            // KeyguardManager.isKeyguardLocked() can be confirmed true, Android's own
+            // lock restriction already blocks changing sensor privacy, so gating on
+            // it here would make this service unable to ever do the one thing it
+            // exists for. isLockScreenClass() is the only gate, so its wording has to
+            // carry the whole burden of telling a real lock apart from the
+            // notification shade (see its own doc for why "StatusBar" was dropped).
             if (isLockScreenClass(className)) {
-                Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className)")
+                val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className, isKeyguardLocked=${keyguardManager?.isKeyguardLocked})")
                 triggerEarlyPrivacyActions()
             }
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Error processing accessibility event", e)
         }
@@ -74,17 +84,24 @@ class PrivacyAccessibilityService : AccessibilityService() {
 
     /**
      * Detects if the window class name indicates a lock screen.
-     * Uses conservative matching to avoid false positives.
-     * 
-     * Common lock screen class names across Android versions:
-     * - com.android.systemui.statusbar.phone.StatusBar
+     *
+     * Deliberately does NOT match "StatusBar" any more. It used to, and that let a
+     * genuine keyguard signal through on some devices - but the notification shade
+     * is rendered by the same StatusBar-lineage classes in AOSP, so it also fired
+     * this on a mere shade pull while the phone was unlocked and in active use
+     * (#26). "Keyguard" and "LockScreen" are specific to the actual lock mechanism
+     * itself, and cover every real-world class name this project has seen recorded
+     * for lock-screen appearance, so dropping "StatusBar" removes the false
+     * positive without (as far as recorded evidence shows) losing real locks:
      * - com.android.internal.policy.impl.keyguard.KeyguardViewMediator
      * - com.android.systemui.keyguard.KeyguardViewMediator
-     * - Various manufacturer-specific lock screen classes
+     * - Various manufacturer-specific Keyguard or LockScreen classes
+     * If a device's real keyguard reports through neither word, its logs will show
+     * no "Lock screen detected via Accessibility" line at all when it locks -
+     * that is the signal a device needs a name added here, not a wider net.
      */
     private fun isLockScreenClass(className: String): Boolean {
-        return className.contains("StatusBar", ignoreCase = true) ||
-               className.contains("Keyguard", ignoreCase = true) ||
+        return className.contains("Keyguard", ignoreCase = true) ||
                className.contains("LockScreen", ignoreCase = true)
     }
 

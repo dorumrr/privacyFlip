@@ -119,6 +119,6 @@ object Constants {
     }
 
     object UI {
-        const val DONATE_URL = "https://buymeacoffee.com/ossdev"
+        const val DONATE_URL = "https://www.paypal.me/duoveselia"
     }
 }

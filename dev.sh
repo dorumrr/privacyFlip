@@ -110,6 +110,71 @@ launch_app() {
     echo "✅ App launched!"
 }
 
+# Guard against building a release from a tree nobody else can reproduce.
+# A release APK has to be reproducible from what is published, because IzzyOnDroid rebuilds the
+# tag from source and compares the result to the published APK byte for byte. Gradle compiles the
+# WORKING TREE, not git - so an edited file, an untracked .kt, or a commit that never left this
+# machine all end up inside the APK while being absent from the tag anyone else can fetch. The
+# rebuild then differs and the check fails, and the only clue is a hash mismatch weeks later.
+#
+# Untracked files really do matter here: a new source file that was never `git add`ed compiles in.
+# Files ignored by .gitignore are not reported - git status --porcelain already leaves them out -
+# so build output and scratch files do not trip this.
+check_release_tree_is_published() {
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "⚠️  Not a git repository - cannot check whether this build is reproducible."
+        return 0
+    fi
+
+    local dirty="" upstream="" unpushed="" confirm=""
+
+    dirty=$(git status --porcelain 2>/dev/null || true)
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
+    if [ -n "$upstream" ]; then
+        unpushed=$(git log --oneline "${upstream}..HEAD" 2>/dev/null || true)
+    fi
+
+    if [ -z "$dirty" ] && [ -z "$unpushed" ] && [ -n "$upstream" ]; then
+        echo "✅ Working tree is clean and pushed to ${upstream}"
+        return 0
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🚫 RELEASE BLOCKED - this build would not be reproducible"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if [ -n "$dirty" ]; then
+        echo "  Uncommitted changes ($(printf '%s\n' "$dirty" | wc -l | tr -d ' ')):"
+        printf '%s\n' "$dirty" | sed 's/^/    /'
+        echo ""
+    fi
+
+    if [ -z "$upstream" ]; then
+        echo "  This branch has no upstream, so nothing here has been pushed."
+        echo "  Set one with: git push -u origin $(git rev-parse --abbrev-ref HEAD)"
+        echo ""
+    elif [ -n "$unpushed" ]; then
+        echo "  Commits not pushed to ${upstream} ($(printf '%s\n' "$unpushed" | wc -l | tr -d ' ')):"
+        printf '%s\n' "$unpushed" | sed 's/^/    /'
+        echo ""
+    fi
+
+    echo "  Anyone rebuilding this version from git will NOT get this APK."
+    echo "  Commit and push first, then tag the commit you build from."
+    echo ""
+
+    read -p "Continue anyway? (yes/no): " confirm || confirm=""
+    if [ "$confirm" != "yes" ]; then
+        echo "❌ Release build cancelled - nothing was built."
+        exit 1
+    fi
+
+    echo "⚠️  Building from an unpublished tree at your request. Do not publish this APK."
+    echo ""
+}
+
 # Main menu
 case "${1:-menu}" in
     "emulator")
@@ -331,6 +396,9 @@ case "${1:-menu}" in
         echo "============================="
         echo ""
 
+        # Refuse to build something nobody else could reproduce (see the function above).
+        check_release_tree_is_published
+
         # Check if keystore.properties exists
         if [ ! -f "keystore.properties" ]; then
             echo "❌ ERROR: keystore.properties not found!"
@@ -442,16 +510,10 @@ case "${1:-menu}" in
                 echo ""
             fi
 
-            # Get current git status
+            # Get current commit info for the summary below. Tree state itself was
+            # already checked and confirmed before the build ran, see the guard above.
             CURRENT_COMMIT=$(git rev-parse HEAD)
             CURRENT_COMMIT_SHORT=$(git rev-parse --short HEAD)
-            GIT_STATUS=$(git status --porcelain)
-
-            if [ -n "$GIT_STATUS" ]; then
-                echo "⚠️  WARNING: You have uncommitted changes!"
-                echo "   Commit your changes before creating a release."
-                echo ""
-            fi
 
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📋 QUICK REFERENCE"

@@ -447,6 +447,18 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Reload the global privacy on/off state from preferences.
+     * Call this on resume: the Quick Settings tile and the home screen widget
+     * both write this value directly to preferences, bypassing the ViewModel,
+     * so without this the screen can keep showing a stale state after either
+     * of them is used while the app sits in the background.
+     */
+    fun reloadGlobalPrivacyStatus() {
+        logManager.d(TAG, "Reloading global privacy status from preferences (triggered by onResume)")
+        loadGlobalPrivacyStatus()
+    }
+
     private fun loadGlobalPrivacyStatus() {
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
         val debugNotificationsEnabled = preferenceManager.debugNotificationsEnabled

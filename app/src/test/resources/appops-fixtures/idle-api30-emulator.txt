@@ -1,0 +1,651 @@
+Current AppOps Service state:
+  Settings:
+    top_state_settle_time=+5s0ms
+    fg_service_state_settle_time=+5s0ms
+    bg_state_settle_time=+1s0ms
+
+  Op mode watchers:
+    Op COARSE_LOCATION:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{4f02841 watchinguid=-1 flags=0x1 op=COARSE_LOCATION from uid=1000 pid=498}
+    Op READ_CONTACTS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op WRITE_CONTACTS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op READ_CALL_LOG:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op WRITE_CALL_LOG:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op READ_CALENDAR:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op WRITE_CALENDAR:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op CALL_PHONE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op READ_SMS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RECEIVE_SMS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RECEIVE_MMS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RECEIVE_WAP_PUSH:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op SEND_SMS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op WRITE_SETTINGS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op SYSTEM_ALERT_WINDOW:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{3b41a3f watchinguid=-1 flags=0x0 op=SYSTEM_ALERT_WINDOW from uid=1000 pid=498}
+    Op CAMERA:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RECORD_AUDIO:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op TOAST_WINDOW:
+      #0: ModeCallback{3b41a3f watchinguid=-1 flags=0x0 op=SYSTEM_ALERT_WINDOW from uid=1000 pid=498}
+    Op READ_PHONE_STATE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op ADD_VOICEMAIL:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op USE_SIP:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op PROCESS_OUTGOING_CALLS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op BODY_SENSORS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op READ_CELL_BROADCASTS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op READ_EXTERNAL_STORAGE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op WRITE_EXTERNAL_STORAGE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op GET_ACCOUNTS:
+      #0: ModeCallback{12aa0de watchinguid=-1 flags=0x0 op=GET_ACCOUNTS from uid=1000 pid=498}
+      #1: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RUN_IN_BACKGROUND:
+      #0: ModeCallback{be36012 watchinguid=-1 flags=0x0 op=RUN_IN_BACKGROUND from uid=1000 pid=498}
+    Op READ_PHONE_NUMBERS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op INSTANT_APP_START_FOREGROUND:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op ANSWER_PHONE_CALLS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op RUN_ANY_IN_BACKGROUND:
+      #0: ModeCallback{789295 watchinguid=-1 flags=0x0 op=RUN_ANY_IN_BACKGROUND from uid=1000 pid=498}
+    Op ACCEPT_HANDOVER:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op ACTIVITY_RECOGNITION:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op SMS_FINANCIAL_TRANSACTIONS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op WRITE_MEDIA_VIDEO:
+      #0: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op WRITE_MEDIA_IMAGES:
+      #0: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op LEGACY_STORAGE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op ACCESS_MEDIA_LOCATION:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op MANAGE_EXTERNAL_STORAGE:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+      #1: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    Op INTERACT_ACROSS_PROFILES:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op LOADER_USAGE_STATS:
+      #0: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    Op NO_ISOLATED_STORAGE:
+      #0: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+  All op mode watchers:
+    24d65e: ModeCallback{3b41a3f watchinguid=-1 flags=0x0 op=SYSTEM_ALERT_WINDOW from uid=1000 pid=498}
+    5139dc4: ModeCallback{d0414ad watchinguid=-1 flags=0x0 op=READ_EXTERNAL_STORAGE from uid=u0a129 pid=1284}
+    862e819: ModeCallback{12aa0de watchinguid=-1 flags=0x0 op=GET_ACCOUNTS from uid=1000 pid=498}
+    9243328: ModeCallback{4f02841 watchinguid=-1 flags=0x1 op=COARSE_LOCATION from uid=1000 pid=498}
+    e45424c: ModeCallback{789295 watchinguid=-1 flags=0x0 op=RUN_ANY_IN_BACKGROUND from uid=1000 pid=498}
+    e6cf616: ModeCallback{263ab97 watchinguid=-1 flags=0x0 op=READ_SMS from uid=1000 pid=498}
+    f5f139d: ModeCallback{be36012 watchinguid=-1 flags=0x0 op=RUN_IN_BACKGROUND from uid=1000 pid=498}
+  All op active watchers:
+    70193e3 ->
+        [CAMERA]
+        ActiveCallback{f790384 watchinguid=-1 from uid=1000 pid=498}
+    9abd0d7 ->
+        [CAMERA]
+        ActiveCallback{1b0e76d watchinguid=-1 from uid=u0a129 pid=1284}
+    fa36ad6 ->
+        [COARSE_LOCATION, FINE_LOCATION, SYSTEM_ALERT_WINDOW, CAMERA, RECORD_AUDIO]
+        ActiveCallback{a23efa2 watchinguid=-1 from uid=u0a121 pid=670}
+  All op noted watchers:
+    aa5e157 ->
+        [COARSE_LOCATION, FINE_LOCATION, SYSTEM_ALERT_WINDOW, CAMERA, RECORD_AUDIO]
+        NotedCallback{e2f3d22 watchinguid=-1 from uid=u0a121 pid=670}
+
+  Uid 0:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    Package com.android.phone:
+      MANAGE_IPSEC_TUNNELS (allow): 
+  Uid 1000:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+    Package android:
+      COARSE_LOCATION (allow): 
+      FINE_LOCATION (allow / switch COARSE_LOCATION=allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 23:21:48.534 (-29s137ms)
+        ]
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [pers-tpd] 2025-11-17 12:27:24.033 (-296d9h54m53s638ms) proxy[uid=10067, pkg=com.android.providers.contacts, attributionTag=null]
+        ]
+      READ_CALENDAR (allow): 
+        null=[
+          Access: [pers-tpd] 2026-09-09 23:21:46.052 (-31s619ms) proxy[uid=10069, pkg=com.android.providers.calendar, attributionTag=null]
+        ]
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:24:50.405 (-57m27s266ms)
+        ]
+      MONITOR_LOCATION (allow / switch COARSE_LOCATION=allow): 
+        SensorNotificationService=[
+          Access: [pers-s] 2026-09-09 22:23:30.636 (-58m47s35ms) duration=+1m51s438ms
+          Running start at: +1m51s438ms
+        ]
+      GET_USAGE_STATS (default): 
+        null=[
+          Reject: [pers-s]2026-09-09 22:23:30.636 (-58m47s35ms)
+        ]
+    Package com.android.server.telecom:
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [pers-tpd] 2026-09-09 22:23:31.511 (-58m46s160ms) proxy[uid=10067, pkg=com.android.providers.userdictionary, attributionTag=null]
+        ]
+    Package com.android.settings:
+      GET_USAGE_STATS (default): 
+        null=[
+          Reject: [pers-s]2026-09-09 22:23:32.304 (-58m45s367ms)
+        ]
+  Uid 1001:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+      WRITE_SMS: mode=allow
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.phone:
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:30.529 (-58m47s142ms)
+        ]
+      READ_SMS (allow): 
+        null=[
+          Access: [pers-tp] 2026-09-09 22:23:32.247 (-58m45s424ms)
+        ]
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:24:50.404 (-57m27s267ms) duration=+1ms
+        ]
+      READ_PHONE_STATE (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:50.392 (-58m27s279ms)
+        ]
+  Uid 1002:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+      WRITE_SMS: mode=allow
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.bluetooth:
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [pers-tpd] 2026-09-09 22:23:34.216 (-58m43s455ms) proxy[uid=10067, pkg=com.android.providers.userdictionary, attributionTag=null]
+        ]
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:30.228 (-58m47s443ms) duration=+1ms
+        ]
+      GET_USAGE_STATS (default): 
+        null=[
+          Reject: [pers-s]2026-09-09 22:23:30.197 (-58m47s474ms)
+        ]
+  Uid 1027:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid 1037:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid 1041:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    Package audioserver:
+      GET_USAGE_STATS (default): 
+        null=[
+          Reject: [cch-s]2026-09-09 23:22:01.028 (-16s643ms)
+        ]
+  Uid 1068:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+  Uid 1073:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+    Package com.android.cellbroadcastservice:
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:30.174 (-58m47s497ms) duration=+3s5ms
+        ]
+  Uid 2000:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a61:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a65:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid u0a67:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    Package com.android.providers.blockednumber:
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:26:55.505 (-296d9h55m22s166ms)
+        ]
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:26:52.459 (-296d9h55m25s212ms)
+        ]
+      WRITE_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:26:52.255 (-296d9h55m25s416ms)
+        ]
+      ADD_VOICEMAIL (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:26:53.297 (-296d9h55m24s374ms)
+        ]
+    Package com.android.providers.userdictionary:
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [fg-tp] 2026-09-09 22:23:34.216 (-58m43s455ms)
+        ]
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2026-09-09 22:23:31.511 (-58m46s160ms)
+        ]
+      WRITE_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2026-09-09 22:23:30.955 (-58m46s716ms)
+        ]
+      ADD_VOICEMAIL (allow): 
+        null=[
+          Access: [fg-tp] 2026-09-09 22:23:32.857 (-58m44s814ms)
+          Access: [bg-tp] 2026-09-09 22:24:37.928 (-57m39s743ms)
+        ]
+    Package com.android.providers.contacts:
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:27:27.662 (-296d9h54m50s9ms)
+        ]
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:27:23.997 (-296d9h54m53s674ms)
+        ]
+      WRITE_CALL_LOG (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:27:23.970 (-296d9h54m53s701ms)
+        ]
+      ADD_VOICEMAIL (allow): 
+        null=[
+          Access: [fg-tp] 2025-11-17 12:27:25.468 (-296d9h54m52s203ms)
+        ]
+  Uid u0a69:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.providers.calendar:
+      READ_CALENDAR (allow): 
+        null=[
+          Access: [fg-tp] 2026-09-09 23:21:46.620 (-31s51ms)
+          Access: [bg-tp] 2026-09-09 23:21:51.009 (-26s662ms)
+        ]
+      WRITE_CALENDAR (allow): 
+        null=[
+          Access: [bg-tp] 2026-09-09 22:23:32.297 (-58m45s374ms)
+        ]
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:32.297 (-58m45s374ms) duration=+2ms
+        ]
+  Uid u0a70:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a71:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.soundpicker:
+      MANAGE_EXTERNAL_STORAGE (default): 
+        null=[
+          Reject: [fg-s]2025-11-17 12:26:52.065 (-296d9h55m25s606ms)
+        ]
+  Uid u0a72:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    Package com.android.cellbroadcastreceiver:
+      READ_CELL_BROADCASTS (allow): 
+        null=[
+          Access: [bg-up] 2025-11-17 12:26:51.850 (-296d9h55m25s821ms)
+        ]
+  Uid u0a74:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a75:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid u0a76:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+  Uid u0a83:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+  Uid u0a84:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+  Uid u0a86:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_EXTERNAL_STORAGE: mode=ignore
+      WRITE_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a95:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid u0a96:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid u0a97:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_PHONE_STATE: mode=ignore
+  Uid u0a98:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a99:
+    state=bg
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+      READ_EXTERNAL_STORAGE: mode=ignore
+      WRITE_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.dialer:
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [bg-tpd] 2026-09-09 22:23:31.480 (-58m46s191ms) proxy[uid=10067, pkg=com.android.providers.userdictionary, attributionTag=null]
+        ]
+      SEND_SMS (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:24:37.934 (-57m39s737ms)
+        ]
+      READ_PHONE_STATE (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:31.103 (-58m46s568ms)
+          Access: [cch-s] 2026-09-09 22:23:30.595 (-58m47s76ms)
+        ]
+      ADD_VOICEMAIL (allow): 
+        null=[
+          Access: [bg-tpd] 2026-09-09 22:24:37.928 (-57m39s743ms) proxy[uid=10067, pkg=com.android.providers.userdictionary, attributionTag=null]
+        ]
+  Uid u0a101:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_CONTACTS: mode=ignore
+  Uid u0a102:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+  Uid u0a103:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      WRITE_SMS: mode=allow
+      LEGACY_STORAGE: mode=allow
+      READ_DEVICE_IDENTIFIERS: mode=allow
+    Package com.android.messaging:
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [bg-tpd] 2026-09-09 22:23:32.847 (-58m44s824ms) proxy[uid=10067, pkg=com.android.providers.userdictionary, attributionTag=null]
+        ]
+      READ_SMS (allow): 
+        null=[
+          Access: [bg-tpd] 2026-09-09 22:23:32.247 (-58m45s424ms) proxy[uid=1001, pkg=com.android.phone, attributionTag=null]
+        ]
+      READ_PHONE_STATE (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:32.846 (-58m44s825ms)
+        ]
+      RUN_IN_BACKGROUND (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:32.826 (-58m44s845ms)
+          Access: [cch-s] 2026-09-09 22:23:32.048 (-58m45s623ms)
+        ]
+      READ_DEVICE_IDENTIFIERS (deny): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:32.845 (-58m44s826ms)
+        ]
+  Uid u0a105:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=allow
+      ACCESS_MEDIA_LOCATION: mode=ignore
+  Uid u0a106:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a108:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+      CAMERA: mode=ignore
+      RECORD_AUDIO: mode=ignore
+      READ_EXTERNAL_STORAGE: mode=ignore
+      WRITE_EXTERNAL_STORAGE: mode=ignore
+      GET_ACCOUNTS: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a109:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      COARSE_LOCATION: mode=ignore
+      CAMERA: mode=ignore
+      RECORD_AUDIO: mode=ignore
+      GET_ACCOUNTS: mode=ignore
+      WRITE_MEDIA_VIDEO: mode=allow
+      WRITE_MEDIA_IMAGES: mode=allow
+      LEGACY_STORAGE: mode=allow
+  Uid u0a110:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      READ_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=allow
+      ACCESS_MEDIA_LOCATION: mode=ignore
+    Package com.android.deskclock:
+      WAKE_LOCK (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 23:21:46.083 (-31s588ms) duration=+4ms
+        ]
+      RUN_IN_BACKGROUND (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 23:21:46.090 (-31s581ms)
+          Access: [cch-s] 2026-09-09 23:21:46.065 (-31s606ms)
+        ]
+  Uid u0a111:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+    Package com.android.calendar:
+      READ_CALENDAR (allow): 
+        null=[
+          Access: [bg-tpd] 2026-09-09 23:21:46.620 (-31s51ms) proxy[uid=10069, pkg=com.android.providers.calendar, attributionTag=null]
+        ]
+  Uid u0a112:
+    state=bg
+    capability=---
+    appWidgetVisible=false
+      READ_CONTACTS: mode=ignore
+      READ_EXTERNAL_STORAGE: mode=ignore
+      WRITE_EXTERNAL_STORAGE: mode=ignore
+      GET_ACCOUNTS: mode=ignore
+      LEGACY_STORAGE: mode=allow
+      ACCESS_MEDIA_LOCATION: mode=ignore
+  Uid u0a116:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a120:
+    state=top
+    capability=LCM
+    appWidgetVisible=false
+      CALL_PHONE: mode=ignore
+      READ_PHONE_STATE: mode=ignore
+      READ_EXTERNAL_STORAGE: mode=ignore
+      WRITE_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+  Uid u0a121:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.systemui:
+      COARSE_LOCATION (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:50.392 (-58m27s279ms)
+        ]
+      READ_CONTACTS (allow): 
+        null=[
+          Access: [pers-tpd] 2025-11-17 12:27:27.662 (-296d9h54m50s9ms) proxy[uid=10067, pkg=com.android.providers.contacts, attributionTag=null]
+        ]
+      READ_CALL_LOG (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:30.529 (-58m47s142ms)
+        ]
+      READ_PHONE_STATE (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:50.392 (-58m27s279ms)
+        ]
+      READ_MEDIA_IMAGES (allow): 
+        null=[
+          Access: [pers-s] 2026-09-09 22:23:30.303 (-58m47s368ms)
+        ]
+      MANAGE_EXTERNAL_STORAGE (default): 
+        null=[
+          Reject: [pers-s]2026-09-09 22:23:30.303 (-58m47s368ms)
+        ]
+  Uid u0a124:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      WRITE_SMS: mode=allow
+    Package com.android.cellbroadcastreceiver.module:
+      READ_PHONE_STATE (allow): 
+        null=[
+          Access: [bg-s] 2026-09-09 22:23:32.826 (-58m44s845ms)
+          Access: [cch-s] 2026-09-09 22:23:50.392 (-58m27s279ms)
+        ]
+      READ_CELL_BROADCASTS (allow): 
+        null=[
+          Access: [bg-upd] 2025-11-17 12:26:51.850 (-296d9h55m25s821ms) proxy[uid=10072, pkg=com.android.cellbroadcastreceiver, attributionTag=null]
+        ]
+  Uid u0a125:
+    state=fg
+    capability=---
+    appWidgetVisible=false
+    foregroundOps:
+      COARSE_LOCATION: WATCHER
+    hasForegroundWatchers=true
+      COARSE_LOCATION: mode=foreground
+  Uid u0a126:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+  Uid u0a129:
+    state=pers
+    capability=LCM
+    appWidgetVisible=false
+      LEGACY_STORAGE: mode=ignore
+    Package com.android.providers.media.module:
+      WRITE_SETTINGS (default): 
+        null=[
+          Reject: [pers-s]2025-11-17 12:26:54.855 (-296d9h55m22s816ms)
+        ]
+  Uid u0a131:
+    state=cch
+    capability=---
+    appWidgetVisible=false
+      CAMERA: mode=ignore
+      READ_EXTERNAL_STORAGE: mode=ignore
+      LEGACY_STORAGE: mode=ignore
+

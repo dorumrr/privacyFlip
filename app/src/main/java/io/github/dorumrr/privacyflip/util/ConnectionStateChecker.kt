@@ -215,15 +215,27 @@ class ConnectionStateChecker(
      * A dumpsys shape this parser doesn't recognise (an untested Android version, an unexpected
      * OEM change) used to print the same "NONE" as a genuinely idle device - indistinguishable
      * even in debug logs. The command now prints "NOBLOCKS" instead when it never matched a
-     * single location-family op header at all, so the two are told apart in the logs. This is
-     * separate from the command failing outright (awk missing, dumpsys itself erroring), which
-     * is still caught below by result.success and logged with whatever the shell reported.
-     * Either way this function still returns the same safe "not in use".
+     * single location-family op header at all, so the two are told apart in the logs. This
+     * reliably catches awk itself being missing (a pipeline's exit status is its last stage's,
+     * so a missing awk fails the whole pipe and is caught by result.success below). It does NOT
+     * reliably catch dumpsys itself failing partway through while awk still exits 0 on whatever
+     * partial input it got - that case is indistinguishable from NOBLOCKS from here. Either way
+     * this function still returns the same safe "not in use"; only the log's stated reason can
+     * be wrong, never the answer.
+     *
+     * #A1 (PLAN.md): confirmed live that awk does not exist at all on Android 8, and that
+     * Android 9's awk build (toybox, dated 2012) SEGFAULTS on this command - isolated all the
+     * way down to `!found` specifically, a bare logical-not on a variable inside an END block.
+     * Neither `!=` elsewhere in this same command, nor an unnegated truthy check, trips it - only
+     * that one exact shape, on that one old build. `found==0` does the identical job without it.
+     * Re-verified after the fix, live, on the same broken build: no crash, right answer for an
+     * idle device, right answer for a synthetic active one, right answer for no location blocks
+     * at all, and no change on Android 10+ or the real device used all session.
      */
     private suspend fun isLocationInUse(): Boolean {
         return try {
             val result = rootManager.executeCommand(
-                "dumpsys appops | awk '/^    Package /{pkg=\$0; sub(/^    Package /,\"\",pkg); sub(/:\$/,\"\",pkg)} /^      [A-Z_]+ \\(/{if (\$0 ~ /^      (COARSE_LOCATION|FINE_LOCATION|MONITOR_LOCATION|MONITOR_HIGH_POWER_LOCATION) \\(/){inloc=1;sawblock=1}else{inloc=0}} inloc && pkg!=\"android\" && /Running start at/{print; found=1} END{if (!found){if (sawblock) print \"NONE\"; else print \"NOBLOCKS\"}}'"
+                "dumpsys appops | awk '/^    Package /{pkg=\$0; sub(/^    Package /,\"\",pkg); sub(/:\$/,\"\",pkg)} /^      [A-Z_]+ \\(/{if (\$0 ~ /^      (COARSE_LOCATION|FINE_LOCATION|MONITOR_LOCATION|MONITOR_HIGH_POWER_LOCATION) \\(/){inloc=1;sawblock=1}else{inloc=0}} inloc && pkg!=\"android\" && /Running start at/{print; found=1} END{if (found==0){if (sawblock) print \"NONE\"; else print \"NOBLOCKS\"}}'"
             )
 
             if (!result.success) {

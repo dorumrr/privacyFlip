@@ -5,9 +5,10 @@ import org.junit.Test
 
 /**
  * Tests for ConnectionStateChecker.parseLocationInUseOutput - the Kotlin-side half of the #20
- * location-in-use check. The other half (the awk command that produces this output from a real
- * `dumpsys appops` dump) only runs through a real shell and was verified live on a device, not
- * here; these tests pin down what this app does with what that command reports.
+ * location-in-use check. The other half (the actual awk command) cannot run inside a JVM test -
+ * it has its own regression check instead: run `test-location-detection.sh` at the repo root,
+ * which replays the real command against captured dumpsys output (PLAN.md #A3). Re-run that
+ * script, not just this file, after touching the awk command in ConnectionStateChecker.kt.
  */
 class ConnectionStateCheckerTest {
 

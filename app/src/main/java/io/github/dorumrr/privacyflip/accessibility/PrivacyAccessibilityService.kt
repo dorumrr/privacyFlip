@@ -73,7 +73,12 @@ class PrivacyAccessibilityService : AccessibilityService() {
             // notification shade (see its own doc for why "StatusBar" was dropped).
             if (isLockScreenClass(className)) {
                 val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className, isKeyguardLocked=${keyguardManager?.isKeyguardLocked})")
+                // Package name logged alongside the class name (#H1): isLockScreenClass() has no
+                // package scoping, matching by class name substring alone, so if a third-party
+                // app's own screen ever false-triggers this, the package name here is what would
+                // actually identify it - without this, a false-positive report would be very
+                // hard to track down to its cause.
+                Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className, package: ${event.packageName}, isKeyguardLocked=${keyguardManager?.isKeyguardLocked})")
                 triggerEarlyPrivacyActions()
             }
 
@@ -112,6 +117,13 @@ class PrivacyAccessibilityService : AccessibilityService() {
      */
     private fun triggerEarlyPrivacyActions() {
         try {
+            if (PrivacyActionWorker.sensorDisableInProgress) {
+                // Another trigger for this same lock is already disabling sensors right now -
+                // REPLACE would cancel it mid-flight (#G1). Nothing to gain by racing it.
+                Log.d(TAG, "⏳ Sensor disable already in progress - not enqueuing a duplicate")
+                return
+            }
+
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
                 .setInputData(
                     workDataOf(
@@ -123,10 +135,10 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 )
                 .build()
 
-            // Use same work name as ScreenStateReceiver
-            // REPLACE policy ensures no duplicate execution
+            // Same unique work name every lock-trigger site uses (Constants.Work.NAME_LOCK).
+            // REPLACE policy ensures no duplicate execution once this one starts.
             WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                "privacy_action_lock",
+                io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK,
                 ExistingWorkPolicy.REPLACE,
                 workRequest
             )

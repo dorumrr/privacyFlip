@@ -5,255 +5,404 @@ Tier: 3        how hard each step is worked. 1 quick, 2 normal, 3 full. Default 
 ```
    [ ]  not started        [~]  in progress        [x]  done
 
-   A. FIX WHAT THIS PLAN RUN FOUND BROKEN
-   [~] A1  Accessibility service can't disable sensors    redesigned, deployed. Code-verified only -
-                                                            this test phone never fires the accessibility
-                                                            event at all, real lock or shade, so the
-                                                            positive case can't be observed here.
-   [x] A2  Delay fix lets a screen blip cancel lock        VERIFIED LIVE, twice: a real screen blip
-                                                            mid-wait no longer cancelled the disable,
-                                                            and it still completed 5/5 both times.
+   PART 1: v2.1.3 - SHIPPED (tag v2.1.3, commit ebc2b5b, pushed). Closed, kept here as record.
+   [x] A1  Accessibility service can't disable sensors    Shipped. A post-release audit then found
+                                                             the ORDINARY (non-accessibility) lock
+                                                             path likely never disables sensors at
+                                                             all, a separate, pre-existing gap this
+                                                             fix didn't reach. See F1a/F1b below.
+   [x] A2  Delay fix lets a screen blip cancel lock        Shipped, verified live twice.
+   [x] B1  Exempt-apps picker sees every app               Shipped, verified live: 111 -> 252.
+   [x] B2  WiFi disable skips an active hotspot             Shipped, off-state verified live. Audit
+                                                             found the guard only covers WiFi itself,
+                                                             not Mobile-Data-as-upstream. See G3.
+   [x] E1  Native Bluetooth API + permission flow          Shipped, verified live end to end. Audit
+                                                             found the permission isn't re-checked
+                                                             after being granted once. See G2.
 
-   B. LAND WHAT'S SAFE
-   [x] B1  Exempt-apps picker sees every app, not just     widened to QUERY_ALL_PACKAGES, your call.
-           ones with a launcher icon                        Verified live: 111 -> 252 packages seen.
-   [~] B2  WiFi disable skips an active hotspot             off-state verified live. On-state still
-                                                            needs a real hotspot switched on once.
+   PART 2: POST-RELEASE AUDIT - HIGH SEVERITY
+   [x] F1a Confirm live: does the ordinary lock path        CONFIRMED LIVE on your real phone:
+           ever disable camera/mic at all?                   5/5 regular features disabled,
+                                                             camera+mic silently skipped every
+                                                             time. Bug is real.
+   [x] F1b Fix it, if F1a confirms it                        VERIFIED LIVE: same phone, same real
+                                                             lock scenario as A1's failing run,
+                                                             now reads "Camera: SUCCESS",
+                                                             "Microphone: SUCCESS", 6/6 features
+                                                             disabled total. Watched it fail, then
+                                                             watched the fix pass, same setup.
+   [x] F2  "Local storage only" is not true on Android        Fixed: kept backup, corrected the
+           12+ while allowBackup stays on                    store text (EN+RU) instead, per your
+                                                             call. Not yet re-verified live.
+   [x] F3  This session's own changelog overclaims a fix     24.txt reworded, no longer states the
+                                                             fix as settled fact. GitHub reply to
+                                                             #26/#35 still drafted, not sent (yours
+                                                             to send).
 
-   C. SMALL CONFIRMED FIX
-   [ ] C1  Fastlane changelog 23.txt trimmed under 500      635 bytes today. Ready any time.
+   PART 3: POST-RELEASE AUDIT - MEDIUM SEVERITY
+   [x] G1  3 different triggers can race and cancel a        Fixed: a shared in-progress flag, all
+           sensor-disable that's still in progress            3 producers now check it before
+                                                             REPLACE-ing. Builds clean, not
+                                                             live-tested (can't force the timing).
+   [x] G2  Bluetooth permission isn't re-checked after       Fixed: re-checked on every resume now,
+           being granted once                                turns the setting back off if revoked.
+   [x] G3  Hotspot guard only covers WiFi, not Mobile        Fixed: Mobile Data now covered by the
+           Data as the hotspot's own upstream                 same guard as WiFi.
+   [x] G4  A warning the app computes is never shown         Fixed: now shown inline between the
+                                                             Camera and Microphone rows, your choice.
 
-   D. HARDEN THE PARSING LAYER
-   [ ] D1  Regression tests for status-parsing utilities    not requested by an issue - flagging it
+   PART 4: POST-RELEASE AUDIT - LOW SEVERITY
+   [x] H1  Lock-screen matcher could false-fire on a         Left the matcher itself alone (too
+           third-party app's own screen                       risky to narrow blind, could break
+                                                             real OEM keyguards). Added the package
+                                                             name to the log line instead, so a real
+                                                             report would be traceable.
+   [x] H2  Dual-SIM check can read the wrong SIM             Fixed: now follows the phone's own
+                                                             active-data-SIM marker instead of
+                                                             grabbing whichever line comes first.
+                                                             Verified live the lookup lands on the
+                                                             right SIM; both SIMs agree on this
+                                                             phone so a genuinely wrong answer was
+                                                             never observed to begin with.
+   [x] H3  dev.sh points at an untracked "step 2"            Fixed: reworded to something true on
+                                                             its own.
 
-   E. BLUETOOTH: STOP GUESSING AT DUMPSYS TEXT
-   [x] E1  Native Bluetooth API + permission flow          VERIFIED LIVE end to end: real earbuds
-                                                            playing music, locked, log read
-                                                            "CONNECTED (A2DP)" and skipped disabling
-                                                            Bluetooth. Confirmed still connected after.
+   PART 5: CARRIED OVER, NOT FROM THE AUDIT
+   [x] I1  Fastlane changelog 23.txt trimmed under the       Fixed: 481 bytes/chars, both counted.
+           F-Droid limit
+   [x] J1  Regression tests for the status-parsing layer     Done: 12 tests, 0 failures. Covers
+                                                             StatusParsingUtils and the new
+                                                             MobileDataToggle dual-SIM logic,
+                                                             including a test proving the OLD naive
+                                                             matcher really would have gotten it
+                                                             wrong, not just that the new one works.
 ```
 
-A2 and E1 are now fully proven, watched live on the real phone. Left: B2's hotspot-on reading (a
-real hotspot switched on once), and A1's positive case, which this specific test phone cannot
-exercise - proven safe by code, not by a live lock on this device.
+A1, A2, B1, B2 and E1 are done and live in v2.1.3. Everything else below is new: 10 findings from
+this session's post-release audit, plus the 2 items (I1, J1) that were never started before the
+release and still aren't.
 
 ---
 
-## A1  Accessibility service can't disable sensors
+## Part 1 - v2.1.3, closed
 
-Depends on: none. Touches: `app/src/main/java/io/github/dorumrr/privacyflip/accessibility/PrivacyAccessibilityService.kt`
-
-**Fixed this run.** The earlier attempt at #26 (stop the notification shade from looking like a
-lock) gated on `KeyguardManager.isKeyguardLocked()` before acting - correct against the
-false-positive, but self-defeating: by the time that can be confirmed true, Android's own lock
-restriction already blocks changing sensor privacy, so the service could never disable a sensor
-again either way (traced by hand into `PrivacyActionWorker.kt:198-215`, both branches refuse once
-locked).
-
-The redesign removes that gate entirely - the service now acts immediately on a class-name match
-again, same as before this session - and instead tightens what counts as a match
-([PrivacyAccessibilityService.kt:71-79](app/src/main/java/io/github/dorumrr/privacyflip/accessibility/PrivacyAccessibilityService.kt#L71-L79),
-matcher at
-[PrivacyAccessibilityService.kt:103-106](app/src/main/java/io/github/dorumrr/privacyflip/accessibility/PrivacyAccessibilityService.kt#L103-L106)).
-The bare `"StatusBar"` match is gone - that's the one the notification shade also fires, since it's
-rendered by the same StatusBar-lineage classes in AOSP. `"Keyguard"` and `"LockScreen"` stay: both
-are specific to the lock mechanism itself, and cover every real class name this project has on
-record for a genuine lock-screen appearance. [Inferred - this project has no record of a device
-whose real keyguard reports through neither word, but that is not the same as proof none exists.
-The class name is still logged every time now, tagged with the real `isKeyguardLocked()` state
-alongside it, purely for future diagnosis if a device ever needs a name added.]
-
-Proves it is done: on a real phone, a genuine power-button lock produces both `"Lock screen
-detected via Accessibility"` and a following `"✅ SUCCESS disable Camera"` / `"✅ SUCCESS disable
-Microphone"` log line. Not yet run - needs one real lock. Pulling the notification shade while
-unlocked still produces neither (confirmed earlier this session against the previous, gated
-version; needs re-confirming against this rewritten matcher too, same test).
-
-Skill: none further unless the real-lock test above fails, then back to `/phi:fix`.
+Shipped as tag `v2.1.3`, commit `ebc2b5b`, pushed to `origin/main`. [Verified in code - `git log
+origin/main..HEAD` returns nothing, the tag exists.] Nothing further scheduled here; the two gaps
+this closing note points at (A1's real limit, B2's real limit) are now their own steps below,
+F1a/F1b and G3, so they are tracked once, not twice.
 
 ---
 
-## A2  Delay fix lets a screen blip cancel lock protection
+## F1a  Confirm live: does the ordinary lock path ever disable camera/mic at all?
 
-Depends on: none. Touches: `app/src/main/java/io/github/dorumrr/privacyflip/receiver/ScreenStateReceiver.kt`,
-`app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt`
+Depends on: none. Touches: `app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt:78-92,197-227`
 
-**Fixed this run.** The earlier attempt at #30b (always honour the configured lock delay, even on
-an already-locked phone) was correct by itself, but exposed an existing interaction that used to
-not matter: `ScreenStateReceiver`'s `ACTION_SCREEN_ON` handler cancelled the entire pending
-lock-time work outright on any screen-on, locked or not - harmless when the already-locked case
-used to disable instantly (nothing left pending to cancel), a real gap once that case started
-waiting out the full delay instead.
+**What the code does today.** `isScreenCurrentlyLocked()` (`PrivacyActionWorker.kt:87`) is
+`isKeyguardLocked || !isInteractive`. The sensor block has two separate ways to skip, and they mean
+different things - the adversarial round caught me conflating them:
 
-The fix makes that cancel conditional
-([ScreenStateReceiver.kt:55-70](app/src/main/java/io/github/dorumrr/privacyflip/receiver/ScreenStateReceiver.kt#L55-L70)):
-only cancel the pending work if the phone is genuinely not locked at that moment (or has no lock
-security configured at all, which behaves the same as before). A screen that merely wakes while
-the keyguard is still showing no longer erases the wait. The delay-honouring change itself is
-unchanged
-([PrivacyActionWorker.kt:235-243](app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt#L235-L243)).
+- `PrivacyActionWorker.kt:220-226` (the `else` of `if (!isDeviceLocked)` at line 198): fires when
+  whoever enqueued the work already decided "locked" before the 75ms wait even starts. On a phone
+  set to lock instantly when the screen turns off, `ScreenStateReceiver`'s own check
+  (`keyguardManager.isKeyguardLocked` read right at the `ACTION_SCREEN_OFF` broadcast) will already
+  be true, so this is the branch that runs, unconditionally, no re-check at all. This is not a new
+  discovery - it's the exact, already-understood reason the Accessibility feature (A1) exists: the
+  code comment in `PrivacyAccessibilityService.kt` says as much.
+- `PrivacyActionWorker.kt:214` (inside `if (!isDeviceLocked)`, after the 75ms wait): fires when the
+  device was NOT yet locked at enqueue time (a lock-delay phone, or the accessibility path, both of
+  which pass `is_device_locked=false`), but the re-check 75ms later finds `isScreenCurrentlyLocked()`
+  true anyway. For a plain `ACTION_SCREEN_OFF`-triggered run specifically, the screen is by
+  definition already off by the time this fires (that's what triggered the broadcast), so the
+  `!isInteractive` half of the formula is very likely already true regardless of the real keyguard
+  state - meaning this re-check may be unable to ever say "still unlocked," even on a phone with a
+  real lock delay that should give the app a genuine window.
 
-**Proven live.** Locked the phone (10s delay), woke the screen at the 5.7s mark without unlocking,
-let it sleep again: log read `"Screen turned ON but still locked - keeping pending lock work"` -
-the old bug would have cancelled outright here. The wait then ran its full course and disabled
-5/5 regular features. A second lock cycle straight after (fresh 10s wait, no blip) also completed
-5/5. Unlock afterward correctly re-enabled everything, sensors instantly, WiFi/Mobile Data after
-the unlock delay. [Verified at runtime - real device, real log, watched before and after]
+Both branches end the same way: sensors don't get disabled, silently, no error shown. [Inferred -
+this project has no record of what `isInteractive()` reports in the exact 75ms window this checks;
+the reasoning is sound but nobody has watched it happen.]
 
-Skill: none further.
+**Proves it is done:** two real locks on your phone, recorded together, not separately:
+1. Check your screen lock timeout setting first (Settings > Display > Lock screen, "instant" vs a
+   delay) and note which one you have.
+2. Turn the Accessibility feature OFF. Set camera and microphone to disable-on-lock. Lock the phone
+   for real (power button). Read the debug log for exactly one of two lines: `"already locked at
+   ACTION_SCREEN_OFF - cannot disable sensors"` or `"Keyguard engaged during stabilization -
+   skipping sensors"` (bug, either way) versus `"SUCCESS disable Camera"` / `"SUCCESS disable
+   Microphone"` (works).
+3. If you have a lock delay available, repeat with it set to a few seconds, to test the second
+   branch specifically.
 
----
+A single "SUCCESS" line does not by itself prove the fix works later - see F1b's own proof section
+for why.
 
-## B1  Exempt-apps picker sees every installed app
-
-Depends on: none. Touches: `app/src/main/AndroidManifest.xml`
-
-**Done and verified live.** First landed as a narrow `<queries>` block (launcher apps only), which
-solved the reported bug (WhatsApp, Telegram both have launcher icons) but left the app's own text
-overselling itself - `ExemptAppsDialogFragment.kt:105-106` and `changelogs/23.txt` line 7 both
-promise "exempt ANY app including system apps," which a launcher-only filter cannot keep. Widened
-to `QUERY_ALL_PACKAGES` instead
-([AndroidManifest.xml:20-26](app/src/main/AndroidManifest.xml#L20-L26)), confirmed present in a
-built release APK via `aapt2 dump permissions`, and confirmed live on the test phone: the
-app-exemption picker's own log went from `"Total installed packages: 111"` before this run's
-widening to `"Total installed packages: 252"` after - more than double, including packages with
-no launcher icon at all. [Verified at runtime]
-
-`QUERY_ALL_PACKAGES` is a real, larger privacy footprint than a narrow `<queries>` block (any app
-holding it can see the phone's full install list) - an unusual thing for a *privacy* app to
-request, worth being upfront about if this is ever asked. Distribution is F-Droid/IzzyOnDroid, not
-the Play Store, so the strict developer-console justification review that permission usually
-triggers there does not apply here.
-
-Proves it is done: (already run) re-run on any device and check two properties, not the raw count,
-since 252 is one phone's own app inventory: a package with no launcher icon is now visible where
-it was not before, and the picker's own count is close to that device's real total installed-app
-count (`pm list packages | wc -l` as ground truth), not a small fraction of it.
-
-Skill: none further - ready to commit.
+Skill: none, this is a live test. `/phi:fix` only follows if this confirms the bug.
 
 ---
 
-## B2  WiFi disable skips an active hotspot
+## F1b  Fix the ordinary-lock-path sensor gate, if F1a confirms it
 
-Depends on: none (A2 has now landed in the shared file, so this is no longer blocked). Touches:
-`app/src/main/java/io/github/dorumrr/privacyflip/util/ConnectionStateChecker.kt`,
-`app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt`
+Depends on: F1a. Scheduled directly after it, not later - the evidence goes stale if other steps
+land first and nobody re-confirms it still applies the same way.
 
-Unchanged from before this round: `isHotspotActive()` reads `dumpsys tethering`'s `Tether state:`
-section for a tetherable WiFi interface in `TetheredState`
-([ConnectionStateChecker.kt:82-116](app/src/main/java/io/github/dorumrr/privacyflip/util/ConnectionStateChecker.kt#L82-L116)),
-wired into the lock branch so WiFi is skipped when a hotspot is active regardless of the
-per-feature "only if unused" setting
-([PrivacyActionWorker.kt:148-163](app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt#L148-L163)).
-The "hotspot off" reading was confirmed live (`ap0 - AvailableState`, correctly read as NOT
-ACTIVE). The "hotspot on" reading has still not been observed.
-
-Two honest limits, unchanged, documented rather than fixed: `dumpsys tethering` only exists since
-API 30, this app's minSdk is 24, so API 24-29 fails closed to the pre-fix behaviour rather than a
-new regression; and Airplane Mode configured alongside WiFi-on-lock still undoes this protection
-in the same run, same as it always did before this fix existed.
-
-Proves it is done: two paired runs on the same phone. Hotspot off, lock: WiFi still disables.
-Hotspot on, lock: a debug log line says WiFi was skipped because a hotspot is active, and WiFi is
-still on afterward. Only the first pairing has been run so far.
-
-Skill: none further unless the hotspot-on test above fails, then `/phi:fix`.
-
----
-
-## C1  Fastlane changelog 23.txt trimmed under 500 chars
-
-Depends on: none. Touches: `fastlane/metadata/android/en-US/changelogs/23.txt`
-
-Unchanged, not started. Still 635 bytes (re-checked this round), describing versionCode 23
-(already-released v2.1.2). No repo-side check catches this - `dev.sh`'s `fdroid-scanner` step
-scans APK contents for tracking URLs, not changelog length (`dev.sh:476`). The limit comes from
-F-Droid/IzzyOnDroid's own external build pipeline, per the issue's own wording.
-
-Proves it is done: `wc -c fastlane/metadata/android/en-US/changelogs/23.txt` reports 500 or fewer,
-and the file still reads as real, complete changelog text.
+**Proves it is done:** re-run the exact same test as F1a, same phone, same lock-timeout setting,
+and watch it flip from the skip line to `"SUCCESS disable Camera"` / `"SUCCESS disable Microphone"`.
+Watching the SAME setting go from broken to fixed is the proof; a fresh run that happens to show
+SUCCESS on a different setting doesn't show the fix did anything.
 
 Skill: `/phi:fix`
 
 ---
 
-## D1  Regression tests for the status-parsing utilities
+## F2  "Local storage only" is not true on Android 12+ while backup stays on
 
-Depends on: none strictly; cleanest now that A1, A2, B1, B2 have landed, so the tests target
-settled code. Scope deliberately excludes Bluetooth parsing - E1 already replaced that with the
-native API, so there is no dumpsys-parsing code left there to pin down. Touches (new): a test
-source set (none exists today - checked again this round, no `test`/`androidTest` directory
-anywhere under `app/src`), covering `StatusParsingUtils.kt` (`parseStandardOutput`,
-`parseSensorPrivacyOutput`), `MobileDataToggle.kt`'s telephony regex, and
-`ConnectionStateChecker.kt`'s `isHotspotActive()` regex.
+Depends on: none. A product decision comes before the code change. Touches:
+`fastlane/metadata/android/en-US/full_description.txt:63-64` (+ `ru/full_description.txt`),
+`app/src/main/res/xml/data_extraction_rules.xml`, `backup_rules.xml`,
+`app/src/main/AndroidManifest.xml:34`
 
-Not from a filed issue - flagging it because all three exist specifically to avoid the exact bug
-class that hit Mobile Data earlier this session: a status field whose own NAME contains the state
-word (`"mIsDataEnabled"` contains "enabled" regardless of its value), which breaks a naive
-`.contains("enabled")` check.
+**What the code does today.** The store listing says "Zero telemetry - No data sent to external
+servers" and "Local storage only - All settings stored on device"
+(`full_description.txt:63-64`). But `allowBackup="true"` (`AndroidManifest.xml:34`) plus THREE
+separate inclusion points - `backup_rules.xml:4`, and `data_extraction_rules.xml`'s cloud-backup
+block (line 5) AND its separate device-transfer block (line 13) - all say to include every
+SharedPreferences file except one (`root_status.xml`) in Android's own backup. [Verified in code -
+read all three files directly.] One extra wrinkle the adversarial round found: `root_status.xml` is
+never actually written by anything in this app (the only file it opens is the one
+`PreferenceManager.kt:15` names), so the one "exclude sensitive data" line excludes a file that
+doesn't exist - not a new problem, just means nothing is currently excluded in practice.
 
-Proves it is done: a test exists that fails against the *old*, simpler `.contains()`-style matcher
-on an input like `"mIsDataEnabled=false"` (name contains "enabled", value says otherwise), and
-passes against the current parser - checked in both directions, so a genuinely-on value still
-reads as on.
+**The trap in fixing only part of this:** Android 12+ (this app's own build target) ignores
+`backup_rules.xml` entirely once `data_extraction_rules.xml` is present - editing only the older
+file changes nothing on any modern phone. Both blocks in `data_extraction_rules.xml` (cloud-backup
+AND device-transfer are separate channels) have to be addressed together with it, or the underlying
+behaviour stays exactly as it is while the fix looks complete. [Verified in code - both blocks
+independently declare the same include.]
+
+**NEEDS YOUR YES.** Two honest directions, not mine to pick:
+- Turn backup off for real (`allowBackup="false"`, or exclude ALL sharedpref in every one of the
+  three spots above) - makes the existing claim true.
+- Or correct the store text to describe what actually happens today - makes the claim honest
+  without changing behaviour.
+
+Proves it is done: whichever direction, re-read every one of the three inclusion points plus the
+manifest flag together, not just one file, and confirm they now agree with whatever the store text
+says.
+
+Skill: `/phi:fix`, after you pick a direction.
+
+---
+
+## F3  This session's own changelog overclaims a fix
+
+Depends on: none. Touches: `fastlane/metadata/android/en-US/changelogs/24.txt:1`
+
+**What's wrong.** `changelogs/24.txt` says plainly: "camera and mic actually get blocked, without
+misfiring on the notification shade." PLAN.md's own record (written the same session) says the
+positive case was never actually observed - this session's only test phone can't produce the
+signal - and the "no misfiring" half was only checked against the PREVIOUS version of the matcher,
+not the one that shipped.
+
+**One thing worth being honest about before editing anything:** `24.txt` describes a version
+(`v2.1.3`) that is already tagged and pushed. Editing the file in git now may not change anything
+anyone already sees - F-Droid/IzzyOnDroid typically build from the tagged commit, which won't move.
+The part that actually reaches anyone still watching is a reply on the GitHub issues this claim
+touches (#26, #35), being honest about what's confirmed and what isn't, and not repeating the same
+overclaim in the NEXT changelog.
+
+Proves it is done: the next changelog this project writes doesn't restate something as fact that
+hasn't been observed, and #26/#35 have an honest reply matching what's actually known. Not "24.txt
+is edited," since that alone may reach nobody.
+
+Skill: `/phi:fix` for the wording pattern going forward; the GitHub replies are Doru's own words to
+send, same as always.
+
+---
+
+## G1  Three different triggers can race and cancel a sensor-disable in progress
+
+Depends on: none strictly, though it touches the same file area as F1b - worth landing with a clear
+head about what F1a found, not blocking on it. Touches:
+`app/src/main/java/io/github/dorumrr/privacyflip/accessibility/PrivacyAccessibilityService.kt:126-132`,
+`app/src/main/java/io/github/dorumrr/privacyflip/receiver/ScreenStateReceiver.kt:100-104`,
+`app/src/main/java/io/github/dorumrr/privacyflip/service/PrivacyMonitorService.kt:212-216`
+
+**What the code does today.** All three enqueue WorkManager work under the same unique name
+(`"privacy_action_lock"`) with `ExistingWorkPolicy.REPLACE`. The adversarial round found the third
+one - `PrivacyMonitorService`, which fires at service startup - that this plan's first draft
+missed. [Verified in code - all three read directly.] If the accessibility-triggered worker is
+still disabling sensors when a later one REPLACEs it, the disable is cancelled mid-flight,
+silently.
+
+Proves it is done: honestly, hard to observe directly - the sensor path's only "delay" is a fixed
+75ms, too narrow to reliably time by hand, and a live attempt can fail for F1a's reason instead of
+this one, muddying the result. The real proof is in the fix design itself: change how the three
+producers coordinate (a status flag the disable step checks before yielding to REPLACE, or moving
+sensor-disable outside the racy unique-work entirely) so that cancellation can no longer land
+mid-disable, then confirm by reading the changed code path by hand rather than chasing a timing
+window blind.
+
+Skill: `/phi:fix`
+
+---
+
+## G2  Bluetooth permission isn't re-checked after being granted once
+
+Depends on: none. Touches:
+`app/src/main/java/io/github/dorumrr/privacyflip/ui/fragment/MainFragment.kt:476,~950`,
+`app/src/main/java/io/github/dorumrr/privacyflip/util/ConnectionStateChecker.kt:140-146`
+
+**What the code does today.** `BLUETOOTH_CONNECT` is checked only at the moment the checkbox is
+tapped. Every later app resume restores the checkbox purely from the saved preference
+(`onResume -> MainViewModel.kt:484 -> MainFragment.kt:475,997`), with no permission read anywhere
+on that path. [Verified in code, full call chain read.] If the permission is revoked later, the
+checkbox stays ticked, and `ConnectionStateChecker` silently treats Bluetooth as "not connected"
+(one warning log line), so it gets disabled even mid-call.
+
+Proves it is done: grant the permission, tick the box, revoke the permission in system Settings
+(this normally kills the app process - that's expected, test the COLD START after, not a
+background switch), reopen the app - the checkbox now shows unticked or a clear warning, not
+silently ticked with nothing behind it.
+
+Skill: `/phi:fix`
+
+---
+
+## G3  Hotspot guard only covers WiFi, not Mobile Data as the hotspot's own upstream
+
+Depends on: none. Touches: `app/src/main/java/io/github/dorumrr/privacyflip/worker/PrivacyActionWorker.kt:148-163`
+
+**What the code does today.** The hotspot-active guard filters only `PrivacyFeature.WIFI` out of
+the disable list. `PrivacyFeature.MOBILE_DATA` stays free to be disabled in the same run - and
+`isFeatureInUse(MOBILE_DATA)` is hardcoded `false` regardless (`ConnectionStateChecker.kt:49-53`),
+so it always gets disabled if configured to. A phone hotspot's actual internet usually comes from
+mobile data, so a user with both "WiFi: disable on lock" and "Mobile Data: disable on lock" set,
+plus an active hotspot, keeps the WiFi radio up (protected) but loses the data feeding it - while
+the app logs "WiFi skipped: hotspot is active" as if it fully protected the hotspot.
+
+Proves it is done: two paired runs, not one - hotspot active with Mobile Data also set to disable:
+the log now shows Mobile Data skipped too, hotspot keeps working. Hotspot NOT active, same
+settings: Mobile Data still disables normally. Both halves needed, or a fix that just always skips
+Mobile Data would silently break the normal case.
+
+Skill: `/phi:fix`
+
+---
+
+## G4  A warning the app computes is never shown
+
+Depends on: none, though where it should appear is a small call worth naming, not assuming.
+Touches: `app/src/main/java/io/github/dorumrr/privacyflip/ui/viewmodel/MainViewModel.kt:808`,
+`app/src/main/res/layout/card_experimental_features.xml:55`
+
+**What the code does today.** `showLockDelayWarning` is computed and written to UI state, with a
+debug log claiming "WARNING WILL BE DISPLAYED TO USER." `card_experimental_features.xml` (the
+layout holding the `lockDelayWarning` view) has zero references anywhere in the app - no
+`<include>`, no generated-binding use. [Verified in code - searched the whole layout directory.]
+Nobody who hits this condition (an instant-lock or short-delay setup with camera/mic protection on)
+is ever actually told their protection may not work.
+
+Proves it is done: two runs, not one - an incompatible setup shows the warning somewhere real in
+the app. A compatible setup does NOT show it. Both halves needed, or a fix that shows the warning
+unconditionally would "pass" the first check while lying the rest of the time.
+
+Skill: `/phi:fix`, after Doru says where in the UI it should land.
+
+---
+
+## H1  Lock-screen matcher could false-fire on a third-party app's own screen
+
+Depends on: none. Touches:
+`app/src/main/java/io/github/dorumrr/privacyflip/accessibility/PrivacyAccessibilityService.kt:103-106`
+
+`isLockScreenClass()` is a bare substring check for "Keyguard"/"LockScreen," no package scoping.
+Same shape of risk as the #26 StatusBar false positive this session already fixed, just narrower -
+a third-party app whose own screen class name happens to contain either word could false-trigger a
+lock action while it's in active use. [Verified in code - the mechanism is real.] Real-world
+frequency: no known example found, likely rare. [Needs confirmation - there is no way to prove a
+negative here beyond watching for it.]
+
+Proves it is done: honestly, this can't be cleanly proven the way most steps can - there's no known
+counter-example app to test against today. If real-world reports ever name a false-fire, that's the
+proof this needs fixing; until then, this stays a documented, low-odds risk, not a confirmed bug.
+
+Skill: `/phi:fix`, low priority.
+
+---
+
+## H2  Dual-SIM mobile-data check can read the wrong SIM
+
+Depends on: none. Touches: `app/src/main/java/io/github/dorumrr/privacyflip/privacy/MobileDataToggle.kt:29-33`
+
+`grep -m1 mIsDataEnabled` takes the FIRST matching line, with nothing tying it to the SIM actually
+carrying data. Confirmed live on a real dual-SIM phone: 2 such lines exist. Both currently agree on
+that phone, so no wrong answer has been observed yet - the mechanism is real, a demonstrated wrong
+answer isn't.
+
+Proves it is done: deliberately set the two SIMs to disagree (one with mobile data on, one off,
+whichever is NOT first in the dump), and confirm the app reads the one actually carrying data -
+plus record which command answered (the new telephony check, or the old settings fallback), so a
+pass can't be credited to the fallback quietly doing the work instead.
+
+Skill: `/phi:fix`
+
+---
+
+## H3  dev.sh points at an untracked "step 2"
+
+Depends on: none. Touches: `dev.sh` (release case block, "Current Commit" summary line)
+
+The release summary prints "(will change after step 2)," naming a step that exists in no tracked
+file - the likely runbook is itself gitignored. Developer-facing only, but exactly the kind of
+mix-up the new release guard exists to prevent (tagging the wrong commit).
+
+Proves it is done: the printed instruction matches a real, findable step, or is removed.
+
+Skill: `/phi:fix`
+
+---
+
+## I1  Fastlane changelog 23.txt trimmed under the F-Droid limit
+
+Depends on: none. Touches: `fastlane/metadata/android/en-US/changelogs/23.txt`
+
+Still 635 bytes, describing the already-released v2.1.2. The adversarial round found the original
+proof ("wc -c reports 500 or fewer") may not actually settle this: the F-Droid limit is likely
+CHARACTERS, and `wc -c` counts bytes - 14 of the 24 files already in this changelogs folder contain
+non-ASCII text, where the two counts differ. The original issue's own wording (#32) said "634
+chars," suggesting the tool THEY hit counts characters, not bytes.
+
+Proves it is done: check both a character count and a byte count come in under 500 for the actual
+file being trimmed, and that the text still reads as complete changelog content, not cut off
+mid-word.
+
+Skill: `/phi:fix`
+
+---
+
+## J1  Regression tests for the status-parsing utilities
+
+Depends on: cleanest after F1b, G1 and H2 land, so tests target settled code rather than code about
+to change. Touches: a new test source set (still none exists - checked again this session).
+
+Not from a filed issue - covers the exact bug class that hit Mobile Data earlier this project's
+history: a status field whose own NAME contains the state word, breaking a naive
+`.contains("enabled")`-style check. The adversarial round tried to break this differential and
+could not - a crafted `"mIsDataEnabled=false"` genuinely fails the naive matcher and passes the
+current regex - confirming the core test idea is sound. One coverage gap it did find: this doesn't
+yet cover `StatusParsingUtils.parseStandardOutput`'s own fallback path, or a true-positive
+no-regression case (a genuinely-enabled reading still reads as enabled). Both added to scope.
+
+Proves it is done: a test fails against the old, simpler matcher and passes against the current
+parser, in both directions, plus the fallback path and a true-positive case are each covered too.
 
 Skill: `/phi:create-tests`
 
 ---
 
-## E1  Bluetooth "only if connected" - native API instead of dumpsys text
+Non-goals (unchanged from before): #36 time-based scheduling, #37 per-app permission revocation
+instead of the global toggle, Battery Saver's missing checkbox label (#21) - all real feature/UX
+requests, none of them steps in this plan.
 
-**Built, deployed, mostly verified live.** #28 (still reported broken after v2.1.2: connected
-headphones get disconnected on lock anyway) traced back to `ConnectionStateChecker.kt`'s old
-Bluetooth check - 4 stacked guesses at raw `dumpsys` text, wording not guaranteed stable across
-phone makers.
-
-Rewritten to use `BluetoothAdapter.getProfileConnectionState()` directly - no dumpsys parsing left
-anywhere in this path
-([ConnectionStateChecker.kt:117-160](app/src/main/java/io/github/dorumrr/privacyflip/util/ConnectionStateChecker.kt#L117-L160)).
-Added the manifest permissions
-([AndroidManifest.xml:28-32](app/src/main/AndroidManifest.xml#L28-L32)): `BLUETOOTH_CONNECT` for
-Android 12+ (runtime-prompted), the older non-prompting `BLUETOOTH` below that. Wired a real
-permission request into the settings screen, following the same pattern the app already uses for
-notifications
-([MainFragment.kt:945-962](app/src/main/java/io/github/dorumrr/privacyflip/ui/fragment/MainFragment.kt#L945-L962)).
-
-**Proven live, both halves.** Turning on Bluetooth's "only if not connected" checkbox produces the
-real Android permission dialog ("Allow Privacy Flip to find, connect to, and determine the
-relative position of nearby devices?") - watched denying it correctly revert the checkbox and log
-the denial cleanly, no crash, no stuck state. Then watched granting it for real: connected real
-earbuds (independently confirmed via `dumpsys bluetooth_manager`: A2DP `mConnectionState:
-CONNECTED (Active)`), played music through them, locked the phone, and read the exact line
-`"🔵 Bluetooth connection check: CONNECTED (A2DP (audio))"` followed by `"⏸️ Bluetooth is in use -
-skipping disable"` - Bluetooth correctly left off the disable list, and confirmed still connected
-and on afterward. No dumpsys parsing anywhere in this path any more. [Verified at runtime - real
-device, real accessory, watched before and after]
-
-Skill: none further.
-
----
-
-Non-goals (explicitly out of this plan):
-- #36 time-based on/off scheduling - a real new feature, its own `/phi:feat` if greenlit.
-- #37 revoke camera/mic permission per app instead of the global sensor-privacy toggle - a
-  redesign of how blocking works, its own `/phi:feat` if greenlit.
-- Battery Saver's missing "only if not already enabled" checkbox (#21) - the protection already
-  exists through a different, always-on mechanism (`PrivacyActionWorker.kt:300-306`); this is a
-  labelling gap, not a functional one. Optional, not blocking, not scheduled here.
-
-Also open, not steps in this plan (fail "provable when finished," or need something only a third
-party has - not silently dropped, just not fake-scheduled):
-- #20 location cuts off active navigation - root cause still unconfirmed; may be an Android
-  platform limit on background location for non-system apps, not something in-app code can
-  necessarily fix. No fix hypothesis exists yet to turn into a step.
-- #21's specific "over-firing sometimes" report - unconfirmed; the one log offered showed the app
-  crashing, not the claimed behaviour. Needs fresh logs from that reporter.
-- #22 NFC on Samsung - the code fix already ships (opt-in Auto-Retry, off by default;
-  `PreferenceManager.kt:53-55`). The only remaining action is asking the reporters to enable it -
-  a reply, not a code step.
-- #33 - a question about a log line, not a bug. Answer: when it fires, Android's own lock beat
-  the app to it, so that time the sensors were not actually blocked. A reply, not a code step.
-- #35 - same root cause as A1 above. A1's redesign is what they need; once the real-lock test
-  above confirms it, the follow-up is a reply pointing them at Side Button Support - not a
-  separate code step.
+Also open, not steps here: #20 (location cutting off navigation, root cause still unconfirmed), the
+rest of #21's "over-firing" report (needs fresh logs), #22 (NFC - code fix already shipped, just
+needs a nudge to the reporters), #33 (a question, not a bug, needs a reply not a step).

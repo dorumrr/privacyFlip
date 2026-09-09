@@ -522,7 +522,7 @@ case "${1:-menu}" in
             echo "APK Location: $RELEASE_APK"
             echo "Version: ${VERSION_NAME}"
             echo "Version Code: ${VERSION_CODE}"
-            echo "Current Commit: ${CURRENT_COMMIT_SHORT} (will change after step 2)"
+            echo "Current Commit: ${CURRENT_COMMIT_SHORT} - tag this exact commit if you publish this build"
             echo "AllowedAPKSigningKeys: ${SHA256_FDROID}"
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -141,4 +141,10 @@ dependencies {
 
     // Dhizuku API
     implementation("io.github.iamr0s:Dhizuku-API:2.5.4")
+
+    // Unit tests (J1) - JUnit 4, the standard for local Android unit tests, no Android
+    // framework dependency needed for the pure string-parsing logic these tests target.
+    // Eclipse Public License 1.0. One transitive dependency (hamcrest-core), already the
+    // de-facto default for this kind of test in every Android project.
+    testImplementation("junit:junit:4.13.2")
 }

@@ -1,9 +1,9 @@
-- Fixed critical race condition in camera/microphone disabling during screen lock
-- Added stabilization delay to prevent keyguard timing issues
-- Improved Bluetooth connection detection with multiple fallback methods
-- Enhanced "only if unused" reliability for Bluetooth headphones
-- Added Samsung NFC payment override detection and opt-in auto-retry
-- Added experimental Accessibility Service for side button lock support
-- Removed app filtering - users can now exempt ANY app including system apps
-- Improved cross-device compatibility for privacy features
-- Added comprehensive logging for debugging (enable Debug Logs in settings)
+- Fixed a camera/mic disabling race condition on screen lock
+- Added a stabilization delay for keyguard timing
+- Improved Bluetooth detection with fallback methods
+- Enhanced Bluetooth "only if unused" reliability
+- Added Samsung NFC override detection, opt-in auto-retry
+- Added experimental Accessibility Service for side-button lock
+- Removed app filtering - exempt any app, including system apps
+- Improved cross-device compatibility
+- Added debug logging (enable in settings)

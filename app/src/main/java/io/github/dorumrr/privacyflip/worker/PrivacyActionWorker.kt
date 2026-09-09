@@ -30,6 +30,16 @@ class PrivacyActionWorker(
 
     companion object {
         private const val TAG = "privacyFlip-PrivacyActionWorker"
+
+        // True for exactly the window where a sensor (camera/mic) disable is actually running.
+        // ScreenStateReceiver, PrivacyAccessibilityService and PrivacyMonitorService all check
+        // this before enqueuing the same unique lock-work under ExistingWorkPolicy.REPLACE, so
+        // none of them cancels a disable that's already mid-flight (#G1) - REPLACE would
+        // otherwise silently cancel the coroutine (see the CancellationException catch below)
+        // partway through, leaving sensors on with no error shown anywhere.
+        @Volatile
+        var sensorDisableInProgress: Boolean = false
+            private set
     }
 
     private val debugNotifier: DebugNotificationHelper by lazy {
@@ -145,20 +155,25 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     logDebug("Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
-                    // Never disable WiFi while an active hotspot is running, regardless of the
-                    // per-feature "only if unused" setting - the radio is shared, so turning WiFi
-                    // off silently kills the hotspot for anyone tethered to it (#34).
-                    val hotspotActive = PrivacyFeature.WIFI in featuresToDisable &&
+                    // Never disable WiFi or Mobile Data while an active hotspot is running,
+                    // regardless of the per-feature "only if unused" setting. WiFi shares its
+                    // radio with the hotspot's access point, so turning WiFi off silently kills
+                    // the hotspot for anyone tethered to it (#34). Mobile Data is the hotspot's
+                    // own upstream internet connection on a phone - a WiFi hotspot can't also be
+                    // fed by the phone's own WiFi client radio, so leaving WiFi on but cutting
+                    // Mobile Data leaves the hotspot broadcasting with nothing to share (found in
+                    // this project's own post-release audit, not part of the original #34 fix).
+                    val hotspotActive = (PrivacyFeature.WIFI in featuresToDisable || PrivacyFeature.MOBILE_DATA in featuresToDisable) &&
                         connectionChecker.isHotspotActive()
                     if (hotspotActive) {
-                        logDebug("📡 Hotspot is active - keeping WiFi on despite lock")
-                        debugNotifier.notifyFeatureSkipped("WiFi", "hotspot is active")
+                        logDebug("📡 Hotspot is active - keeping WiFi and Mobile Data on despite lock")
+                        debugNotifier.notifyFeatureSkipped("WiFi and Mobile Data", "hotspot is active")
                     }
 
                     // Filter features based on "only if unused/not connected" setting
                     val skippedFeatures = mutableListOf<String>()
                     val filteredFeatures = featuresToDisable.filter { feature ->
-                        if (feature == PrivacyFeature.WIFI && hotspotActive) {
+                        if ((feature == PrivacyFeature.WIFI || feature == PrivacyFeature.MOBILE_DATA) && hotspotActive) {
                             false // Hotspot check above already decided this one
                         } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
                             true // Always disable if "only if unused" is not enabled
@@ -192,28 +207,45 @@ class PrivacyActionWorker(
                         it !in PrivacyFeature.getSystemModeFeatures()
                     }
 
-                    // Disable camera/microphone with stabilization delay
-                    // The 75ms delay prevents race condition where keyguard engages during command execution
+                    // Disable camera/microphone - attempted immediately, no artificial delay.
+                    //
+                    // #F1b, confirmed live this session: the old code waited 75ms then re-checked
+                    // isScreenCurrentlyLocked() (isKeyguardLocked || !isInteractive) before
+                    // attempting anything. That re-check can never say "still unlocked" for this
+                    // branch specifically - it only runs because ACTION_SCREEN_OFF already fired,
+                    // and the screen being off is exactly what makes !isInteractive true, on its
+                    // own, regardless of whether the keyguard itself has engaged yet. A real lock
+                    // was watched go through this exact path: 5/5 regular features disabled
+                    // correctly, camera and microphone silently skipped every time, "by design",
+                    // because the check could never pass. Waiting 75ms before even trying only
+                    // made it worse - it handed the keyguard 75ms head start to win the race
+                    // before the attempt was even made.
+                    //
+                    // Fixed by removing the predictive check entirely and trusting the real
+                    // outcome of the command instead: attempt the disable right away, and let
+                    // privacyManager.disableFeatures()'s own success/failure (already captured
+                    // and logged below via processResults, same as every other feature) be the
+                    // source of truth. If the keyguard genuinely wins the race, the command fails
+                    // and that's reported honestly - it no longer gets silently pre-decided by a
+                    // heuristic that was measuring the wrong thing.
                     if (sensorFeatures.isNotEmpty()) {
+                      // sensorDisableInProgress stays true for this whole block, not just the
+                      // actual disable call - the other two triggers check it before they'd
+                      // REPLACE this same unique work, and the danger window is "could this
+                      // enqueue cancel something already underway", which starts as soon as this
+                      // block starts (#G1). Cleared in every exit path via finally, so a crash or
+                      // an external cancellation can never leave it stuck true.
+                      sensorDisableInProgress = true
+                      try {
                         if (!isDeviceLocked) {
-                            // Add stabilization delay for keyguard to fully engage
-                            // This prevents race condition where keyguard locks during command execution
-                            logDebug("⏱️ Waiting 75ms for keyguard stabilization before disabling sensors: ${sensorFeatures.map { it.displayName }}")
-                            delay(75) // Small delay to let keyguard fully engage
-                            
-                            // CRITICAL: Double-check lock state after stabilization
-                            val isNowLocked = isScreenCurrentlyLocked()
-                            
-                            if (!isNowLocked) {
-                                // Safe to proceed - keyguard hasn't engaged
-                                logDebug("✅ Keyguard stable, device still unlocked - disabling sensors: ${sensorFeatures.map { it.displayName }}")
-                                val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
-                                processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
-                            } else {
-                                // Keyguard engaged during stabilization - expected behavior
-                                logDebug("🔒 Keyguard engaged during stabilization - skipping sensors (by design)")
+                            logDebug("🔒 Attempting to disable sensors immediately (no delay): ${sensorFeatures.map { it.displayName }}")
+                            val sensorResults = privacyManager.disableFeatures(sensorFeatures.toSet())
+                            processResults(sensorResults, sensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                            val stillFailed = sensorResults.filter { !it.success }
+                            if (stillFailed.isNotEmpty()) {
+                                logWarning("⚠️ Sensor disable failed, keyguard likely won the race: ${stillFailed.map { it.feature.displayName }}")
                                 debugNotifier.notifyFeatureSkipped(
-                                    sensorFeatures.map { it.displayName }.joinToString(", "),
+                                    stillFailed.map { it.feature.displayName }.joinToString(", "),
                                     "device locked before sensors could be disabled"
                                 )
                             }
@@ -224,6 +256,9 @@ class PrivacyActionWorker(
                                 "device already locked"
                             )
                         }
+                      } finally {
+                        sensorDisableInProgress = false
+                      }
                     }
 
                     // Handle regular features and protection modes after delay

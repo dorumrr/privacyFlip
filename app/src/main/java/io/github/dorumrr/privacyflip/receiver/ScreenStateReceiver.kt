@@ -82,6 +82,16 @@ class ScreenStateReceiver : BroadcastReceiver() {
     }
     
     private fun triggerPrivacyAction(context: Context, isLocking: Boolean, isDeviceLocked: Boolean, reason: String) {
+        // If the accessibility-triggered path is mid-way through disabling the camera/mic for
+        // THIS same lock, don't REPLACE it - that would cancel a disable that's already running,
+        // silently, with sensors left on (#G1). The regular-features delay this trigger would
+        // otherwise start still gets a chance to run once the in-flight worker completes, since
+        // that worker (enqueued with isDeviceLocked=false at the time) carries its own delay
+        // through to the same regular-features step.
+        if (isLocking && PrivacyActionWorker.sensorDisableInProgress) {
+            logDebug(context, "⏳ Sensor disable already in progress - not replacing it (reason: $reason)")
+            return
+        }
         try {
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
                 .setInputData(
@@ -120,7 +130,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "privacyFlip-ScreenStateReceiver"
-        private const val WORK_NAME_LOCK = "privacy_action_lock"
-        private const val WORK_NAME_UNLOCK = "privacy_action_unlock"
+        private val WORK_NAME_LOCK = io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK
+        private val WORK_NAME_UNLOCK = io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK
     }
 }

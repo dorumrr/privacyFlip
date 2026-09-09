@@ -15,6 +15,16 @@ object Constants {
     object BootReceiver {
         const val DEBOUNCE_DELAY_MS = 300L
     }
+
+    // The unique WorkManager names shared by every trigger that can enqueue a privacy
+    // action: ScreenStateReceiver, PrivacyAccessibilityService, and PrivacyMonitorService.
+    // Centralised here (previously each file hardcoded its own copy of the same string)
+    // so all three stay in sync, and so PrivacyActionWorker.sensorDisableInProgress
+    // (checked by all three before they REPLACE this work, see #G1) has one name to refer to.
+    object Work {
+        const val NAME_LOCK = "privacy_action_lock"
+        const val NAME_UNLOCK = "privacy_action_unlock"
+    }
     
     object Preferences {
         const val PRIVACY_SWITCH_PREFS = "privacy_switch_prefs"

@@ -194,13 +194,21 @@ class PrivacyMonitorService : Service() {
      */
     private fun triggerInitialPrivacyAction(isUnlocking: Boolean, reason: String) {
         try {
+            val isLocking = !isUnlocking
+            if (isLocking && PrivacyActionWorker.sensorDisableInProgress) {
+                // Another trigger is already disabling sensors for this lock - REPLACE would
+                // cancel it mid-flight (#G1).
+                Log.d(TAG, "⏳ Sensor disable already in progress - not replacing it")
+                return
+            }
+
             // Check if device is currently locked to pass correct flag to worker
             val isDeviceLocked = isScreenCurrentlyLocked()
 
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
                 .setInputData(
                     workDataOf(
-                        "is_locking" to !isUnlocking,
+                        "is_locking" to isLocking,
                         "is_device_locked" to isDeviceLocked,
                         "trigger" to "service_init",
                         "reason" to reason
@@ -208,8 +216,9 @@ class PrivacyMonitorService : Service() {
                 )
                 .build()
 
-            // Use unique work names consistent with ScreenStateReceiver
-            val workName = if (!isUnlocking) "privacy_action_lock" else "privacy_action_unlock"
+            // Unique work names shared with ScreenStateReceiver and PrivacyAccessibilityService
+            val workName = if (isLocking) io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK
+                            else io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK
             WorkManager.getInstance(this).enqueueUniqueWork(
                 workName,
                 ExistingWorkPolicy.REPLACE,

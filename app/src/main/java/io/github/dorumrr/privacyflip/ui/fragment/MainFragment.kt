@@ -132,6 +132,15 @@ class MainFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume() called - reloading screen lock configuration, global privacy status and privilege status")
+
+        // Bluetooth's "only if not connected" is only ever permission-checked at the moment
+        // the checkbox is tapped (see the listener below). If BLUETOOTH_CONNECT is revoked
+        // later, in system Settings, nothing else in the app would notice - the checkbox would
+        // stay ticked on every future resume with no permission behind it, and the feature
+        // would silently stop protecting anything (#G2). Runs before reloadScreenLockConfig()
+        // below, so the corrected preference is already in place by the time the UI reads it.
+        revalidateBluetoothPermission()
+
         // Reload screen lock configuration from preferences when fragment resumes
         // This ensures the UI reflects any changes made by the worker (e.g., after lock/unlock)
         viewModel.reloadScreenLockConfig()
@@ -524,6 +533,12 @@ class MainFragment : Fragment() {
 
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
         binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
+
+        // Warn when the current lock-delay setup means camera/mic disable-on-lock can't work
+        // reliably. Computed in MainViewModel; this was previously never actually shown
+        // anywhere (#G4) - the view it targeted wasn't included in any inflated layout.
+        binding.screenLockCard.lockDelayWarning.visibility =
+            if (uiState.showLockDelayWarning) View.VISIBLE else View.GONE
 
         // Microphone with "only if unused" support
         binding.screenLockCard.microphoneDisableOnLockSwitch.isChecked = uiState.screenLockConfig.microphoneDisableOnLock
@@ -1124,6 +1139,32 @@ class MainFragment : Fragment() {
             openAccessibilitySettingsButton.setOnClickListener {
                 io.github.dorumrr.privacyflip.util.AccessibilityServiceManager.openAccessibilitySettings(requireContext())
             }
+        }
+    }
+
+    /**
+     * Turns Bluetooth's "only if not connected" back off if BLUETOOTH_CONNECT has been
+     * revoked since it was granted (Android 12+ only; below that, the non-prompting legacy
+     * BLUETOOTH permission covers it and can't be individually revoked this way). Only writes
+     * the preference if it actually needs to change, so a normal resume with permission still
+     * intact does nothing extra.
+     */
+    private fun revalidateBluetoothPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return
+        }
+        val preferenceManager = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext())
+        val onlyIfUnusedEnabled = preferenceManager.getFeatureOnlyIfUnused(PrivacyFeature.BLUETOOTH)
+        if (!onlyIfUnusedEnabled) {
+            return
+        }
+        val stillGranted = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!stillGranted) {
+            Log.w(TAG, "Bluetooth connect permission was revoked - turning 'only if not connected' back off")
+            viewModel.updateFeatureOnlyIfUnused(PrivacyFeature.BLUETOOTH, false)
         }
     }
 

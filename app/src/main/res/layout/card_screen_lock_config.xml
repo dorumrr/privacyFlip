@@ -211,6 +211,27 @@
 
         </LinearLayout>
 
+        <!-- Camera/Mic Lock Delay Warning - shown when the current lock delay setting means
+             sensor-disable-on-lock can't work reliably. Sits between Camera and Microphone
+             since it covers both. See MainViewModel's showLockDelayWarning / #G4. -->
+        <LinearLayout
+            android:id="@+id/lockDelayWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp"
+            android:background="@color/warning_background"
+            android:visibility="gone"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/lock_delay_warning_message"
+                android:textSize="11sp"
+                android:textColor="@color/warning_text" />
+        </LinearLayout>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

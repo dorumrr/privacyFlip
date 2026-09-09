@@ -23,18 +23,32 @@ class MobileDataToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager
                   description = "Broadcast method")
     )
 
-    // Checked first: the real per-SIM enabled flag from the telephony service itself.
-    // "settings get global mobile_data" is a legacy, single-SIM-era flag. On some
-    // phones (dual-SIM ones in particular) it can report "on" even while data is
-    // genuinely off, which made the app wrongly skip re-enabling data on unlock.
-    // grep with no match exits non-zero, so this correctly falls through to the
-    // settings flag below on any device where the telephony dump doesn't have it.
+    // Checked first: the real per-SIM enabled flag from the telephony service itself,
+    // for the specific SIM that's actually carrying data. A dual-SIM phone's dumpsys
+    // output lists one "mIsDataEnabled" line per SIM (per "Phone Id="), and a plain
+    // "grab the first one" reads whichever SIM happens to be listed first, not
+    // necessarily the one the phone is actually using for data - confirmed on a real
+    // dual-SIM phone during this project's own post-release audit. This command reads
+    // "mActiveDataSubId" (which SIM is actually carrying data), matches it to its
+    // "Phone Id=" block via a "phoneId=... subId=..." line dumpsys also logs, then
+    // reads that specific block's "mIsDataEnabled" - not just whichever comes first.
+    // Falls back to the old first-match version, then the legacy settings flag, if any
+    // step above finds nothing (a single-SIM phone, or a dump shape this doesn't expect).
     override val statusCommands = listOf(
-        CommandSet("dumpsys telephony.registry | grep -m1 mIsDataEnabled", description = "Telephony data-enabled state"),
+        CommandSet(
+            "SUBID=\$(dumpsys telephony.registry | grep -m1 'mActiveDataSubId=' | sed 's/.*=//'); " +
+                "PHONEID=\$(dumpsys telephony.registry | grep -m1 \"phoneId=[0-9]* subId=\$SUBID\" | sed -E 's/.*phoneId=([0-9]+).*/\\1/'); " +
+                "dumpsys telephony.registry | awk -v p=\"Phone Id=\$PHONEID\" 'index(\$0,p){f=1} f&&/mIsDataEnabled=/{print;exit}'",
+            description = "Telephony data-enabled state for the active data SIM"
+        ),
+        CommandSet("dumpsys telephony.registry | grep -m1 mIsDataEnabled", description = "Telephony data-enabled state (first SIM listed - fallback, may be the wrong SIM on dual-SIM)"),
         CommandSet("settings get global mobile_data", description = "Settings database method (fallback)")
     )
 
-    override fun parseStatusOutput(output: String): FeatureState {
+    // Public (widened from the base class's protected, which Kotlin allows) so the regression
+    // test for this exact parsing logic (#J1, MobileDataToggleTest.kt) can call it directly
+    // instead of needing a subclass or reflection just to reach it.
+    public override fun parseStatusOutput(output: String): FeatureState {
         // The telephony line looks like "mIsDataEnabled=true". Its field NAME
         // contains the word "enabled" regardless of the actual value, so the
         // generic parser (which just looks for the word "enabled" anywhere)

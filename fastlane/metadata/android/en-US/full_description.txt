@@ -60,7 +60,7 @@ Note: Camera and microphone ignore custom delays and trigger immediately (if not
 
 <b>Privacy & Security:</b>
 
-• Zero telemetry - No data sent to external servers
-• Local storage only - All settings stored on device
+• Zero telemetry - Nothing is sent to us or any third party
+• Settings stay on your device, and in your own Android backup if you have one turned on - never sent anywhere else
 • No network permissions - App cannot access internet
 • Open source - https://github.com/dorumrr/privacyFlip

@@ -1,4 +1,4 @@
-Fixed instant lock (side/function key) so camera and mic actually get blocked, without misfiring on the notification shade
+Improved instant lock (side/function key) detection so it no longer misfires on the notification shade; camera/mic protection for this path needs further confirmation
 Fixed lock delay being skipped when the phone was already locked
 App exemption list now sees every installed app
 Fixed WiFi disable turning off an active hotspot

@@ -381,11 +381,33 @@ class PrivacyActionWorker(
                         it !in PrivacyFeature.getSystemModeFeatures()
                     }
 
-                    // Enable camera/microphone IMMEDIATELY (no delay)
+                    // Enable camera/microphone IMMEDIATELY (no delay), skipping ones already on.
+                    // CAMERA_ONLY_IF_NOT_ENABLED / MICROPHONE_ONLY_IF_NOT_ENABLED both default to
+                    // true (Constants.kt) - the intent was always to skip a redundant re-enable
+                    // here, same as regular features already do below, but this block never
+                    // actually read that preference (#21's real, if minor, finding: every
+                    // catch-up re-check - the app can only detect a real lock while its
+                    // background service is alive, and gets restarted often on some phones -
+                    // was unconditionally re-enabling the microphone even when it was already on).
                     if (sensorFeatures.isNotEmpty()) {
-                        logDebug("⚡ Enabling sensors immediately (no delay): ${sensorFeatures.map { it.displayName }}")
-                        val sensorResults = privacyManager.enableFeatures(sensorFeatures.toSet())
-                        processResults(sensorResults, sensorFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                        val currentSensorStatus = privacyManager.getCurrentStatus()
+                        val filteredSensorFeatures = sensorFeatures.filter { feature ->
+                            val onlyIfNotEnabled = preferenceManager.getFeatureOnlyIfNotEnabled(feature)
+                            if (!onlyIfNotEnabled) {
+                                true
+                            } else {
+                                val isAlreadyEnabled = currentSensorStatus[feature] == FeatureState.ENABLED
+                                if (isAlreadyEnabled) {
+                                    logDebug("⏸️ ${feature.displayName} already enabled - skipping enable (onlyIfNotEnabled=true)")
+                                }
+                                !isAlreadyEnabled
+                            }
+                        }
+                        if (filteredSensorFeatures.isNotEmpty()) {
+                            logDebug("⚡ Enabling sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
+                            val sensorResults = privacyManager.enableFeatures(filteredSensorFeatures.toSet())
+                            processResults(sensorResults, filteredSensorFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                        }
                     }
 
                     // Handle regular features and protection modes after delay

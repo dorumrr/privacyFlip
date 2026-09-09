@@ -21,7 +21,7 @@ import io.github.dorumrr.privacyflip.root.RootManager
  * - Bluetooth: Uses BluetoothAdapter's own connection-state API (needs BLUETOOTH_CONNECT
  *   on Android 12+) - no dumpsys parsing, see isBluetoothConnected()
  * - Hotspot: Uses dumpsys tethering to check for an active tethered interface
- * - Location: Uses dumpsys location to check for active location requests (e.g., navigation apps)
+ * - Location: Uses dumpsys appops to check for active location requests (e.g., navigation apps)
  * - Microphone: Uses AudioManager to check call/communication mode
  */
 class ConnectionStateChecker(
@@ -30,6 +30,12 @@ class ConnectionStateChecker(
 ) {
     companion object {
         private const val TAG = "privacyFlip-ConnectionStateChecker"
+
+        // Split out from isLocationInUse() so it can be unit-tested without a real device: the
+        // awk command it classifies can only run through a real shell, but the classification
+        // itself is plain string logic. See ConnectionStateCheckerTest.
+        internal fun parseLocationInUseOutput(output: String): Boolean =
+            output.isNotBlank() && !output.contains("NONE") && !output.contains("NOBLOCKS")
     }
 
     /**
@@ -177,49 +183,67 @@ class ConnectionStateChecker(
 
     /**
      * Check if location is currently being used by any app.
-     * Uses dumpsys location to check for active location requests/listeners.
-     * This detects apps like navigation (Google Maps) actively requesting location.
+     *
+     * #20: the original version of this check grepped dumpsys location for the literal words
+     * "LocationRequest", "UpdateRecord", "Active" and "Listener[" - words that turn out not to
+     * exist at all in modern Android's actual dumpsys location output. That almost certainly
+     * explains why this always reported "not in use" even during active navigation.
+     *
+     * Reads Android's own AppOps usage tracking instead (dumpsys appops), the same subsystem the
+     * OS's own privacy indicators are built on. An op can be logged as a single instant ("noteOp",
+     * a one-off read) or as a held-open session ("startOp"/"finishOp", which is what produces the
+     * "Running start at:" line this check looks for).
+     *
+     * Tracks two op families, not one, after a second audit round found the first attempt was
+     * still incomplete:
+     *  - COARSE_LOCATION / FINE_LOCATION: the per-app location-read ops.
+     *  - MONITOR_LOCATION / MONITOR_HIGH_POWER_LOCATION: the "continually monitoring" ops -
+     *    Android's own app-ops documentation (AppOps.md) names these as its example of the
+     *    held-open pattern. On a real device, COARSE_LOCATION/FINE_LOCATION never once showed a
+     *    held-open session across a full dumpsys appops dump, while MONITOR_LOCATION did - a
+     *    navigation app's continuous fix stream is far more likely to hold that one open, so
+     *    leaving it out would have reproduced #20 under a different name.
+     *
+     * Excludes the "android" package specifically. Confirmed live: Android's own system process
+     * holds MONITOR_LOCATION open near-permanently for its own bookkeeping (observed on a real,
+     * otherwise-idle device: the dark-theme sunrise/sunset timer and a system sensor-notification
+     * component, both "running" 30+ minutes with no navigation happening at all). Without this
+     * exclusion the check would read "in use" almost always, regardless of what the user is
+     * actually doing - the opposite failure from #20, but just as broken. Any real third-party
+     * app, including OEM-preloaded ones, carries its own package name and is still caught.
+     *
+     * A dumpsys shape this parser doesn't recognise (an untested Android version, an unexpected
+     * OEM change) used to print the same "NONE" as a genuinely idle device - indistinguishable
+     * even in debug logs. The command now prints "NOBLOCKS" instead when it never matched a
+     * single location-family op header at all, so the two are told apart in the logs. This is
+     * separate from the command failing outright (awk missing, dumpsys itself erroring), which
+     * is still caught below by result.success and logged with whatever the shell reported.
+     * Either way this function still returns the same safe "not in use".
      */
     private suspend fun isLocationInUse(): Boolean {
         return try {
-            // Query dumpsys location for active requests and listeners
-            // Look for LocationRequest entries which indicate apps actively requesting location
             val result = rootManager.executeCommand(
-                "dumpsys location | grep -E 'LocationRequest|UpdateRecord|Active|Listener.*\\[' | grep -v 'passive' | head -30"
+                "dumpsys appops | awk '/^    Package /{pkg=\$0; sub(/^    Package /,\"\",pkg); sub(/:\$/,\"\",pkg)} /^      [A-Z_]+ \\(/{if (\$0 ~ /^      (COARSE_LOCATION|FINE_LOCATION|MONITOR_LOCATION|MONITOR_HIGH_POWER_LOCATION) \\(/){inloc=1;sawblock=1}else{inloc=0}} inloc && pkg!=\"android\" && /Running start at/{print; found=1} END{if (!found){if (sawblock) print \"NONE\"; else print \"NOBLOCKS\"}}'"
             )
-            
+
             if (!result.success) {
-                Log.w(TAG, "Failed to check location usage state via dumpsys")
+                // Include the shell's own error (e.g. "awk: not found" on a device without it) -
+                // the previous version of this log dropped it, leaving no way to tell why this
+                // failed from the logs alone.
+                Log.w(TAG, "📍 Failed to check location usage state via dumpsys appops: ${result.error ?: "no error detail"}")
                 return false
             }
 
-            val output = result.output.joinToString(" ").uppercase()
-            
-            // If output is empty or very short, no active requests found
-            if (output.length < 10) {
-                Log.i(TAG, "📍 Location usage check: NOT IN USE (no active requests)")
-                return false
+            val output = result.output.joinToString("\n")
+            if (output.contains("NOBLOCKS")) {
+                Log.w(TAG, "📍 dumpsys appops never showed a location op block at all - detection may not work on this Android version/OEM, treating as not in use")
             }
-            
-            // Look for patterns indicating active location usage:
-            // - "LOCATIONREQUEST" with quality/interval indicates active requests
-            // - "UPDATERECORD" shows active update subscriptions
-            // - "ACTIVE" in context of listeners indicates ongoing use
-            val hasActiveRequest = output.contains("LOCATIONREQUEST") ||
-                                   output.contains("UPDATERECORD") ||
-                                   output.contains("ACTIVE")
-            
-            // Additional check: look for specific app patterns that indicate active navigation
-            val hasNavigationApp = output.contains("COM.GOOGLE.ANDROID.APPS.MAPS") ||
-                                  output.contains("COM.WAZE") ||
-                                  output.contains("MAPS") // Broader match for map apps
-
-            val isInUse = hasActiveRequest || hasNavigationApp
+            val isInUse = parseLocationInUseOutput(output)
 
             Log.i(TAG, "📍 Location usage check: ${if (isInUse) "IN USE" else "NOT IN USE"}")
             isInUse
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking location usage state", e)
+            Log.e(TAG, "📍 Error checking location usage state", e)
             false
         }
     }

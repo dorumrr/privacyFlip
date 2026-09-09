@@ -320,14 +320,45 @@ class PrivacyActionWorker(
 
                         // Disable regular features (WiFi, Bluetooth, NFC, etc.)
                         if (regularFeatures.isNotEmpty()) {
-                            logDebug("🔒 Disabling regular features (count=${regularFeatures.size}): ${regularFeatures.map { it.displayName }}")
-                            logDebug("🔒 About to call privacyManager.disableFeatures()...")
+                            // Re-check "only if unused" features if we waited (#20 audit finding):
+                            // the filter earlier in this function sampled "in use" BEFORE this
+                            // delay, so a feature reported free then could be in genuine active
+                            // use now - e.g. navigation started during the wait. Only features
+                            // that opted into "only if unused" need re-testing; an unconditionally
+                            // included feature's presence here never depended on that snapshot.
+                            val filteredRegularFeatures = if (lockDelay > 0) {
+                                regularFeatures.filter { feature ->
+                                    if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
+                                        true
+                                    } else {
+                                        val stillInUse = connectionChecker.isFeatureInUse(feature)
+                                        if (stillInUse) {
+                                            logDebug("⏸️ ${feature.displayName} became in use during the delay - skipping disable")
+                                            debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
+                                        }
+                                        !stillInUse
+                                    }
+                                }
+                            } else {
+                                regularFeatures
+                            }
 
-                            val regularResults = privacyManager.disableFeatures(regularFeatures.toSet())
+                            // The re-check above can filter every last one out (all of them
+                            // became in use during the wait) - guard the empty case the same
+                            // way the unlock-side equivalent already does, rather than calling
+                            // disableFeatures on an empty set.
+                            if (filteredRegularFeatures.isNotEmpty()) {
+                                logDebug("🔒 Disabling regular features (count=${filteredRegularFeatures.size}): ${filteredRegularFeatures.map { it.displayName }}")
+                                logDebug("🔒 About to call privacyManager.disableFeatures()...")
 
-                            logDebug("🔒 privacyManager.disableFeatures() returned ${regularResults.size} results")
+                                val regularResults = privacyManager.disableFeatures(filteredRegularFeatures.toSet())
 
-                            processResults(regularResults, regularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                                logDebug("🔒 privacyManager.disableFeatures() returned ${regularResults.size} results")
+
+                                processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                            } else {
+                                logDebug("ℹ️ No regular features left to disable after the in-use re-check")
+                            }
                         } else {
                             logDebug("ℹ️ No regular features to disable (list is empty)")
                         }

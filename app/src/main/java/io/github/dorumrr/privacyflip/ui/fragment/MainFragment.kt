@@ -519,7 +519,8 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.locationEnableOnUnlock,
             onlyIfUnused = uiState.screenLockConfig.locationOnlyIfUnused,
             onlyIfNotEnabled = uiState.screenLockConfig.locationOnlyIfNotEnabled,
-            showOnlyIfUnused = true
+            showOnlyIfUnused = true,
+            onlyIfUnusedLabel = "Only if not in use"
         )
 
         updatePrivacyFeatureSetting(
@@ -1021,11 +1022,16 @@ class MainFragment : Fragment() {
         enableOnUnlock: Boolean,
         onlyIfUnused: Boolean = false,
         onlyIfNotEnabled: Boolean = true,
-        showOnlyIfUnused: Boolean = true
+        showOnlyIfUnused: Boolean = true,
+        // The row's XML default, "Only if not connected", is correct for WiFi/Bluetooth (real
+        // connections) but wrong for Location, which is never "connected" - only "in use".
+        // Overridden per call site rather than duplicating the whole layout (#20 audit finding).
+        onlyIfUnusedLabel: String = "Only if not connected"
     ) {
         featureBinding.disableOnLockSwitch.isChecked = disableOnLock
         featureBinding.enableOnUnlockSwitch.isChecked = enableOnUnlock
         featureBinding.onlyIfUnusedCheckbox.isChecked = onlyIfUnused
+        featureBinding.onlyIfUnusedText.text = onlyIfUnusedLabel
         featureBinding.onlyIfNotEnabledCheckbox.isChecked = onlyIfNotEnabled
         // Show/hide the "only if unused" container based on disableOnLock state
         // But only if this feature supports the option

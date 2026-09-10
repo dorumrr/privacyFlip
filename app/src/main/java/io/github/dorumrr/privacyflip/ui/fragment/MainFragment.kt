@@ -551,12 +551,6 @@ class MainFragment : Fragment() {
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
         binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
 
-        // Warn when the current lock-delay setup means camera/mic disable-on-lock can't work
-        // reliably. Computed in MainViewModel; this was previously never actually shown
-        // anywhere (#G4) - the view it targeted wasn't included in any inflated layout.
-        binding.screenLockCard.lockDelayWarning.visibility =
-            if (uiState.showLockDelayWarning) View.VISIBLE else View.GONE
-
         // Microphone with "only if unused" support
         binding.screenLockCard.microphoneDisableOnLockSwitch.isChecked = uiState.screenLockConfig.microphoneDisableOnLock
         binding.screenLockCard.microphoneEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.microphoneEnableOnUnlock

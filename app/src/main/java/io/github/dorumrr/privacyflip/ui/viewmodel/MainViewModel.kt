@@ -764,8 +764,12 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Check lock delay configuration and update UI state to show/hide warning.
-     * This is the main entry point for lock delay warning logic.
+     * Check lock delay configuration and log whether it would prevent reliable sensor disabling.
+     * No longer drives a UI warning box - that duplicated the camera/mic (?) info dialog
+     * verbatim (same string resource) whenever both were visible at once. The explanation now
+     * lives only behind that (?) icon (showCameraMicInfoDialog, MainFragment.kt); this function
+     * still runs and still logs, since the diagnostic trail is useful on its own for debugging a
+     * report like #22 even without a UI element to show it in.
      */
     fun checkLockDelayConfiguration(context: Context) {
         handleError("checking lock delay configuration") {
@@ -804,8 +808,6 @@ class MainViewModel : ViewModel() {
                 }
             }
             logManager.i(TAG, "=== LOCK DELAY WARNING CHECK END ===")
-
-            updateUiState { it.copy(showLockDelayWarning = finalShowWarning) }
         }
     }
 
@@ -1150,8 +1152,6 @@ data class UiState(
         unlockDelaySeconds = Constants.Defaults.UNLOCK_DELAY_SECONDS,
         showCountdown = Constants.Defaults.SHOW_COUNTDOWN
     ),
-    // Lock delay warning for camera/mic
-    val showLockDelayWarning: Boolean = false,
     // Debug notifications toggle
     val debugNotificationsEnabled: Boolean = Constants.Defaults.DEBUG_NOTIFICATIONS_ENABLED,
     // Debug logs toggle

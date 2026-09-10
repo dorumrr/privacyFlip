@@ -3,6 +3,7 @@ package io.github.dorumrr.privacyflip.accessibility
 import android.app.Application
 import android.app.KeyguardManager
 import android.content.Context
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
@@ -48,11 +49,18 @@ class PrivacyAccessibilityServiceTest {
         return event
     }
 
+    // Existence, not "not finished" (found 10 Sep, /phi:debug pass - reviewer 3 challenged the
+    // original !isFinished filter, and a direct check proved it right to challenge: the enqueued
+    // CoroutineWorker can genuinely still be RUNNING at one check and SUCCEEDED microseconds
+    // later at the next, making a finished-state filter race the worker's own completion. What
+    // this test actually needs to know is simpler and race-free: was NAME_UNLOCK ever enqueued
+    // at all. shadowOf(Looper.getMainLooper()).idle() after every event lets any queued
+    // WorkManager callback settle first, so this reads a stable, already-final answer.
     private fun unlockWorkEnqueuedCount(): Int =
         WorkManager.getInstance(context)
             .getWorkInfosForUniqueWork(Constants.Work.NAME_UNLOCK)
             .get()
-            .count { !it.state.isFinished }
+            .size
 
     @Test
     fun `window changes away from lock screen while keyguard still reports locked does not trigger unlock actions`() {
@@ -67,6 +75,7 @@ class PrivacyAccessibilityServiceTest {
         // A non-lock-screen window now appears, but the keyguard STILL reports locked - the
         // exact race the #C3 regression missed
         service.onAccessibilityEvent(windowEvent("com.android.settings.Settings"))
+        shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(
             "must not enqueue unlock-side work while the keyguard still reports locked",
@@ -86,9 +95,42 @@ class PrivacyAccessibilityServiceTest {
 
         shadowOf(keyguardManager).setKeyguardLocked(false) // genuine unlock this time
         service.onAccessibilityEvent(windowEvent("com.android.settings.Settings"))
+        shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(
             "must enqueue unlock-side work once the keyguard confirms unlocked",
+            1,
+            unlockWorkEnqueuedCount()
+        )
+    }
+
+    @Test
+    fun `a missed race self-heals on the next window event once keyguard catches up`() {
+        // Checks PLAN.md's H3/A3 (found 10 Sep, /phi:debug pass): the finding claimed a missed
+        // race is permanent, "no retry or timeout". Closer reading suggested otherwise - the
+        // keyguard read re-runs on EVERY window event while wasShowingKeyguard stays true, not
+        // just once. This proves which reading is correct.
+        val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
+
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        shadowOf(keyguardManager).setKeyguardLocked(true)
+
+        service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardViewMediator"))
+
+        // First non-lock-screen event: the race. Keyguard state has not caught up yet.
+        service.onAccessibilityEvent(windowEvent("com.android.settings.Settings"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("must not fire yet - the race window", 0, unlockWorkEnqueuedCount())
+
+        // Keyguard state catches up; a second, later window event arrives (any further
+        // navigation on the phone produces one of these in real use).
+        shadowOf(keyguardManager).setKeyguardLocked(false)
+        service.onAccessibilityEvent(windowEvent("com.android.settings.SubSettings"))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "H3: does a later window event recover the missed unlock, or does it stay lost " +
+                "forever as the finding claimed",
             1,
             unlockWorkEnqueuedCount()
         )

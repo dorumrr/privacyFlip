@@ -223,6 +223,17 @@ class PrivacyMonitorService : Service() {
                 if (!PrivacyActionWorker.sensorDisableInProgress) {
                     io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(this, TAG)
                 }
+                // #A2's own #G1 gap, found by this round's adversarial review: without this, a
+                // 3rd unlock signal (this restart catch-up firing moments after another path
+                // already caught the same real unlock) could REPLACE-enqueue while that 2nd
+                // unlock's job is still mid-way through enableFeatures(), cancelling that
+                // in-flight coroutine and leaving sensors off after a real unlock. Checked after
+                // recordUnlock()/cancel() above - both are still correct and safe to do even
+                // when the enqueue itself is about to be skipped as redundant.
+                if (PrivacyActionWorker.sensorEnableInProgress) {
+                    Log.d(TAG, "⏳ Sensor enable already in progress - not enqueuing a duplicate")
+                    return
+                }
             }
 
             // Check if device is currently locked to pass correct flag to worker

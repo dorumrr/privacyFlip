@@ -49,6 +49,18 @@ class PrivacyAccessibilityServiceTest {
         return event
     }
 
+    // Robolectric.setupService() only drives the plain Service lifecycle (onCreate); it does not
+    // call onServiceConnected(), which real Android calls via a system binder callback, not part
+    // of that plain lifecycle. Found this round (#A3): without it, isServiceRunning stays false
+    // in every test, silently short-circuiting the new delayed-recheck guard that checks it -
+    // real Android always has onServiceConnected() fire before any accessibility event can
+    // arrive, so calling it here matches production ordering, not a workaround for it.
+    private fun connectedService(): PrivacyAccessibilityService {
+        val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
+        service.onServiceConnected()
+        return service
+    }
+
     // Existence, not "not finished" (found 10 Sep, /phi:debug pass - reviewer 3 challenged the
     // original !isFinished filter, and a direct check proved it right to challenge: the enqueued
     // CoroutineWorker can genuinely still be RUNNING at one check and SUCCEEDED microseconds
@@ -64,7 +76,7 @@ class PrivacyAccessibilityServiceTest {
 
     @Test
     fun `window changes away from lock screen while keyguard still reports locked does not trigger unlock actions`() {
-        val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
+        val service = connectedService()
 
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         shadowOf(keyguardManager).setKeyguardLocked(true) // real keyguard state: still locked
@@ -86,7 +98,7 @@ class PrivacyAccessibilityServiceTest {
 
     @Test
     fun `window changes away from lock screen once keyguard confirms unlocked does trigger unlock actions`() {
-        val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
+        val service = connectedService()
 
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         shadowOf(keyguardManager).setKeyguardLocked(true)
@@ -110,7 +122,7 @@ class PrivacyAccessibilityServiceTest {
         // race is permanent, "no retry or timeout". Closer reading suggested otherwise - the
         // keyguard read re-runs on EVERY window event while wasShowingKeyguard stays true, not
         // just once. This proves which reading is correct.
-        val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
+        val service = connectedService()
 
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         shadowOf(keyguardManager).setKeyguardLocked(true)
@@ -131,6 +143,36 @@ class PrivacyAccessibilityServiceTest {
         assertEquals(
             "H3: does a later window event recover the missed unlock, or does it stay lost " +
                 "forever as the finding claimed",
+            1,
+            unlockWorkEnqueuedCount()
+        )
+    }
+
+    @Test
+    fun `A3 fix - a missed race is still caught after a delay even with no further window event`() {
+        // The narrower defect the self-heal test above doesn't cover: what if NO further window
+        // event ever arrives before the device locks again (a glance-and-relock, no navigation)?
+        // Advances Robolectric's fake clock with no second window event at all - only the #A3
+        // delayed re-check should be able to catch this.
+        val service = connectedService()
+
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        shadowOf(keyguardManager).setKeyguardLocked(true)
+
+        service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardViewMediator"))
+
+        // The race: keyguard state has not caught up yet.
+        service.onAccessibilityEvent(windowEvent("com.android.settings.Settings"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("must not fire yet - the race window", 0, unlockWorkEnqueuedCount())
+
+        // Keyguard state catches up, but no further window event is ever sent - only time
+        // passing past the re-check delay.
+        shadowOf(keyguardManager).setKeyguardLocked(false)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600))
+
+        assertEquals(
+            "the delayed re-check must catch this even with zero further window events",
             1,
             unlockWorkEnqueuedCount()
         )

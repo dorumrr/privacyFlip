@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.work.WorkManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
+import java.util.concurrent.Executor
 
 /**
  * Cancels the pending lock-triggered privacy action, and records that an unlock happened.
@@ -17,9 +18,28 @@ import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 object PendingLockWork {
     fun cancel(context: Context, tag: String) {
         try {
-            WorkManager.getInstance(context).cancelUniqueWork(Constants.Work.NAME_LOCK)
-            Log.i(tag, "🚫 Cancelled pending lock work due to a confirmed unlock")
-            DebugLogHelper.getInstance(context).i(tag, "🚫 Cancelled pending lock work due to a confirmed unlock")
+            val operation = WorkManager.getInstance(context).cancelUniqueWork(Constants.Work.NAME_LOCK)
+            Log.i(tag, "🚫 Cancelling pending lock work due to a confirmed unlock")
+            DebugLogHelper.getInstance(context).i(tag, "🚫 Cancelling pending lock work due to a confirmed unlock")
+            // #A4 (PLAN.md, confirmed 10 Sep by /phi:debug): cancelUniqueWork()'s returned
+            // Operation used to be discarded - it resolves asynchronously, and a genuine failure
+            // (WorkManager's own docs name a full internal database as one real cause) could
+            // never be detected or logged, leaving a stale lock/disable action free to still fire
+            // later with no error shown anywhere. Callers here (broadcast receivers, an
+            // accessibility event handler) are not coroutines, so this listens for the real
+            // outcome asynchronously rather than blocking to await it - fire-and-forget for the
+            // caller, but the actual result is no longer silently dropped. Runs the listener
+            // inline (Runnable::run): logging is thread-safe and cheap, no need to hop threads.
+            operation.result.addListener({
+                try {
+                    operation.result.get()
+                    Log.i(tag, "✅ Pending lock work cancel confirmed by WorkManager")
+                    DebugLogHelper.getInstance(context).i(tag, "✅ Pending lock work cancel confirmed by WorkManager")
+                } catch (e: Exception) {
+                    Log.e(tag, "❌ Pending lock work cancel FAILED - a stale lock/disable action may still fire later", e)
+                    DebugLogHelper.getInstance(context).e(tag, "❌ Pending lock work cancel FAILED - a stale lock/disable action may still fire later", e)
+                }
+            }, Executor { it.run() })
         } catch (e: Exception) {
             Log.e(tag, "Failed to cancel pending lock work", e)
             DebugLogHelper.getInstance(context).e(tag, "Failed to cancel pending lock work", e)

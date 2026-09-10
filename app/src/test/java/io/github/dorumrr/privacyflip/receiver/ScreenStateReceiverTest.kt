@@ -48,12 +48,13 @@ class ScreenStateReceiverTest {
         ScreenStateReceiver().onReceive(context, Intent(Intent.ACTION_SCREEN_ON))
         shadowOf(Looper.getMainLooper()).idle()
 
-        // H1 predicts this is 0 (the bug: nothing re-enables). If the code turns out to already
-        // enqueue it, this assertion itself fails and H1 is dead, not confirmed.
+        // #A1 fix (PLAN.md): this used to read 0 (the bug - nothing re-enabled). Watched this
+        // exact assertion fail against the pre-fix code, then pass once triggerPrivacyAction was
+        // added to this branch.
         assertEquals(
-            "H1: ACTION_SCREEN_ON (not locked) should enqueue unlock-side work if the app is " +
-                "meant to fully recover here - recording what actually happens, not assuming it",
-            0,
+            "ACTION_SCREEN_ON (not locked) must enqueue the unlock-side re-enable, same as the " +
+                "app's other 3 unlock-detection paths",
+            1,
             enqueuedCount(Constants.Work.NAME_UNLOCK)
         )
     }

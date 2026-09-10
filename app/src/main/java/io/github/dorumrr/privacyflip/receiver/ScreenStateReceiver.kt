@@ -106,6 +106,15 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     if (!PrivacyActionWorker.sensorDisableInProgress) {
                         PendingLockWork.cancel(context, TAG)
                     }
+                    // #A1 (PLAN.md, confirmed 10 Sep by /phi:debug): this branch used to only
+                    // cancel, never re-enable - unlike the other 3 unlock-detection paths. That
+                    // left the exact scenario this branch exists for (screen off during Android's
+                    // own pre-keyguard grace period, then back on before the keyguard actually
+                    // engaged) with no way to give back whatever the immediate sensor block had
+                    // already disabled, since a real unlock was never technically dismissed and
+                    // ACTION_USER_PRESENT never fires either. Mirrors ACTION_USER_PRESENT's own
+                    // call below, matching what every other confirmed-unlock path already does.
+                    triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen On (Not Locked)")
                 }
             }
 
@@ -124,6 +133,13 @@ class ScreenStateReceiver : BroadcastReceiver() {
         // through to the same regular-features step.
         if (isLocking && PrivacyActionWorker.sensorDisableInProgress) {
             logDebug(context, "⏳ Sensor disable already in progress - not replacing it (reason: $reason)")
+            return
+        }
+        // #A2's own #G1 gap: the enable-side twin of the guard above. A 3rd unlock signal
+        // REPLACE-enqueuing while a 2nd is still mid-way through enabling camera/mic would
+        // cancel that in-flight coroutine outright, leaving sensors off after a real unlock.
+        if (!isLocking && PrivacyActionWorker.sensorEnableInProgress) {
+            logDebug(context, "⏳ Sensor enable already in progress - not replacing it (reason: $reason)")
             return
         }
         try {

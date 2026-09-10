@@ -29,7 +29,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Airplane Mode - Enable on lock (opt-in, disables all radios at once)
 • Battery Saver - Enable on lock (opt-in, reduces background activity)
 
-Note: Camera and microphone ignore custom delays and trigger immediately (if not in use to avoid interrupting calls), due to Android limitations
+Note: Camera and microphone ignore custom delays and trigger immediately, due to Android limitations. Microphone can skip this during a real call if enabled in settings; camera cannot detect active use, so it always triggers immediately
 
 <b>Requirements:</b>
 

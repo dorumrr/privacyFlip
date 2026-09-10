@@ -12,7 +12,7 @@
     <string name="widget_privacy_off">OFF</string>
 
     <!-- Camera & Microphone Info -->
-    <string name="lock_delay_warning_message">Android prevents changing camera or microphone privacy while locked. For this reason, camera and microphone ignore custom lock/unlock delays and trigger immediately (if they are not in use).\n\nTo ensure automatic disabling on lock:\n\n1. Go to Settings → Security → Screen Lock\n2. Tap the gear icon ⚙️ next to your lock method\n3. Set \"Automatically lock\" to 5 seconds or more\n4. Disable \"Power button instantly locks\" (if present)</string>
+    <string name="lock_delay_warning_message">Android prevents changing camera or microphone privacy while locked. For this reason, camera and microphone ignore custom lock/unlock delays and trigger immediately.\n\nMicrophone can skip this while genuinely in use (a call), if you turn that on below. Camera has no way to detect active use, so it always triggers immediately, even during a video call.\n\nTo ensure automatic disabling on lock:\n\n1. Go to Settings → Security → Screen Lock\n2. Tap the gear icon ⚙️ next to your lock method\n3. Set \"Automatically lock\" to 5 seconds or more\n4. Disable \"Power button instantly locks\" (if present)</string>
 
     <!-- Airplane Mode Info -->
     <string name="airplane_mode_info_message">Enabling Airplane Mode will disable WiFi, Bluetooth, Mobile Data, and NFC regardless of their individual settings.\n\nException: if a WiFi hotspot is active, Airplane Mode is skipped on lock so tethered devices stay connected - the same exception WiFi and Mobile Data already have.\n\nUse this for maximum privacy when the device is locked.</string>

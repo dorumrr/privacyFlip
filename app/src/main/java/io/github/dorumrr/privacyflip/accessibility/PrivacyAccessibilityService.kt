@@ -3,6 +3,8 @@ package io.github.dorumrr.privacyflip.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.work.ExistingWorkPolicy
@@ -48,9 +50,25 @@ class PrivacyAccessibilityService : AccessibilityService() {
         // service's own event stream instead of a broadcast.
         @Volatile
         private var wasShowingKeyguard = false
+
+        // #A3 (PLAN.md, confirmed 10 Sep by /phi:debug): the isStillLocked re-check below only
+        // ever runs when a NEW window-state-change event arrives. If KeyguardManager's own
+        // internal state lags the event that triggered the check (a dismiss animation, an OEM
+        // ordering quirk) AND no further window event happens before the device locks again - a
+        // user who unlocks just to glance at something and re-locks without navigating anywhere
+        // else - the miss can persist through that whole cycle with nothing to catch it. This
+        // delay is how long to wait before checking again anyway, with no new event required.
+        // Short enough to be irrelevant to normal use (this only matters when
+        // PrivacyMonitorService is already dead, the one situation this detector exists for),
+        // long enough to clear a real dismiss-animation lag.
+        private const val UNLOCK_RECHECK_DELAY_MS = 500L
     }
 
-    override fun onServiceConnected() {
+    // public, not the inherited protected: PrivacyAccessibilityServiceTest calls this directly
+    // to simulate the real lifecycle (Robolectric.setupService() only drives the plain Service
+    // lifecycle, not this AccessibilityService-specific system binder callback). Idempotent, so
+    // widening it has no real downside.
+    public override fun onServiceConnected() {
         super.onServiceConnected()
         isServiceRunning = true
         Log.i(TAG, "✅ Accessibility Service connected and active")
@@ -108,6 +126,7 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 val isStillLocked = keyguardManager?.isKeyguardLocked ?: true // fail closed
                 if (isStillLocked) {
                     Log.d(TAG, "Window changed (class: $className) but keyguard is still locked - not an unlock, staying armed")
+                    scheduleUnlockRecheck()
                 } else {
                     Log.d(TAG, "🔓 Lock screen replaced by another window (class: $className), keyguard confirmed unlocked")
                     wasShowingKeyguard = false
@@ -118,6 +137,28 @@ class PrivacyAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error processing accessibility event", e)
         }
+    }
+
+    /**
+     * #A3: catches a missed unlock when no further window-state-change event ever arrives to
+     * naturally re-trigger the check above. Re-reads real keyguard state once, after
+     * [UNLOCK_RECHECK_DELAY_MS] - if [wasShowingKeyguard] has already been cleared by then
+     * (a real window event caught it first, or a fresh lock cycle armed and is now tracking its
+     * own state), this is a no-op; isServiceRunning guards against acting after the service
+     * has been torn down.
+     */
+    private fun scheduleUnlockRecheck() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!isServiceRunning || !wasShowingKeyguard) {
+                return@postDelayed
+            }
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (keyguardManager?.isKeyguardLocked == false) {
+                Log.d(TAG, "🔓 Keyguard caught up on delayed re-check (#A3) - no further window event ever arrived to trigger it naturally")
+                wasShowingKeyguard = false
+                triggerEarlyUnlockActions()
+            }
+        }, UNLOCK_RECHECK_DELAY_MS)
     }
 
     /**
@@ -200,6 +241,17 @@ class PrivacyAccessibilityService : AccessibilityService() {
             // actively running for THIS lock must not be interrupted mid-command.
             if (!PrivacyActionWorker.sensorDisableInProgress) {
                 PendingLockWork.cancel(applicationContext, TAG)
+            }
+            // #A2's own #G1 gap, found by this round's adversarial review: without this, a 3rd
+            // unlock signal (this path firing moments after ScreenStateReceiver's own
+            // ACTION_USER_PRESENT already caught the same real unlock) could REPLACE-enqueue
+            // while the 2nd unlock's job is still mid-way through enableFeatures(), cancelling
+            // that in-flight coroutine and leaving sensors off after a real unlock. Checked after
+            // recordUnlock()/cancel() above, not before - both of those are still correct and
+            // safe to do even when the enqueue itself is about to be skipped as redundant.
+            if (PrivacyActionWorker.sensorEnableInProgress) {
+                Log.d(TAG, "⏳ Sensor enable already in progress - not enqueuing a duplicate")
+                return
             }
 
             val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()

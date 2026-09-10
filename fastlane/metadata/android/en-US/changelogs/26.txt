@@ -1,0 +1,5 @@
+- Fixed camera/mic not always re-enabling promptly after certain unlock sequences
+- Improved side-button/instant-lock detection reliability
+- Fixed hotspot occasionally getting disabled by a WiFi/Airplane Mode timing race
+- Fixed several lock/unlock timing race conditions that could leave WiFi, Bluetooth, NFC, Airplane Mode, or Battery Saver not properly protected after a quick lock, unlock, and re-lock
+- Corrected the lock-delay warning text about camera protection

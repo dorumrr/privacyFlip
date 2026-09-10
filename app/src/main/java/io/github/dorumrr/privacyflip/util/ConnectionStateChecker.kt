@@ -223,19 +223,59 @@ class ConnectionStateChecker(
      * this function still returns the same safe "not in use"; only the log's stated reason can
      * be wrong, never the answer.
      *
-     * #A1 (PLAN.md): confirmed live that awk does not exist at all on Android 8, and that
-     * Android 9's awk build (toybox, dated 2012) SEGFAULTS on this command - isolated all the
-     * way down to `!found` specifically, a bare logical-not on a variable inside an END block.
-     * Neither `!=` elsewhere in this same command, nor an unnegated truthy check, trips it - only
-     * that one exact shape, on that one old build. `found==0` does the identical job without it.
-     * Re-verified after the fix, live, on the same broken build: no crash, right answer for an
-     * idle device, right answer for a synthetic active one, right answer for no location blocks
-     * at all, and no change on Android 10+ or the real device used all session.
+     * #A1: confirmed live that awk does not exist at all on Android 8, and that Android 9's awk
+     * build (toybox, dated 2012) SEGFAULTS on this command - isolated all the way down to
+     * `!found` specifically, a bare logical-not on a variable inside an END block. Neither `!=`
+     * elsewhere in this same command, nor an unnegated truthy check, trips it - only that one
+     * exact shape, on that one old build. `found==0` does the identical job without it.
+     * Re-verified after the fix, live, on the same broken build (the Pixel_2_AOSP_9_API_28 AVD):
+     * no crash, right answer for an idle device, right answer for a synthetic active one, right
+     * answer for no location blocks at all, and no change on Android 10+ or the real device used
+     * all session.
+     *
+     * #20, second gap: "Running start at" only ever appears while a session is held open
+     * (startOp called, finishOp not yet called). An app that asks for a fix in short bursts -
+     * noteOp, not startOp/finishOp - never produces that line at all, even mid-navigation, so a
+     * lock landing between two bursts used to read as "not in use". Every "Access:" line already
+     * carries how long ago that read happened, e.g. "(-2s410ms)" or "(-331ms)" - a second rule
+     * now also counts a location-family access from the last ~6 seconds as in use, same package
+     * exclusion, same op-block scoping. Matches only the two shapes dumpsys is expected to print
+     * for "just now": bare milliseconds (confirmed against real captured output, e.g. "-331ms"
+     * in android-housekeeping-api28-real.txt) or a single-digit second plus milliseconds (NOT
+     * yet seen in any real capture this repo has - both real fixtures only ever show
+     * two-digit-or-larger seconds for anything under a minute, e.g. "-29s137ms", "-14s3ms"; this
+     * branch is proven only against the synthetic fixture written for it,
+     * active-thirdparty-burst-synthetic.txt). Neither shape is a bare whole-second form (e.g.
+     * "-5s" with no trailing ms), which also has not been seen in any real capture, so this
+     * cannot mistake an older access ("-14s3ms", "-58m47s35ms") for a recent one without doing
+     * time arithmetic in awk, which is exactly the kind of construct #A1 found an old toybox
+     * build cannot be trusted with. A dumpsys shape that doesn't match either rule falls back to
+     * the existing NONE/NOBLOCKS handling - never a crash, only a missed detection, same failure
+     * mode this check already had.
+     *
+     * Audit, same night: 2 findings against the block above, both fixed here.
+     *  - The gate that decides "did a new op start" used to require the exact shape
+     *    `[A-Z_]+ \(` (op name in caps, then a space and a paren). A header this parser doesn't
+     *    recognise - a lowercase or differently-punctuated OEM op name - matched nothing, so the
+     *    block-membership flag never reset and leaked into whatever came after it, which a
+     *    fresher access-recency line could then wrongly attribute to Location. The gate is now
+     *    just "a new op-header-depth line started" (`^      [^ ]`, exactly 6 leading spaces then
+     *    anything) - real per-op detail is always indented deeper than that in every real
+     *    capture this repo has, so this can only end a block sooner or on time, never early.
+     *    Which op the block actually belongs to still requires the exact location-op names,
+     *    unchanged.
+     *  - The bare-milliseconds branch had no upper bound (`[0-9]+ms`), so it would have matched
+     *    ANY digit count, not just the sub-1-second values real captures actually show - an
+     *    older access dumpsys happened to print as bare ms (nothing seen doing this, but nothing
+     *    ruled it out either) would have been wrongly treated as "just now". Capped to 1-3
+     *    digits (`[0-9][0-9]?[0-9]?ms`, i.e. under 1 second) with plain `?`, not a `{1,3}`
+     *    interval - interval syntax is untested on the old toybox build #A1 already found one
+     *    real crash on, `?` is already used elsewhere in this same command with no issue.
      */
     private suspend fun isLocationInUse(): Boolean {
         return try {
             val result = rootManager.executeCommand(
-                "dumpsys appops | awk '/^    Package /{pkg=\$0; sub(/^    Package /,\"\",pkg); sub(/:\$/,\"\",pkg)} /^      [A-Z_]+ \\(/{if (\$0 ~ /^      (COARSE_LOCATION|FINE_LOCATION|MONITOR_LOCATION|MONITOR_HIGH_POWER_LOCATION) \\(/){inloc=1;sawblock=1}else{inloc=0}} inloc && pkg!=\"android\" && /Running start at/{print; found=1} END{if (found==0){if (sawblock) print \"NONE\"; else print \"NOBLOCKS\"}}'"
+                "dumpsys appops | awk '/^    Package /{pkg=\$0; sub(/^    Package /,\"\",pkg); sub(/:\$/,\"\",pkg)} /^      [^ ]/{if (\$0 ~ /^      (COARSE_LOCATION|FINE_LOCATION|MONITOR_LOCATION|MONITOR_HIGH_POWER_LOCATION) \\(/){inloc=1;sawblock=1}else{inloc=0}} inloc && pkg!=\"android\" && /Running start at/{print; found=1} inloc && pkg!=\"android\" && /Access:/ && \$0 ~ /\\(-([0-9][0-9]?[0-9]?ms|[0-5]s[0-9]+ms)\\)/{print; found=1} END{if (found==0){if (sawblock) print \"NONE\"; else print \"NOBLOCKS\"}}'"
             )
 
             if (!result.success) {

@@ -163,3 +163,8 @@ Desktop.ini
 *.swo
 *.tmp
 artifacts/
+
+# Local-only dev tooling: scripts and captured device data used for manual verification during
+# development, never needed to build or ship the app, never wired into CI. Kept out of the
+# public repo on purpose - see dev-local/README.md.
+dev-local/

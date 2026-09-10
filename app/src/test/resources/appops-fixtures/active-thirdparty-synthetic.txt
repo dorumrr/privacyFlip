@@ -1,5 +1,0 @@
-    Package com.example.navapp:
-      MONITOR_LOCATION (allow):
-        pkg=[
-          Running start at: +5s
-        ]

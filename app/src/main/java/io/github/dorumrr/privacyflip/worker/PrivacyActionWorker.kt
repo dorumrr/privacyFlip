@@ -6,7 +6,6 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.work.CoroutineWorker
@@ -114,6 +113,13 @@ class PrivacyActionWorker(
         // elapsedRealtime(), not System.currentTimeMillis(): immune to the wall clock itself
         // moving (NTP sync, the user changing the clock, DST), which a plain timestamp
         // comparison would otherwise be exposed to.
+        //
+        // Found by ultrareview to have a second role, missed when lastLockAtMillis's own second
+        // role was added: doWork()'s unlock branch also reads this AS thisUnlockCycleStartedAt -
+        // its own cycle's reference point, not just the opposite-action value the lock side
+        // reads. Same reasoning as lastLockAtMillis: recordUnlock() stamps this at the real
+        // trigger site, before the job is even enqueued, so doWork() never needs to (and must
+        // not) re-stamp a fresh, WorkManager-dispatch-delayed value of its own.
         @Volatile
         var lastUnlockAtMillis: Long = 0L
 
@@ -222,14 +228,6 @@ class PrivacyActionWorker(
         // (the normal path, preserving #B2's "still cancellable during the regular-features
         // delay" behaviour), and in the outer finally below for every early-return and exception
         // path, for THIS direction only (see that finally's own comment).
-        //
-        // thisCycleStartedAt is still used below as the unlock branch's own reference point
-        // (thisUnlockCycleStartedAt) - there is no equivalent trigger-site record for it to read
-        // instead yet (nothing needs one: the unlock side's own supersede checks compare against
-        // lastLockAtMillis, the OPPOSITE action, never against a delayed stamp of its own start).
-        // The lock branch below deliberately does NOT use this value for its own reference
-        // point - see thisLockCycleStartedAt's own comment for why.
-        val thisCycleStartedAt = SystemClock.elapsedRealtime()
         if (isLocking) {
             sensorDisableInProgress = true
         } else {
@@ -589,20 +587,30 @@ class PrivacyActionWorker(
                 if (featuresToEnable.isNotEmpty()) {
                     logDebug("Enabling features on unlock: ${featuresToEnable.map { it.displayName }}")
 
-                    // #A2: this unlock cycle's own start time (captured above, before any setup
-                    // work - see #Audit finding 2), the enable-side twin of thisLockCycleStartedAt.
-                    val thisUnlockCycleStartedAt = thisCycleStartedAt
+                    // #A2, the enable-side twin of thisLockCycleStartedAt. Found asymmetric by
+                    // ultrareview after this round's own fixes: this used to read a fresh
+                    // SystemClock.elapsedRealtime() captured inside doWork() (after WorkManager
+                    // dispatch), the exact "captured too late" bug #Audit finding 2 already fixed
+                    // once for the lock side - a real lock landing during that dispatch delay
+                    // would get a smaller raw timestamp than this artificially-late "start",
+                    // making the check below read backwards and miss it. Now reads
+                    // lastUnlockAtMillis - stamped by PendingLockWork.recordUnlock() at the real
+                    // trigger site, before this job was even enqueued - same fix as
+                    // thisLockCycleStartedAt already has, applied to the side it was missing from.
+                    val thisUnlockCycleStartedAt = lastUnlockAtMillis
 
-                    // Split into sensor features, protection modes, and regular features
-                    val sensorFeatures = featuresToEnable.filter {
-                        it == PrivacyFeature.CAMERA || it == PrivacyFeature.MICROPHONE
-                    }
+                    // Split into sensor features, protection modes, and regular features.
+                    // Ultrareview nit, fixed: used to hardcode CAMERA/MICROPHONE here while the
+                    // lock branch's own split (above) used PrivacyFeature.getSensorFeatures() -
+                    // the same categorisation expressed 2 different ways in the same doWork(), so
+                    // a future change to what counts as a sensor feature could be applied to only
+                    // one. Now shares the same helper.
+                    val sensorFeatures = featuresToEnable.filter { it in PrivacyFeature.getSensorFeatures() }
                     val protectionModes = featuresToEnable.filter {
                         it in PrivacyFeature.getSystemModeFeatures()
                     }
                     val regularFeatures = featuresToEnable.filter {
-                        it != PrivacyFeature.CAMERA && it != PrivacyFeature.MICROPHONE &&
-                        it !in PrivacyFeature.getSystemModeFeatures()
+                        it !in PrivacyFeature.getSensorFeatures() && it !in PrivacyFeature.getSystemModeFeatures()
                     }
 
                     // Enable camera/microphone IMMEDIATELY (no delay), skipping ones already on.

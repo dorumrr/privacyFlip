@@ -1,0 +1,2 @@
+- Improved Location detection reliability for the "only if not in use" option during active navigation
+- Removed camera/microphone warning message, still available via the (?) icon

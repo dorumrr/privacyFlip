@@ -35,6 +35,15 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             Intent.ACTION_SCREEN_OFF -> {
+                // #Audit finding 2, round 2 (production-readiness audit, 10 Sep - deepened by
+                // this round's own adversarial review): recorded as close to the real trigger
+                // event as possible, before the enqueue this branch leads to - the lock-side
+                // twin of recordUnlock() below, same reasoning: a plain volatile write can never
+                // interrupt anything mid-flight, so it needs no guard, and doWork() itself can no
+                // longer be trusted to stamp this promptly enough (real WorkManager dispatch
+                // latency, outside doWork()'s own control, sits between this line and doWork()
+                // actually starting).
+                PendingLockWork.recordLock()
                 // Check if device is already locked (keyguard engaged)
                 val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
                 val isKeyguardLocked = keyguardManager?.isKeyguardLocked ?: true
@@ -68,7 +77,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 // anywhere, the same race the other producers already guard against before
                 // they'd REPLACE this same unique work.
                 if (!PrivacyActionWorker.sensorDisableInProgress) {
-                    PendingLockWork.cancel(context, TAG)
+                    PendingLockWork.cancel(context, TAG, WORK_NAME_LOCK)
                 }
                 triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen Unlock")
             }
@@ -104,7 +113,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     // Matches the guard ACTION_USER_PRESENT, PrivacyAccessibilityService and
                     // PrivacyMonitorService's restart catch-up all already had.
                     if (!PrivacyActionWorker.sensorDisableInProgress) {
-                        PendingLockWork.cancel(context, TAG)
+                        PendingLockWork.cancel(context, TAG, WORK_NAME_LOCK)
                     }
                     // #A1 (PLAN.md, confirmed 10 Sep by /phi:debug): this branch used to only
                     // cancel, never re-enable - unlike the other 3 unlock-detection paths. That

@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -30,6 +31,12 @@ import org.robolectric.shadows.ShadowLog
  * Not provable here: whether a genuine Operation FAILURE specifically gets logged as failure -
  * Robolectric's test WorkManager has no way to force cancelUniqueWork() to fail, only to
  * succeed (trivially, even against a no-op). That half of A4 stays Verified in code only.
+ *
+ * #Audit finding 7 (production-readiness audit, 10 Sep): the assertion used to accept EITHER
+ * "cancel confirmed" or "cancel FAILED" appearing - but only "confirmed" can ever actually occur
+ * in this test setup (see the paragraph above), so accepting "FAILED" too meant a bug that
+ * swapped the success/failure log branches would pass undetected. Now asserts "confirmed"
+ * specifically appears and "FAILED" specifically does not.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
@@ -59,19 +66,23 @@ class PendingLockWorkTest {
         )
         shadowOf(Looper.getMainLooper()).idle()
 
-        PendingLockWork.cancel(context, tag)
+        PendingLockWork.cancel(context, tag, Constants.Work.NAME_LOCK)
         shadowOf(Looper.getMainLooper()).idle()
 
         val logs = ShadowLog.getLogs().filter { it.tag == tag }
-        val confirmedOrFailed = logs.any {
-            it.msg.contains("cancel confirmed") || it.msg.contains("cancel FAILED")
-        }
+        val confirmed = logs.any { it.msg.contains("cancel confirmed") }
+        val failed = logs.any { it.msg.contains("cancel FAILED") }
 
         assertTrue(
             "cancel() must log the Operation's real, resolved outcome for a genuinely pending " +
-                "job (confirmed or failed), not just the immediate call-site attempt - if this " +
-                "fails, the Operation result is being discarded again",
-            confirmedOrFailed
+                "job - not just the immediate call-site attempt - if this fails, the Operation " +
+                "result is being discarded again",
+            confirmed
+        )
+        assertFalse(
+            "this setup can only ever produce a genuine success - a FAILED log here means the " +
+                "success/failure branches were swapped, not a real cancel failure",
+            failed
         )
     }
 }

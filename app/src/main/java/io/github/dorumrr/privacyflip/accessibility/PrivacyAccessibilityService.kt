@@ -191,6 +191,14 @@ class PrivacyAccessibilityService : AccessibilityService() {
      */
     private fun triggerEarlyPrivacyActions() {
         try {
+            // #Audit finding 2, round 2 (production-readiness audit, 10 Sep - deepened by this
+            // round's own adversarial review): recorded unconditionally, before the
+            // sensorDisableInProgress check below - a plain volatile write can never interrupt
+            // anything mid-flight, so it needs none of that guard, same reasoning as
+            // recordUnlock() below. doWork() itself can no longer be trusted to stamp this
+            // promptly enough on its own (real WorkManager dispatch latency sits between this
+            // line and doWork() actually starting).
+            PendingLockWork.recordLock()
             if (PrivacyActionWorker.sensorDisableInProgress) {
                 // Another trigger for this same lock is already disabling sensors right now -
                 // REPLACE would cancel it mid-flight (#G1). Nothing to gain by racing it.
@@ -240,7 +248,7 @@ class PrivacyAccessibilityService : AccessibilityService() {
             // Same guard the lock branch above already uses (#G1): a sensor disable that's
             // actively running for THIS lock must not be interrupted mid-command.
             if (!PrivacyActionWorker.sensorDisableInProgress) {
-                PendingLockWork.cancel(applicationContext, TAG)
+                PendingLockWork.cancel(applicationContext, TAG, io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK)
             }
             // #A2's own #G1 gap, found by this round's adversarial review: without this, a 3rd
             // unlock signal (this path firing moments after ScreenStateReceiver's own

@@ -8,19 +8,26 @@ import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import java.util.concurrent.Executor
 
 /**
- * Cancels the pending lock-triggered privacy action, and records that an unlock happened.
+ * Cancels pending lock- or unlock-triggered privacy work, and records that an unlock happened.
  * Shared by every place that can detect a genuine unlock - ScreenStateReceiver's own
  * ACTION_USER_PRESENT and ACTION_SCREEN_ON handlers (#B2), PrivacyAccessibilityService's own
- * window-transition detection (#C3), and PrivacyMonitorService's restart catch-up (#C3) - so the
- * 4 call sites can never drift into cancelling different work, logging differently about doing
- * it, or (#C2 Part 1) recording the unlock timestamp differently.
+ * window-transition detection (#C3), and PrivacyMonitorService's restart catch-up (#C3) - so
+ * those call sites can never drift into cancelling different work, logging differently about
+ * doing it, or (#C2 Part 1) recording the unlock timestamp differently.
+ *
+ * #Audit finding 5 (production-readiness audit, 10 Sep): cancel() used to only ever target
+ * NAME_LOCK - there was no way to cancel a stale NAME_UNLOCK job at all, so a service restart
+ * that found the device newly LOCKED correctly enqueued a fresh lock-side job but left any
+ * already-pending unlock-side job to run to completion regardless, re-enabling features on a
+ * phone the user had since locked. Parameterised so PrivacyMonitorService's restart catch-up can
+ * cancel the opposite direction too, symmetric to the lock side.
  */
 object PendingLockWork {
-    fun cancel(context: Context, tag: String) {
+    fun cancel(context: Context, tag: String, workName: String) {
         try {
-            val operation = WorkManager.getInstance(context).cancelUniqueWork(Constants.Work.NAME_LOCK)
-            Log.i(tag, "🚫 Cancelling pending lock work due to a confirmed unlock")
-            DebugLogHelper.getInstance(context).i(tag, "🚫 Cancelling pending lock work due to a confirmed unlock")
+            val operation = WorkManager.getInstance(context).cancelUniqueWork(workName)
+            Log.i(tag, "🚫 Cancelling pending work ($workName) due to a confirmed opposite action")
+            DebugLogHelper.getInstance(context).i(tag, "🚫 Cancelling pending work ($workName) due to a confirmed opposite action")
             // #A4 (PLAN.md, confirmed 10 Sep by /phi:debug): cancelUniqueWork()'s returned
             // Operation used to be discarded - it resolves asynchronously, and a genuine failure
             // (WorkManager's own docs name a full internal database as one real cause) could
@@ -33,16 +40,16 @@ object PendingLockWork {
             operation.result.addListener({
                 try {
                     operation.result.get()
-                    Log.i(tag, "✅ Pending lock work cancel confirmed by WorkManager")
-                    DebugLogHelper.getInstance(context).i(tag, "✅ Pending lock work cancel confirmed by WorkManager")
+                    Log.i(tag, "✅ Pending work ($workName) cancel confirmed by WorkManager")
+                    DebugLogHelper.getInstance(context).i(tag, "✅ Pending work ($workName) cancel confirmed by WorkManager")
                 } catch (e: Exception) {
-                    Log.e(tag, "❌ Pending lock work cancel FAILED - a stale lock/disable action may still fire later", e)
-                    DebugLogHelper.getInstance(context).e(tag, "❌ Pending lock work cancel FAILED - a stale lock/disable action may still fire later", e)
+                    Log.e(tag, "❌ Pending work ($workName) cancel FAILED - a stale action may still fire later", e)
+                    DebugLogHelper.getInstance(context).e(tag, "❌ Pending work ($workName) cancel FAILED - a stale action may still fire later", e)
                 }
             }, Executor { it.run() })
         } catch (e: Exception) {
-            Log.e(tag, "Failed to cancel pending lock work", e)
-            DebugLogHelper.getInstance(context).e(tag, "Failed to cancel pending lock work", e)
+            Log.e(tag, "Failed to cancel pending work ($workName)", e)
+            DebugLogHelper.getInstance(context).e(tag, "Failed to cancel pending work ($workName)", e)
         }
     }
 
@@ -56,5 +63,20 @@ object PendingLockWork {
      */
     fun recordUnlock() {
         PrivacyActionWorker.lastUnlockAtMillis = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * Records that a lock was just detected - the lock-side twin of [recordUnlock], added by
+     * this round's own adversarial review after it found [recordUnlock]'s existing "instant, at
+     * the real trigger site" pattern had never been extended to the lock side.
+     * PrivacyActionWorker.doWork() used to stamp lastLockAtMillis itself, as its own first
+     * statement - closer to the real event than the old, even-later stamp, but still exposed to
+     * real WorkManager dispatch latency (Doze, scheduler load) between the trigger firing and
+     * doWork() actually starting to run. Call this UNCONDITIONALLY, before the enqueue, at every
+     * real lock-trigger call site - same reasoning as [recordUnlock]: a plain volatile write can
+     * never interrupt anything mid-flight, so it needs no sensorDisableInProgress guard either.
+     */
+    fun recordLock() {
+        PrivacyActionWorker.lastLockAtMillis = SystemClock.elapsedRealtime()
     }
 }

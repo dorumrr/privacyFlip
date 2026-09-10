@@ -1,6 +1,5 @@
 package io.github.dorumrr.privacyflip.service
 
-import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,7 +11,6 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.ExistingWorkPolicy
@@ -165,35 +163,13 @@ class PrivacyMonitorService : Service() {
     }
 
     /**
-     * Checks if the screen is currently locked using KeyguardManager and PowerManager.
-     * Returns true if screen is locked, false if unlocked.
+     * Checks if the screen is currently locked. #Audit finding 1 (10 Sep): now the shared
+     * util/ScreenLockState.kt function - this used to be its own private copy, which meant #D5's
+     * fail-closed fix only ever covered this one, not PrivacyActionWorker's separate copy.
+     * PrivacyMonitorServiceTest proves this stays fail-closed.
      */
-    private fun isScreenCurrentlyLocked(): Boolean {
-        return try {
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-
-            val isKeyguardLocked = keyguardManager.isKeyguardLocked
-            val isScreenOn = powerManager.isInteractive
-
-            Log.d(TAG, "Screen state check: keyguardLocked=$isKeyguardLocked, screenOn=$isScreenOn")
-
-            // Screen is considered locked if keyguard is active OR screen is off
-            isKeyguardLocked || !isScreenOn
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking screen lock state", e)
-            // Fail closed (#D5, PLAN.md): default to LOCKED when the read itself fails, matching
-            // every other lock-state read in this app (ScreenStateReceiver, PrivacyAccessibility
-            // Service both use `?: true`). This one used to default the other way - the only
-            // consequence an exception here ever had was skipping the restart catch-up's own
-            // re-enable, before #C2 wired this same read into triggerInitialPrivacyAction(), which
-            // now also stamps PrivacyActionWorker.lastUnlockAtMillis and cancels real pending
-            // protection on the same wrong answer. PrivacyMonitorServiceTest proves this stays
-            // fail-closed.
-            true
-        }
-    }
+    private fun isScreenCurrentlyLocked(): Boolean =
+        io.github.dorumrr.privacyflip.util.isScreenCurrentlyLocked(this, TAG)
 
     /**
      * Triggers privacy action based on initial screen state.
@@ -202,6 +178,34 @@ class PrivacyMonitorService : Service() {
     private fun triggerInitialPrivacyAction(isUnlocking: Boolean, reason: String) {
         try {
             val isLocking = !isUnlocking
+
+            // #Audit finding 2, round 2 (production-readiness audit, 10 Sep - deepened by this
+            // round's own adversarial review): recorded unconditionally, before any early return
+            // below - the lock-side twin of recordUnlock() further down, same reasoning: a plain
+            // volatile write can never interrupt anything mid-flight, so it needs no guard.
+            if (isLocking) {
+                io.github.dorumrr.privacyflip.util.PendingLockWork.recordLock()
+            }
+
+            // #Audit finding 5 (production-readiness audit, 10 Sep), reordered by round 2's own
+            // adversarial review: this cancel is independently guarded by sensorEnableInProgress
+            // and can never interrupt anything in-flight - cancelling a sensor enable that's
+            // actively running would interrupt it mid-command with sensors left disabled and no
+            // error shown anywhere, which is exactly what that guard prevents. It must run
+            // BEFORE the sensorDisableInProgress early-return just below, not after: the first
+            // draft put it after, so that early return (whenever this restart catch-up finds the
+            // device locked while an earlier disable is already running - e.g. the service was
+            // killed and respawned via START_STICKY without the process dying) skipped this
+            // cancel entirely, reopening the exact stale-NAME_UNLOCK gap finding 5 exists to
+            // close, just for this one case. Mirrors how the isUnlocking branch below already
+            // orders its own independently-safe recordUnlock()/cancel() before its own
+            // sensorEnableInProgress-guarded early return.
+            if (isLocking && !PrivacyActionWorker.sensorEnableInProgress) {
+                io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(
+                    this, TAG, io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK
+                )
+            }
+
             if (isLocking && PrivacyActionWorker.sensorDisableInProgress) {
                 // Another trigger is already disabling sensors for this lock - REPLACE would
                 // cancel it mid-flight (#G1).
@@ -221,7 +225,9 @@ class PrivacyMonitorService : Service() {
                 // of the sensorDisableInProgress guard the cancel itself needs just below.
                 io.github.dorumrr.privacyflip.util.PendingLockWork.recordUnlock()
                 if (!PrivacyActionWorker.sensorDisableInProgress) {
-                    io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(this, TAG)
+                    io.github.dorumrr.privacyflip.util.PendingLockWork.cancel(
+                        this, TAG, io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK
+                    )
                 }
                 // #A2's own #G1 gap, found by this round's adversarial review: without this, a
                 // 3rd unlock signal (this restart catch-up firing moments after another path

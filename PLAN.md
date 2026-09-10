@@ -105,65 +105,6 @@ Not verified: no live device run; whether 500ms is the right delay for a real di
   lag on real hardware, versus this session's own reasoning about what "short enough to be
   irrelevant, long enough to clear a lag" means
 
-## A2  Unlock-side re-enable can race ahead of and finish before the sensor disable
-
-CONFIRMED structurally 10 Sep by /phi:debug. ACTION_USER_PRESENT correctly skips cancelling an
-in-flight sensor disable (#G1 - cancelling it would interrupt the running coroutine mid-command)
-but still unconditionally enqueues the unlock-side re-enable as a separate, concurrent WorkManager
-job - and PrivacyActionWorker's own unlock-side enableFeatures() branch never checks
-sensorDisableInProgress either, confirmed independently by this round's adversarial review reading
-the worker in full. That job can finish before the still-running lock-side sensor disable does,
-leaving camera/mic off after a real, confirmed unlock - the opposite of what the user just did.
-
-Confirmed this app can actually run the two concurrently, not just that nothing stops it in
-theory: grepped for any custom WorkManager Configuration.Provider or Executor anywhere in this
-app - none exists, so it runs WorkManager's default configuration, which uses a multi-threaded
-pool (never single-threaded, even on a 2-core device) and only serialises work sharing the SAME
-unique name. The exact interleaving outcome (which job actually finishes first in a real run)
-stays Inferred - forcing it would need controllable timing inside PrivacyManager.disableFeatures(),
-which talks to a real root/Shizuku shell and isn't swappable here without a bigger refactor.
-
-depends on: none    touches: receiver/ScreenStateReceiver.kt (ACTION_USER_PRESENT),
-  worker/PrivacyActionWorker.kt (both the lock-side sensor block and the unlock-side enable)
-  [Verified in code - the missing guard on both sides, and the shared default WorkManager
-  configuration that makes them genuinely concurrent; Inferred - the actual race outcome]
-
-Needs a decision before it can be built: how the two competing jobs should be sequenced - hold
-the unlock-side enable until sensorDisableInProgress clears, or something else. Not a quick
-default flip like A2's sibling (the one already fixed, PrivacyMonitorService's fail-open default).
-
-proves it is done: whatever the chosen fix is, provable the same way - force the race in a test
-  (delay the lock-side disable, fire the unlock-side enable) and confirm sensors end up enabled,
-  not disabled, once both finish
-
-## A3  Side-button unlock detection has a bounded, not permanent, blind spot
-
-REWORDED 10 Sep by /phi:debug - the original framing ("permanently missed... no retry or
-timeout") does not survive a runtime test, and saying so plainly matters more than quietly fixing
-the wording: PrivacyAccessibilityServiceTest proves the same race SELF-HEALS on the very next
-window-state-change event, because the keyguard read re-runs every time a non-lock-screen window
-event arrives while an internal flag (wasShowingKeyguard) stays true - not just once, as first
-assumed.
-
-The real, narrower defect underneath: self-healing depends on a FURTHER window event actually
-happening before the device locks again, and this round's own adversarial review correctly
-pushed back on assuming that is quick or reliable. A user who unlocks just to glance at
-something and re-locks without opening or switching anything may generate no further
-window-state-change event before locking again - in that exact pattern, the miss can persist
-through the whole cycle, only resolving whenever the NEXT separate lock/unlock cycle happens to
-produce one. Still only user-visible when PrivacyMonitorService is already dead (the one
-situation this detector exists to cover, since it has its own independent lock-detection path
-specifically so it doesn't depend on that service being alive).
-
-depends on: none    touches: accessibility/PrivacyAccessibilityService.kt (the unlock branch)
-  [Verified at runtime - both that the race can happen and that it self-heals on a later window
-  event; Inferred - how often a "glance and re-lock" pattern with no further window event occurs
-  in real use]
-
-proves it is done: a retry/timeout mechanism added (e.g. re-check keyguard state again after a
-  short delay even with no new window event), tested by simulating "no further window event
-  arrives" in Robolectric and confirming eventual detection anyway
-
 ## A4  PendingLockWork.cancel() logs success even when nothing was cancelled
 
 DONE 10 Sep. cancel() now reads the Operation cancelUniqueWork() returns: a listener on its

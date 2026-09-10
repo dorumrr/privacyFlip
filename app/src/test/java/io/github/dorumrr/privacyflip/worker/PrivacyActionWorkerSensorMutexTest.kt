@@ -167,4 +167,68 @@ class PrivacyActionWorkerSensorMutexTest {
             PrivacyActionWorker.isSupersededByFresherOppositeAction(100L, 100L)
         )
     }
+
+    @Test
+    fun `a re-lock during a slow sensor step is not missed by a frozen cycle-start snapshot`() {
+        // Ultrareview finding: doWork() used to freeze lastLockAtMillis into a local
+        // (thisLockCycleStartedAt) once, at the very start of the job, then compare the
+        // opposite action against that frozen value for the rest of the job's lifetime. That
+        // misses a re-trigger for the SAME direction that arrives later but never gets its own
+        // job, because the REPLACE-guard (sensorDisableInProgress/sensorEnableInProgress)
+        // correctly folds it into this already-running one instead of starting a new one.
+        //
+        // Real-world chronology this reproduces: lock (t0), unlock (t1, while this lock job's
+        // own sensor step is still running so its cancel is skipped by #G1), re-lock (t2, also
+        // folded into this same still-running job by the same guard). By the time this job
+        // reaches its regularFeatures checkpoint, the phone is genuinely LOCKED again (t2 is the
+        // latest real event) - the check must say "not superseded" so the disable proceeds.
+        //
+        // Found weaker than intended by round 3's own adversarial review: the first draft of
+        // this test called isSupersededByFresherOppositeAction() with hand-picked literals only,
+        // never touching the real companion fields - functionally a duplicate of the
+        // truth-table test above with different numbers, proving nothing about the fresh-read
+        // mechanism itself. Rewritten to actually write PrivacyActionWorker.lastLockAtMillis and
+        // lastUnlockAtMillis for real, between 2 separate reads - the exact "does a write that
+        // happens between checkpoints get picked up" question doWork()'s own 4 call sites depend
+        // on, that a same-invocation, hand-picked-literal comparison cannot exercise.
+        PrivacyActionWorker.lastLockAtMillis = 0L
+        PrivacyActionWorker.lastUnlockAtMillis = 0L
+
+        // t0: the lock this job's own regularFeatures checkpoint will eventually reach.
+        PrivacyActionWorker.lastLockAtMillis = 1000L
+
+        // Simulates the OLD, removed behaviour: a local frozen here, at "job start", before the
+        // unlock and re-lock below ever happen.
+        val frozenAtJobStart = PrivacyActionWorker.lastLockAtMillis
+
+        // t1: a real unlock, during this job's still-running sensor step (#G1 skips its cancel).
+        PrivacyActionWorker.lastUnlockAtMillis = 1050L
+
+        // t2: a real re-lock, also folded into this same still-running job by the same guard.
+        PrivacyActionWorker.lastLockAtMillis = 1100L
+
+        // The OLD, removed behaviour: comparing the unlock against a snapshot frozen before the
+        // re-lock ever happened.
+        assertTrue(
+            "reproduces the bug: comparing the unlock against a snapshot frozen at job start, " +
+                "before the re-lock happened, wrongly says superseded - this is what doWork() " +
+                "used to do, and what ultrareview caught",
+            PrivacyActionWorker.isSupersededByFresherOppositeAction(
+                PrivacyActionWorker.lastUnlockAtMillis, frozenAtJobStart
+            )
+        )
+
+        // The FIXED behaviour: doWork()'s real call sites read lastLockAtMillis directly here,
+        // at the checkpoint - this re-read genuinely happens AFTER the writes above, proving the
+        // mechanism actually picks up a write that happened between 2 checkpoints, not just that
+        // 2 different literals produce 2 different answers.
+        assertFalse(
+            "the fix: reading lastLockAtMillis fresh at the checkpoint - genuinely after the " +
+                "writes above, not a hand-picked literal - correctly sees the re-lock and says " +
+                "NOT superseded, so the disable proceeds on a phone that is genuinely locked",
+            PrivacyActionWorker.isSupersededByFresherOppositeAction(
+                PrivacyActionWorker.lastUnlockAtMillis, PrivacyActionWorker.lastLockAtMillis
+            )
+        )
+    }
 }

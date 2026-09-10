@@ -96,7 +96,9 @@ class PrivacyActionWorker(
         // backwards and miss it - the exact bug finding 2 already fixed once, reopened one layer
         // out. Now written by util/PendingLockWork.kt's recordLock(), at every real lock-trigger
         // call site, before the job is even enqueued - doWork() only ever reads this, never
-        // writes it (see thisLockCycleStartedAt's own comment).
+        // writes it. Read fresh at each of doWork()'s 4 supersede checkpoints (see
+        // isSupersededByFresherOppositeAction's own comment) rather than frozen into a local
+        // once - a further ultrareview finding, after this one.
         @Volatile
         var lastLockAtMillis: Long = 0L
 
@@ -115,11 +117,13 @@ class PrivacyActionWorker(
         // comparison would otherwise be exposed to.
         //
         // Found by ultrareview to have a second role, missed when lastLockAtMillis's own second
-        // role was added: doWork()'s unlock branch also reads this AS thisUnlockCycleStartedAt -
-        // its own cycle's reference point, not just the opposite-action value the lock side
-        // reads. Same reasoning as lastLockAtMillis: recordUnlock() stamps this at the real
-        // trigger site, before the job is even enqueued, so doWork() never needs to (and must
-        // not) re-stamp a fresh, WorkManager-dispatch-delayed value of its own.
+        // role was added: doWork()'s unlock branch also reads this as its own cycle's own
+        // reference point, not just the opposite-action value the lock side reads. Same
+        // reasoning as lastLockAtMillis: recordUnlock() stamps this at the real trigger site,
+        // before the job is even enqueued, so doWork() never needs to (and must not) re-stamp a
+        // fresh, WorkManager-dispatch-delayed value of its own. Read fresh at each of doWork()'s
+        // 4 supersede checkpoints, never frozen into a local - a further ultrareview finding,
+        // after this one (see isSupersededByFresherOppositeAction's own comment).
         @Volatile
         var lastUnlockAtMillis: Long = 0L
 
@@ -133,10 +137,24 @@ class PrivacyActionWorker(
         // share the same code, so a fix or a regression can never land in only one of them.
         // internal, not private: same reason sensorMutex above is internal, so the test can call
         // the real thing.
+        //
+        // Ultrareview finding: the second argument used to be a value frozen once, at the start
+        // of THIS job (thisLockCycleStartedAt/thisUnlockCycleStartedAt, each a local val read
+        // from lastLockAtMillis/lastUnlockAtMillis exactly once). That misses a re-trigger for
+        // the SAME direction that arrives later but never gets its own job, because the
+        // REPLACE-guard (sensorDisableInProgress/sensorEnableInProgress) correctly folds it into
+        // this already-running one instead of starting a new one - lock, then unlock, then
+        // re-lock, all while this job's own sensor step is still running, leaves this job
+        // comparing the unlock against the FIRST lock's stale timestamp, never learning about
+        // the re-lock at all. Now takes ownLastKnownAtMillis fresh at each call site
+        // (lastLockAtMillis/lastUnlockAtMillis read directly, not a frozen local) - always
+        // >= any earlier snapshot, since real lock/unlock timestamps only ever move forward, so
+        // this can only ever see a MORE complete picture than the frozen version did, never a
+        // worse one.
         internal fun isSupersededByFresherOppositeAction(
             oppositeActionAtMillis: Long,
-            thisCycleStartedAt: Long
-        ): Boolean = oppositeActionAtMillis > thisCycleStartedAt
+            ownLastKnownAtMillis: Long
+        ): Boolean = oppositeActionAtMillis > ownLastKnownAtMillis
     }
 
     private val debugNotifier: DebugNotificationHelper by lazy {
@@ -290,20 +308,18 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     logDebug("Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
-                    // #C2 Part 1, deepened by this round's own adversarial review (#Audit
-                    // finding 2, round 2): reads lastLockAtMillis - stamped by
-                    // PendingLockWork.recordLock() at the real trigger site, BEFORE this job was
-                    // even enqueued - rather than a fresh SystemClock.elapsedRealtime() taken
-                    // here. Capturing a new timestamp at this point in doWork() would still be
-                    // exposed to real WorkManager dispatch latency (Doze, scheduler load, thread
-                    // pool availability) between the trigger firing and doWork() actually
-                    // starting - reopening finding 2's exact bug one layer further out: a real
-                    // unlock landing during that dispatch delay would get a smaller raw
-                    // timestamp than this cycle's own artificially-late "start", the same
-                    // backwards comparison finding 2 already fixed once for doWork()'s own
-                    // internal setup latency. Compared against lastUnlockAtMillis at the
-                    // checkpoints below.
-                    val thisLockCycleStartedAt = lastLockAtMillis
+                    // #C2 Part 1: the 2 checkpoints below read lastLockAtMillis directly, fresh,
+                    // each time - not a value frozen into a local once at the top of this
+                    // branch. Used to be frozen (thisLockCycleStartedAt); ultrareview found that
+                    // missed a re-lock that arrives while THIS job's own sensor step is still
+                    // running (lock, then unlock, then re-lock, none of the later 2 getting
+                    // their own job because the REPLACE-guard correctly folds them into this
+                    // one) - the frozen snapshot never learned about the re-lock, so the
+                    // regularFeatures checkpoint compared the unlock against the FIRST lock's
+                    // stale timestamp and wrongly concluded it had been superseded. Reading
+                    // lastLockAtMillis fresh is always safe: real lock timestamps only ever
+                    // move forward (see recordLock()'s own comment), so a fresh read can only
+                    // ever be a MORE complete picture than a frozen one, never a worse one.
 
                     // Categorise by TYPE ONLY, unfiltered (#C2 Part 2). Filtering used to happen
                     // here too, in a shared pass, before the lock delay - narrowing this list
@@ -314,10 +330,15 @@ class PrivacyActionWorker(
                     // once, at the latest moment safe for that group: sensors immediately, since
                     // they act with no delay anyway and always have; regular features and
                     // protection modes together after the delay (or immediately if lockDelay==0).
-                    val sensorFeatures = featuresToDisable.filter { it in PrivacyFeature.getSensorFeatures() }
-                    val protectionModes = featuresToDisable.filter { it in PrivacyFeature.getSystemModeFeatures() }
+                    // Ultrareview nit: hoisted once, not called again for every feature inside
+                    // each filter predicate below (getSensorFeatures()/getSystemModeFeatures()
+                    // each allocate their own Set on every call).
+                    val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
+                    val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
+                    val sensorFeatures = featuresToDisable.filter { it in sensorFeatureSet }
+                    val protectionModes = featuresToDisable.filter { it in systemModeFeatureSet }
                     val regularFeatures = featuresToDisable.filter {
-                        it !in PrivacyFeature.getSensorFeatures() && it !in PrivacyFeature.getSystemModeFeatures()
+                        it !in sensorFeatureSet && it !in systemModeFeatureSet
                     }
 
                     // Disable camera/microphone - attempted immediately, no artificial delay.
@@ -351,11 +372,11 @@ class PrivacyActionWorker(
                         sensorMutex.withLock {
                           // #A2: this cycle may have waited its turn at the mutex above - re-check
                           // right before acting, still inside the lock, whether a fresher unlock
-                          // has already been recorded since this cycle started. If so, that
-                          // unlock's own enable either already ran or is queued right behind this
-                          // check - disabling now would stomp on it.
-                          if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, thisLockCycleStartedAt)) {
-                              logDebug("⚠️ A newer unlock was recorded since this lock cycle started - skipping sensor disable")
+                          // has already been recorded. If so, that unlock's own enable either
+                          // already ran or is queued right behind this check - disabling now
+                          // would stomp on it.
+                          if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
+                              logDebug("⚠️ A newer unlock was recorded since this lock - skipping sensor disable")
                               debugNotifier.notifyFeatureSkipped(
                                   filteredSensorFeatures.map { it.displayName }.joinToString(", "),
                                   "unlocked since this lock cycle started"
@@ -454,9 +475,11 @@ class PrivacyActionWorker(
                         // alongside isStillLocked just above: that already catches a LASTING
                         // unlock by the time the delay ends, this also catches one that happened
                         // and was recorded during the sensor block, closing the window before it
-                        // rather than only after the wait.
-                        if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, thisLockCycleStartedAt)) {
-                            logWarning("⚠️ Unlocked during this lock cycle - cancelling remaining disable actions")
+                        // rather than only after the wait. Compares against lastLockAtMillis read
+                        // fresh here, not a value frozen at this job's own start - ultrareview's
+                        // own finding, see isSupersededByFresherOppositeAction's comment above.
+                        if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
+                            logWarning("⚠️ Unlocked since this lock - cancelling remaining disable actions")
                             debugNotifier.notifyActionCancelled("Unlocked during lock cycle - disable cancelled")
                             return Result.success()
                         }
@@ -587,30 +610,27 @@ class PrivacyActionWorker(
                 if (featuresToEnable.isNotEmpty()) {
                     logDebug("Enabling features on unlock: ${featuresToEnable.map { it.displayName }}")
 
-                    // #A2, the enable-side twin of thisLockCycleStartedAt. Found asymmetric by
-                    // ultrareview after this round's own fixes: this used to read a fresh
-                    // SystemClock.elapsedRealtime() captured inside doWork() (after WorkManager
-                    // dispatch), the exact "captured too late" bug #Audit finding 2 already fixed
-                    // once for the lock side - a real lock landing during that dispatch delay
-                    // would get a smaller raw timestamp than this artificially-late "start",
-                    // making the check below read backwards and miss it. Now reads
-                    // lastUnlockAtMillis - stamped by PendingLockWork.recordUnlock() at the real
-                    // trigger site, before this job was even enqueued - same fix as
-                    // thisLockCycleStartedAt already has, applied to the side it was missing from.
-                    val thisUnlockCycleStartedAt = lastUnlockAtMillis
+                    // #A2, the enable-side twin of the lock branch's own lastLockAtMillis reads.
+                    // The 2 checkpoints below read lastUnlockAtMillis directly, fresh, each time
+                    // - not a value frozen into a local once here. Ultrareview found the frozen
+                    // version (thisUnlockCycleStartedAt) missed a re-trigger for the same
+                    // direction that arrives while THIS job's own sensor step is still running -
+                    // see isSupersededByFresherOppositeAction's own comment above for the full
+                    // reasoning, symmetric here.
 
                     // Split into sensor features, protection modes, and regular features.
                     // Ultrareview nit, fixed: used to hardcode CAMERA/MICROPHONE here while the
                     // lock branch's own split (above) used PrivacyFeature.getSensorFeatures() -
                     // the same categorisation expressed 2 different ways in the same doWork(), so
                     // a future change to what counts as a sensor feature could be applied to only
-                    // one. Now shares the same helper.
-                    val sensorFeatures = featuresToEnable.filter { it in PrivacyFeature.getSensorFeatures() }
-                    val protectionModes = featuresToEnable.filter {
-                        it in PrivacyFeature.getSystemModeFeatures()
-                    }
+                    // one. Now shares the same helper, hoisted once for the same reason as the
+                    // lock branch's own equivalent hoist above.
+                    val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
+                    val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
+                    val sensorFeatures = featuresToEnable.filter { it in sensorFeatureSet }
+                    val protectionModes = featuresToEnable.filter { it in systemModeFeatureSet }
                     val regularFeatures = featuresToEnable.filter {
-                        it !in PrivacyFeature.getSensorFeatures() && it !in PrivacyFeature.getSystemModeFeatures()
+                        it !in sensorFeatureSet && it !in systemModeFeatureSet
                     }
 
                     // Enable camera/microphone IMMEDIATELY (no delay), skipping ones already on.
@@ -644,12 +664,12 @@ class PrivacyActionWorker(
                               }
                           }
                           // #A2: symmetric to the lock-side check - if a fresher lock has already
-                          // been recorded since this unlock cycle started, that lock's own disable
-                          // either already ran or is queued right behind this check, so enabling
-                          // now would stomp on it with a stale instruction.
+                          // been recorded, that lock's own disable either already ran or is
+                          // queued right behind this check, so enabling now would stomp on it
+                          // with a stale instruction.
                           if (filteredSensorFeatures.isNotEmpty() &&
-                              isSupersededByFresherOppositeAction(lastLockAtMillis, thisUnlockCycleStartedAt)) {
-                              logDebug("⚠️ A newer lock was recorded since this unlock cycle started - skipping sensor enable")
+                              isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
+                              logDebug("⚠️ A newer lock was recorded since this unlock - skipping sensor enable")
                               debugNotifier.notifyFeatureSkipped(
                                   filteredSensorFeatures.map { it.displayName }.joinToString(", "),
                                   "locked since this unlock cycle started"
@@ -696,11 +716,14 @@ class PrivacyActionWorker(
                         // ordinary setting, symmetric to lockDelaySeconds==0) this is the ONLY
                         // re-validation this stage gets, the same reason that check is
                         // unconditional on the lock side. Without it, a lock recorded after this
-                        // unlock cycle started was never consulted before WiFi/Bluetooth/NFC got
+                        // unlock started was never consulted before WiFi/Bluetooth/NFC got
                         // switched back on and Airplane Mode/Battery Saver got switched off - on
-                        // a phone that is actually locked right now.
-                        if (isSupersededByFresherOppositeAction(lastLockAtMillis, thisUnlockCycleStartedAt)) {
-                            logWarning("⚠️ Locked during this unlock cycle - cancelling remaining enable actions")
+                        // a phone that is actually locked right now. Compares against
+                        // lastUnlockAtMillis read fresh here, not a value frozen at this job's
+                        // own start - ultrareview's finding, see
+                        // isSupersededByFresherOppositeAction's comment above.
+                        if (isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
+                            logWarning("⚠️ Locked since this unlock - cancelling remaining enable actions")
                             debugNotifier.notifyActionCancelled("Locked during unlock cycle - enable cancelled")
                             return Result.success()
                         }

@@ -23,11 +23,26 @@ import java.util.concurrent.Executor
  * cancel the opposite direction too, symmetric to the lock side.
  */
 object PendingLockWork {
+    // Ultrareview nit: cancel() below used to hand-write every log call twice (Log.X, then the
+    // identical message again to DebugLogHelper.X), 6 pairs in one small function - the same
+    // dual-write pattern PrivacyActionWorker/PrivacyMonitorService already collapse into their
+    // own logDebug/logWarning/logError helpers. One shared pair here does the same for this
+    // object's own single caller-supplied tag, so a message can only ever drift between the two
+    // sinks if this one place gets it wrong, not up to 6 places.
+    private fun logInfo(context: Context, tag: String, message: String) {
+        Log.i(tag, message)
+        DebugLogHelper.getInstance(context).i(tag, message)
+    }
+
+    private fun logError(context: Context, tag: String, message: String, e: Exception? = null) {
+        Log.e(tag, message, e)
+        DebugLogHelper.getInstance(context).e(tag, message, e)
+    }
+
     fun cancel(context: Context, tag: String, workName: String) {
         try {
             val operation = WorkManager.getInstance(context).cancelUniqueWork(workName)
-            Log.i(tag, "🚫 Cancelling pending work ($workName) due to a confirmed opposite action")
-            DebugLogHelper.getInstance(context).i(tag, "🚫 Cancelling pending work ($workName) due to a confirmed opposite action")
+            logInfo(context, tag, "🚫 Cancelling pending work ($workName) due to a confirmed opposite action")
             // #A4 (PLAN.md, confirmed 10 Sep by /phi:debug): cancelUniqueWork()'s returned
             // Operation used to be discarded - it resolves asynchronously, and a genuine failure
             // (WorkManager's own docs name a full internal database as one real cause) could
@@ -40,16 +55,13 @@ object PendingLockWork {
             operation.result.addListener({
                 try {
                     operation.result.get()
-                    Log.i(tag, "✅ Pending work ($workName) cancel confirmed by WorkManager")
-                    DebugLogHelper.getInstance(context).i(tag, "✅ Pending work ($workName) cancel confirmed by WorkManager")
+                    logInfo(context, tag, "✅ Pending work ($workName) cancel confirmed by WorkManager")
                 } catch (e: Exception) {
-                    Log.e(tag, "❌ Pending work ($workName) cancel FAILED - a stale action may still fire later", e)
-                    DebugLogHelper.getInstance(context).e(tag, "❌ Pending work ($workName) cancel FAILED - a stale action may still fire later", e)
+                    logError(context, tag, "❌ Pending work ($workName) cancel FAILED - a stale action may still fire later", e)
                 }
             }, Executor { it.run() })
         } catch (e: Exception) {
-            Log.e(tag, "Failed to cancel pending work ($workName)", e)
-            DebugLogHelper.getInstance(context).e(tag, "Failed to cancel pending work ($workName)", e)
+            logError(context, tag, "Failed to cancel pending work ($workName)", e)
         }
     }
 

@@ -19,12 +19,18 @@ enum class PrivacyFeature(
             return listOf(WIFI, BLUETOOTH, MOBILE_DATA, LOCATION, NFC)
         }
 
-        fun getSensorFeatures(): List<PrivacyFeature> {
-            return listOf(CAMERA, MICROPHONE)
+        // Ultrareview nit: Set, not List - PrivacyActionWorker.kt calls these inside `in`/`!in`
+        // filter predicates, once per feature being categorised, so a List meant an O(n) scan
+        // every time; a Set makes that O(1). Each still allocates once per call (a Kotlin
+        // literal set has no cached singleton), so PrivacyActionWorker.kt still hoists the
+        // result into a local before filtering with it, rather than calling this again per
+        // feature.
+        fun getSensorFeatures(): Set<PrivacyFeature> {
+            return setOf(CAMERA, MICROPHONE)
         }
 
-        fun getSystemModeFeatures(): List<PrivacyFeature> {
-            return listOf(AIRPLANE_MODE, BATTERY_SAVER)
+        fun getSystemModeFeatures(): Set<PrivacyFeature> {
+            return setOf(AIRPLANE_MODE, BATTERY_SAVER)
         }
     }
 }

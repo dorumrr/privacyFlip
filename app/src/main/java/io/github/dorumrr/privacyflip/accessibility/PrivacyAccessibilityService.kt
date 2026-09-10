@@ -139,6 +139,14 @@ class PrivacyAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Ultrareview nit: scheduleUnlockRecheck() below used to build a fresh Handler on every
+    // call with no way to cancel an earlier one - several non-keyguard window events arriving
+    // in a row (a call screen, the notification shade, an animation tick) while
+    // wasShowingKeyguard stays true each queued their own independent 500ms callback, all
+    // running the same idempotent check. One stored Handler, with the pending callback replaced
+    // rather than piled onto, does the same job with at most one pending check at a time.
+    private val unlockRecheckHandler = Handler(Looper.getMainLooper())
+
     /**
      * #A3: catches a missed unlock when no further window-state-change event ever arrives to
      * naturally re-trigger the check above. Re-reads real keyguard state once, after
@@ -148,7 +156,8 @@ class PrivacyAccessibilityService : AccessibilityService() {
      * has been torn down.
      */
     private fun scheduleUnlockRecheck() {
-        Handler(Looper.getMainLooper()).postDelayed({
+        unlockRecheckHandler.removeCallbacksAndMessages(null)
+        unlockRecheckHandler.postDelayed({
             if (!isServiceRunning || !wasShowingKeyguard) {
                 return@postDelayed
             }

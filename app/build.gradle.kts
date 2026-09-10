@@ -89,7 +89,16 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-    
+
+    testOptions {
+        unitTests {
+            // Robolectric needs the app's real resources/manifest on the test classpath to
+            // resolve things like the accessibility service's manifest entry and string
+            // resources - without this it fails with opaque "resource not found" errors.
+            isIncludeAndroidResources = true
+        }
+    }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -147,4 +156,23 @@ dependencies {
     // Eclipse Public License 1.0. One transitive dependency (hamcrest-core), already the
     // de-facto default for this kind of test in every Android project.
     testImplementation("junit:junit:4.13.2")
+
+    // Robolectric - runs real Android framework classes (KeyguardManager, WorkManager,
+    // AccessibilityService, SharedPreferences) on the plain JVM, so code that reacts to lock
+    // state and schedules background work can be unit-tested with a real red/green test instead
+    // of only code-reading and adversarial review. Test-only (testImplementation): never
+    // packaged into the APK, so it has no effect on the shipped app's size, its dependency
+    // footprint, or F-Droid's reproducible-build comparison. Apache 2.0 licence, maintained by
+    // Google plus a large open source community, the de-facto standard for this kind of Android
+    // unit test. Heavier than the other test deps here (its own shadow classes for large chunks
+    // of the Android framework), which is exactly why it stays test-only and nothing in the main
+    // dependency block above changes.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    // ApplicationProvider.getApplicationContext() - the fake, real-enough Context Robolectric
+    // tests construct a service or receiver against. Apache 2.0, maintained by Google.
+    testImplementation("androidx.test:core:1.6.1")
+    // Synchronous WorkManager for tests (androidx.work:work-runtime-ktx's own test artifact,
+    // same version already used above) - lets a test check whether a specific unique work name
+    // was actually enqueued, instead of WorkManager's normal async scheduling.
+    testImplementation("androidx.work:work-testing:2.9.0")
 }

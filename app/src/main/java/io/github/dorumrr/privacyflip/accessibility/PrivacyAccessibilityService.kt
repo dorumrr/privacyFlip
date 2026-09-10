@@ -103,7 +103,7 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 // acting, the same way ScreenStateReceiver's own ACTION_SCREEN_ON handler already
                 // does. A first version of this fix skipped that check and could cancel a
                 // genuine pending disable, and re-enable sensors, on a phone that was never
-                // actually unlocked.
+                // actually unlocked. PrivacyAccessibilityServiceTest proves this stays caught.
                 val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
                 val isStillLocked = keyguardManager?.isKeyguardLocked ?: true // fail closed
                 if (isStillLocked) {

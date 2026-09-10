@@ -17,8 +17,8 @@ Tier: 3
 
    C. FOUND WHILE FIXING B1/B2 - BIGGER THAN B1/B2's OWN SCOPE
    [x] C1  Protection modes (Airplane Mode) ignore hotspot entirely                   done 09 Sep - Airplane Mode only; Battery Saver reasoned safe, not verified live
-   [x] C2  B2's cancel is skipped exactly when it matters most, and a filtered-out     done 10 Sep - both parts built. 6 more findings surfaced while
-       feature never gets re-added even after the reason for filtering ends            checking it, all pre-existing/adjacent - NEEDS A /phi:plan PASS
+   [x] C2  B2's cancel is skipped exactly when it matters most, and a filtered-out     done 10 Sep - both parts built. 7 more findings surfaced,
+       feature never gets re-added even after the reason for filtering ends            1 fixed 10 Sep, 6 pre-existing/adjacent - NEEDS A /phi:plan PASS
    [x] C3  B2 only protected the ScreenStateReceiver path                             done 09 Sep - PrivacyAccessibilityService and the service restart path now covered too
 
 ## A1  isLocationInUse must not crash, must keep failing safe, on older Android
@@ -262,12 +262,13 @@ depends on: none    touches: worker/PrivacyActionWorker.kt (both parts), util/Pe
   runs exactly once and can re-include) held against all 3 adversarial reviewers; no live
   lock/unlock device run, same depth as B1/C1/C3's own verification]
 
-**6 real findings surfaced while checking this - 1 now fixed, 5 still filed.** Each was either
-pre-existing (in code this fix did not touch, or inherited unchanged from C1/C3) or needed a
-decision beyond a timestamp-style safety net, so none cleared the bar to fix inline in C2's own
-round. The Robolectric test harness added 10 Sep (app/build.gradle.kts, see below) made the first
-one provable at runtime, closing that gap. NEEDS A /phi:plan PASS to give the remaining 5 their
-own IDs:
+**7 real findings surfaced while checking this - 1 now fixed, 6 still filed.** (Originally
+recorded as "6 real findings" in the 10 Sep round record - miscounted then, corrected here: the
+list below always had 7 items.) Each was either pre-existing (in code this fix did not touch, or
+inherited unchanged from C1/C3) or needed a decision beyond a timestamp-style safety net, so none
+cleared the bar to fix inline in C2's own round. The Robolectric test harness added 10 Sep
+(app/build.gradle.kts, see below) made the first one provable at runtime, closing that gap.
+NEEDS A /phi:plan PASS to give the remaining 6 their own IDs:
 
 - ScreenStateReceiver's ACTION_SCREEN_ON "not locked" branch cancels the pending lock job but,
   unlike the other 3 detectors, never enqueues the unlock-side re-enable - if the device is woken

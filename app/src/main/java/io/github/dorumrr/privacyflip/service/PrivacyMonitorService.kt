@@ -183,8 +183,15 @@ class PrivacyMonitorService : Service() {
 
         } catch (e: Exception) {
             Log.e(TAG, "Error checking screen lock state", e)
-            // Default to unlocked if we can't determine state
-            false
+            // Fail closed (#D5, PLAN.md): default to LOCKED when the read itself fails, matching
+            // every other lock-state read in this app (ScreenStateReceiver, PrivacyAccessibility
+            // Service both use `?: true`). This one used to default the other way - the only
+            // consequence an exception here ever had was skipping the restart catch-up's own
+            // re-enable, before #C2 wired this same read into triggerInitialPrivacyAction(), which
+            // now also stamps PrivacyActionWorker.lastUnlockAtMillis and cancels real pending
+            // protection on the same wrong answer. PrivacyMonitorServiceTest proves this stays
+            // fail-closed.
+            true
         }
     }
 

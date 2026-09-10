@@ -262,10 +262,12 @@ depends on: none    touches: worker/PrivacyActionWorker.kt (both parts), util/Pe
   runs exactly once and can re-include) held against all 3 adversarial reviewers; no live
   lock/unlock device run, same depth as B1/C1/C3's own verification]
 
-**6 real findings surfaced while checking this, all filed rather than fixed** - each is either
-pre-existing (in code this fix did not touch, or inherited unchanged from C1/C3) or needs a
-decision beyond a timestamp-style safety net, so none cleared the bar to fix inline this round.
-NEEDS A /phi:plan PASS to give these their own IDs:
+**6 real findings surfaced while checking this - 1 now fixed, 5 still filed.** Each was either
+pre-existing (in code this fix did not touch, or inherited unchanged from C1/C3) or needed a
+decision beyond a timestamp-style safety net, so none cleared the bar to fix inline in C2's own
+round. The Robolectric test harness added 10 Sep (app/build.gradle.kts, see below) made the first
+one provable at runtime, closing that gap. NEEDS A /phi:plan PASS to give the remaining 5 their
+own IDs:
 
 - ScreenStateReceiver's ACTION_SCREEN_ON "not locked" branch cancels the pending lock job but,
   unlike the other 3 detectors, never enqueues the unlock-side re-enable - if the device is woken
@@ -280,11 +282,12 @@ NEEDS A /phi:plan PASS to give these their own IDs:
 - `PendingLockWork.cancel()` logs "Cancelled pending lock work" even when nothing was pending
   (the common case), and never reads the async `Operation` WorkManager's cancel returns, so a
   genuine cancel failure can never be logged either
-- `PrivacyMonitorService.isScreenCurrentlyLocked()` defaults to "unlocked" on an exception reading
-  KeyguardManager/PowerManager, unlike every other lock-state read in this app (which defaults to
-  "locked"). Pre-existing, but this round's own wiring means that wrong default can now also
-  stamp `lastUnlockAtMillis` and cancel real pending protection, not just skip a re-enable. Small,
-  ready fix for later: change that one `false` to `true`
+- FIXED 10 Sep. `PrivacyMonitorService.isScreenCurrentlyLocked()` defaulted to "unlocked" on an
+  exception reading KeyguardManager/PowerManager, unlike every other lock-state read in this app
+  (which defaults to "locked"). Changed the one `false` to `true`. Proved red then green with
+  PrivacyMonitorServiceTest (Robolectric): forced the real exception path via a deliberately
+  wrong-typed KEYGUARD_SERVICE registration, watched `lastUnlockAtMillis` get wrongly stamped on
+  the old code, watched it stay untouched on the fix - not just read and reasoned about.
 - The hotspot check in the lock branch is sampled once, then used both for the regularFeatures
   filter and, after a real `disableFeatures()` round-trip, the protection-modes loop's Airplane
   Mode decision - a hotspot starting or stopping in that gap gets the stale verdict. Inherited

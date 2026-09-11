@@ -10,6 +10,11 @@
     - "Disable on unlock" (instead of "Enable on unlock")
     
     The underlying switch IDs remain the same for compatibility with existing code.
+
+    #38: because those ids are shared with privacy_feature_row.xml, and both layouts are
+    <include>d more than once, every control here carries android:saveEnabled="false" and
+    it has to stay. See that file's header for the full reason.
+    Covered by PrivacyFeatureRowViewStateTest.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -79,7 +84,8 @@
         <Switch
             android:id="@+id/disableOnLockSwitch"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:saveEnabled="false" />
 
     </LinearLayout>
 
@@ -98,7 +104,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="32dp"
-            android:paddingStart="4dp" />
+            android:paddingStart="4dp"
+            android:saveEnabled="false" />
 
         <TextView
             android:id="@+id/onlyIfUnusedText"
@@ -133,7 +140,8 @@
         <Switch
             android:id="@+id/enableOnUnlockSwitch"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:saveEnabled="false" />
 
     </LinearLayout>
 
@@ -152,7 +160,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="32dp"
-            android:paddingStart="4dp" />
+            android:paddingStart="4dp"
+            android:saveEnabled="false" />
 
         <TextView
             android:layout_width="0dp"

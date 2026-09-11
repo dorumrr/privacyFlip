@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    #38: every control here carries android:saveEnabled="false", and it has to stay.
+    This layout is <include>d 5 times (and privacy_protection_mode_row.xml, which declares
+    the same child ids, twice more), so 7 live views share each id below. Android's view
+    state is a SparseArray keyed by view id, so the last row saved was restored into all 7,
+    and each resulting change fired the listener that persists it - silently overwriting
+    every feature's saved settings with the last row's. These controls are redrawn from
+    SharedPreferences on every bind (MainFragment.updatePrivacySettings), so the view
+    system has nothing to add and only cross-talk to lose.
+    Covered by PrivacyFeatureRowViewStateTest.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -67,7 +78,8 @@
         <Switch
             android:id="@+id/disableOnLockSwitch"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:saveEnabled="false" />
 
     </LinearLayout>
 
@@ -87,7 +99,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="32dp"
-            android:paddingStart="4dp" />
+            android:paddingStart="4dp"
+            android:saveEnabled="false" />
 
         <TextView
             android:id="@+id/onlyIfUnusedText"
@@ -125,7 +138,8 @@
         <Switch
             android:id="@+id/enableOnUnlockSwitch"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:saveEnabled="false" />
 
     </LinearLayout>
 
@@ -145,7 +159,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="32dp"
-            android:paddingStart="4dp" />
+            android:paddingStart="4dp"
+            android:saveEnabled="false" />
 
         <TextView
             android:id="@+id/onlyIfNotEnabledText"

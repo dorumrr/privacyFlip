@@ -1,0 +1,2 @@
+- Screen Lock and Extras settings stability after updating
+- Fixed settings storage 

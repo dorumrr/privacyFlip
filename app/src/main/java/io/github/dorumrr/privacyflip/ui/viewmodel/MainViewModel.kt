@@ -17,6 +17,7 @@ import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.DeviceDetector
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
@@ -564,8 +565,7 @@ class MainViewModel : ViewModel() {
             logManager.i(TAG, "Android Version: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
             logManager.i(TAG, "Build ID: ${android.os.Build.ID}")
 
-            // Check if camera/mic sensor privacy is supported (Android 12+)
-            val isSensorPrivacySupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+            val isSensorPrivacySupported = DeviceDetector.supportsSensorPrivacyToggle()
             logManager.i(TAG, "Sensor privacy API supported: $isSensorPrivacySupported")
 
             if (!isSensorPrivacySupported) {

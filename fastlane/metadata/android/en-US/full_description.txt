@@ -12,7 +12,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Smart "only if unused/not connected" modes for WiFi, Bluetooth, Location
 • App exemption system (skip privacy for specific foreground apps)
 • Samsung NFC payment override detection with opt-in auto-retry
-• Optional Accessibility Service for side button instant-lock support
+• Optional Accessibility Service for side button instant-lock support (Android 12+ for camera/microphone)
 • Advanced multi-tier Bluetooth connection detection
 • Background service for persistent monitoring
 • Quick Settings tile integration

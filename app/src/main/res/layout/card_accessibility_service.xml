@@ -43,7 +43,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Enable Accessibility Service for instant-lock support"
+            android:text="@string/accessibility_service_card_subtitle"
             android:textSize="12sp"
             android:textColor="@color/text_secondary" />
 
@@ -98,7 +98,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Allows Privacy Flip to detect side/power button locks before keyguard fully engages, and detects when you unlock again to cancel actions that are no longer needed. Enables camera and microphone privacy even with instant-lock. Does not read screen content."
+            android:text="@string/accessibility_service_card_description"
             android:textSize="11sp"
             android:textColor="@color/text_secondary" />
 

@@ -259,6 +259,17 @@
 
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/cameraUnsupportedNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/sensor_needs_android_12"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
         </LinearLayout>
 
         <!-- The camera/mic lock-delay explanation used to also show here as a permanent box,
@@ -396,6 +407,17 @@
                     android:layout_height="wrap_content" />
 
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/microphoneUnsupportedNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/sensor_needs_android_12"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone"
+                tools:visibility="visible" />
 
         </LinearLayout>
 

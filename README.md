@@ -45,7 +45,7 @@
 
 - **App Exemptions** - Exclude specific apps from privacy actions when in foreground
 - **Samsung NFC Auto-Retry** - Opt-in feature to combat Samsung payment framework NFC override (for Galaxy S, Note, Z series)
-- **Accessibility Service** - Experimental support for side/power button instant-lock (opt-in, requires Accessibility permission)
+- **Accessibility Service** - Experimental support for side/power button instant-lock (opt-in, requires Accessibility permission; the instant-lock benefit applies to camera/microphone, which needs Android 12+)
 - **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 
 ### **Customizable Timing**

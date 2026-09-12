@@ -1,8 +1,8 @@
 package io.github.dorumrr.privacyflip.privacy
 
-import android.os.Build
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.DeviceDetector
 import io.github.dorumrr.privacyflip.util.StatusParsingUtils
 
 class CameraToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
@@ -32,8 +32,7 @@ class CameraToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
     }
 
     override suspend fun isSupported(): FeatureSupport {
-        // cmd sensor_privacy requires Android 12+ (API 31)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        return if (DeviceDetector.supportsSensorPrivacyToggle()) {
             FeatureSupport.FULLY_SUPPORTED
         } else {
             FeatureSupport.UNSUPPORTED

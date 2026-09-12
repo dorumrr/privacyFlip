@@ -355,13 +355,21 @@ class PrivacyActionWorker(
                     // made it worse - it handed the keyguard 75ms head start to win the race
                     // before the attempt was even made.
                     //
-                    // Fixed by removing the predictive check entirely and trusting the real
-                    // outcome of the command instead: attempt the disable right away, and let
-                    // privacyManager.disableFeatures()'s own success/failure (already captured
-                    // and logged below via processResults, same as every other feature) be the
-                    // source of truth. If the keyguard genuinely wins the race, the command fails
-                    // and that's reported honestly - it no longer gets silently pre-decided by a
-                    // heuristic that was measuring the wrong thing.
+                    // Fixed by removing that 75ms wait and its live re-check, and trusting the
+                    // real outcome of the command instead: attempt the disable right away, and
+                    // let privacyManager.disableFeatures()'s own success/failure (already
+                    // captured and logged below via processResults, same as every other feature)
+                    // be the source of truth. If the keyguard genuinely wins the race, the
+                    // command fails and that's reported honestly.
+                    //
+                    // One narrower gate does remain, and it is NOT that heuristic: the
+                    // `else if (!isDeviceLocked)` below reads the flag the trigger supplied,
+                    // meaning the device was already locked when the screen went off, rather
+                    // than guessing from screen state. Skipping there is right, not pessimistic:
+                    // measured on a real device on 12 Sep, `cmd sensor_privacy enable 0 camera`
+                    // leaves the camera allowed when the keyguard is up, and flips it the moment
+                    // the same command runs unlocked. Attempting it would cost a shell round
+                    // trip to change nothing.
                     if (sensorFeatures.isNotEmpty()) {
                       val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, connectionChecker, hotspotActiveNow = false)
                       if (filteredSensorFeatures.isNotEmpty()) {

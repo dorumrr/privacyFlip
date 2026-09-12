@@ -34,6 +34,7 @@ import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.DeviceDetector
 
 class MainFragment : Fragment() {
 
@@ -264,9 +265,13 @@ class MainFragment : Fragment() {
                 }
             }
 
-            // Make the microphone "only if not in use" text clickable
+            // Make the microphone "only if not in use" text clickable. toggle() does not check
+            // whether the checkbox is enabled, so without this guard the label would still flip
+            // and save a setting whose own control is greyed out and cannot be pressed.
             microphoneOnlyIfUnusedText.setOnClickListener {
-                microphoneOnlyIfUnusedCheckbox.toggle()
+                if (microphoneOnlyIfUnusedCheckbox.isEnabled) {
+                    microphoneOnlyIfUnusedCheckbox.toggle()
+                }
             }
 
             cameraInfoIcon.setOnClickListener {
@@ -548,6 +553,13 @@ class MainFragment : Fragment() {
             uiState.screenLockConfig.airplaneModeOnlyIfNotManual
         )
 
+        // These show the stored value on every Android version, including the ones that cannot
+        // act on it. An earlier version of this forced them to display off below Android 12,
+        // which read as "your camera is not being touched" while the stored setting was still
+        // on: after an OS update to 12 with the data kept, camera and mic would suddenly start
+        // being blocked on every lock, instantly and mid call, for something the user had only
+        // ever seen switched off. The switches are greyed and carry a note instead, in
+        // updateInteractiveElementsState, so the screen and the stored setting always agree.
         binding.screenLockCard.cameraDisableOnLockSwitch.isChecked = uiState.screenLockConfig.cameraDisableOnLock
         binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.cameraEnableOnUnlock
 
@@ -555,7 +567,7 @@ class MainFragment : Fragment() {
         binding.screenLockCard.microphoneDisableOnLockSwitch.isChecked = uiState.screenLockConfig.microphoneDisableOnLock
         binding.screenLockCard.microphoneEnableOnUnlockSwitch.isChecked = uiState.screenLockConfig.microphoneEnableOnUnlock
         binding.screenLockCard.microphoneOnlyIfUnusedCheckbox.isChecked = uiState.screenLockConfig.microphoneOnlyIfUnused
-        binding.screenLockCard.microphoneOnlyIfUnusedContainer.visibility = 
+        binding.screenLockCard.microphoneOnlyIfUnusedContainer.visibility =
             if (uiState.screenLockConfig.microphoneDisableOnLock) View.VISIBLE else View.GONE
 
         isUpdatingUI = false
@@ -904,11 +916,27 @@ class MainFragment : Fragment() {
             nfcSettings.disableOnLockSwitch.isEnabled = isEnabled
             nfcSettings.enableOnUnlockSwitch.isEnabled = isEnabled
 
-            // Camera and microphone (custom inline layouts)
-            cameraDisableOnLockSwitch.isEnabled = isEnabled
-            cameraEnableOnUnlockSwitch.isEnabled = isEnabled
-            microphoneDisableOnLockSwitch.isEnabled = isEnabled
-            microphoneEnableOnUnlockSwitch.isEnabled = isEnabled
+            // Camera and microphone (custom inline layouts). Both run through
+            // `cmd sensor_privacy`, which does not exist before Android 12 and has no older
+            // equivalent, so on those versions the switches cannot do anything whatever the
+            // privilege state is. They used to stay usable and simply fail on every lock,
+            // which left the user believing the camera was protected. Set here rather than in
+            // setup because this method runs on every UI update and would undo it.
+            val sensorsUsable = DeviceDetector.supportsSensorPrivacyToggle()
+            cameraDisableOnLockSwitch.isEnabled = isEnabled && sensorsUsable
+            cameraEnableOnUnlockSwitch.isEnabled = isEnabled && sensorsUsable
+            microphoneDisableOnLockSwitch.isEnabled = isEnabled && sensorsUsable
+            microphoneEnableOnUnlockSwitch.isEnabled = isEnabled && sensorsUsable
+            // Only touched when the sensors cannot be switched at all. Writing
+            // `isEnabled && sensorsUsable` here would have greyed it on Android 12+ without
+            // privilege too, where nothing used to grey it, which is a change this fix has no
+            // business making. sensorsUsable cannot change while the process lives, so setting
+            // it one way only is enough.
+            if (!sensorsUsable) {
+                microphoneOnlyIfUnusedCheckbox.isEnabled = false
+            }
+            cameraUnsupportedNote.visibility = if (sensorsUsable) View.GONE else View.VISIBLE
+            microphoneUnsupportedNote.visibility = if (sensorsUsable) View.GONE else View.VISIBLE
         }
 
         // Extras card (Airplane Mode, Battery Saver)

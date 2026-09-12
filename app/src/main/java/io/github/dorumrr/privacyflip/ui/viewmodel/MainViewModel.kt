@@ -769,7 +769,7 @@ class MainViewModel : ViewModel() {
      * verbatim (same string resource) whenever both were visible at once. The explanation now
      * lives only behind that (?) icon (showCameraMicInfoDialog, MainFragment.kt); this function
      * still runs and still logs, since the diagnostic trail is useful on its own for debugging a
-     * report like #22 even without a UI element to show it in.
+     * user's bug report even without a UI element to show it in.
      */
     fun checkLockDelayConfiguration(context: Context) {
         handleError("checking lock delay configuration") {

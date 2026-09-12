@@ -9,9 +9,6 @@ data class CommandResult(
     val error: String? = null,
     val exitCode: Int = if (success) 0 else 1
 ) {
-    /**
-     * Returns the output as a single string
-     */
     fun getOutputString(): String = output.joinToString("\n")
     
     /**
@@ -20,9 +17,6 @@ data class CommandResult(
     fun hasOutput(): Boolean = success && output.isNotEmpty()
     
     companion object {
-        /**
-         * Creates a failed result with an error message
-         */
         fun failure(error: String, exitCode: Int = 1): CommandResult {
             return CommandResult(
                 success = false,
@@ -31,10 +25,7 @@ data class CommandResult(
                 exitCode = exitCode
             )
         }
-        
-        /**
-         * Creates a successful result with output
-         */
+
         fun success(output: List<String> = emptyList()): CommandResult {
             return CommandResult(
                 success = true,

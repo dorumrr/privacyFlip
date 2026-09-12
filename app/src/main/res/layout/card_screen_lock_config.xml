@@ -109,12 +109,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
-        <!-- Samsung NFC Auto-Retry (#22): Samsung's own payment/wallet framework can silently
+        <!-- Samsung NFC Auto-Retry: Samsung's own payment/wallet framework can silently
              re-enable NFC right after this app disables it, on flagship devices. The app has
              always been able to detect that and retry, but this setting had no way to turn it
-             on until now - the code has been recommending it in its own log message since
-             v2.1.1, nobody could actually follow that advice. Shown only on the Samsung models
-             where this override can happen (see DeviceDetector.isSamsungWithPaymentOverride()). -->
+             on until now - the code has been recommending it in its own log message, nobody
+             could actually follow that advice. Shown only on the Samsung models where this
+             override can happen (see DeviceDetector.isSamsungWithPaymentOverride()). -->
         <LinearLayout
             android:id="@+id/samsungNfcAutoRetryContainer"
             android:layout_width="match_parent"

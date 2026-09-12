@@ -11,7 +11,7 @@
     
     The underlying switch IDs remain the same for compatibility with existing code.
 
-    #38: because those ids are shared with privacy_feature_row.xml, and both layouts are
+    Because those ids are shared with privacy_feature_row.xml, and both layouts are
     <include>d more than once, every control here carries android:saveEnabled="false" and
     it has to stay. See that file's header for the full reason.
     Covered by PrivacyFeatureRowViewStateTest.

@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * Regression tests for the exact bug class that hit Mobile Data earlier this project's
- * history (#J1): a status field whose own NAME contains the state word - "mIsDataEnabled"
+ * history: a status field whose own NAME contains the state word - "mIsDataEnabled"
  * contains "enabled" regardless of its actual value - which breaks a naive
  * `.contains("enabled")`-style check. StatusParsingUtils.parseStandardOutput() itself does
  * not read raw telephony field names directly (MobileDataToggle has its own override for

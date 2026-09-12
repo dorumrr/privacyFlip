@@ -20,7 +20,7 @@ object Constants {
     // action: ScreenStateReceiver, PrivacyAccessibilityService, and PrivacyMonitorService.
     // Centralised here (previously each file hardcoded its own copy of the same string)
     // so all three stay in sync, and so PrivacyActionWorker.sensorDisableInProgress
-    // (checked by all three before they REPLACE this work, see #G1) has one name to refer to.
+    // (checked by all three before they REPLACE this work) has one name to refer to.
     object Work {
         const val NAME_LOCK = "privacy_action_lock"
         const val NAME_UNLOCK = "privacy_action_unlock"

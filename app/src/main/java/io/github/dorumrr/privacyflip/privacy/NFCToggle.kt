@@ -58,36 +58,31 @@ class NFCToggle(
      */
     override suspend fun disable(): PrivacyResult {
         Log.d(TAG, "📍 Starting NFC disable sequence...")
-        
-        // Execute standard disable command
+
         val initialResult = super.disable()
-        
-        // If not Samsung, return immediately (no override possible)
+
         if (!DeviceDetector.isSamsungWithPaymentOverride()) {
             return initialResult
         }
-        
+
         Log.d(TAG, "🔍 Samsung device with payment override detected - checking for override...")
-        
+
         // Wait for potential Samsung payment framework override
         delay(500)
-        
-        // Check actual NFC state after delay
+
         val actualState = getCurrentState()
         val wasOverridden = (initialResult.success && actualState == FeatureState.ENABLED)
-        
+
         if (!wasOverridden) {
             Log.d(TAG, "✅ NFC successfully disabled (no Samsung override detected)")
             return initialResult
         }
-        
-        // Samsung payment framework overrode our disable command
+
         Log.w(TAG, "⚠️ Samsung payment framework overrode NFC disable (NFC re-enabled)")
-        
-        // Check if user enabled auto-retry feature
+
         val preferenceManager = PreferenceManager.getInstance(context)
         val autoRetryEnabled = preferenceManager.samsungNfcAutoRetry
-        
+
         if (!autoRetryEnabled) {
             Log.i(TAG, "Auto-retry disabled by user preference - returning override warning")
             return PrivacyResult(
@@ -96,24 +91,20 @@ class NFCToggle(
                 message = "Samsung payment override detected. Enable 'Samsung Auto-Retry' in settings or disable payment cards in Google Wallet/Samsung Pay."
             )
         }
-        
-        // User enabled auto-retry - attempt aggressive re-disable
+
         Log.i(TAG, "🔄 Auto-retry enabled - attempting aggressive re-disable...")
-        
+
         var retryCount = 0
         val maxRetries = 3 // Hard limit to prevent infinite loop
-        
+
         while (retryCount < maxRetries) {
             retryCount++
             Log.d(TAG, "🔄 Retry attempt $retryCount of $maxRetries")
-            
-            // Try all disable methods in sequence
+
             super.disable()
-            
-            // Shorter delay between retries
+
             delay(300)
-            
-            // Check if it stuck this time
+
             val newState = getCurrentState()
             if (newState == FeatureState.DISABLED) {
                 Log.i(TAG, "✅ Auto-retry successful on attempt $retryCount - NFC disabled")
@@ -123,11 +114,10 @@ class NFCToggle(
                     message = "NFC disabled (Samsung auto-retry succeeded on attempt $retryCount)"
                 )
             }
-            
+
             Log.d(TAG, "❌ Retry attempt $retryCount failed - Samsung framework re-enabled NFC")
         }
-        
-        // All retries exhausted
+
         Log.w(TAG, "❌ Auto-retry exhausted all $maxRetries attempts - Samsung payment override persists")
         return PrivacyResult(
             feature = feature,

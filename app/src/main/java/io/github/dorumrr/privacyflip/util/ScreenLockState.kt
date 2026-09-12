@@ -8,13 +8,10 @@ import android.util.Log
 /**
  * Checks whether the screen is currently locked (keyguard engaged, or the screen is simply off).
  *
- * #Audit finding 1 (production-readiness audit, 10 Sep): this used to be two separate, identical
- * copies - PrivacyMonitorService's own private function, and a second, independent one in
- * PrivacyActionWorker.kt. #D5 fixed only the first copy's exception fallback (from "assume
- * unlocked" to "assume locked", matching every other lock-state read in this app) - the second
- * copy, used at 2 high-stakes points in PrivacyActionWorker's own delay re-validation, was never
- * touched and still failed open. Collapsed into one shared function so there is only one place
- * left to get this right, and only one place a future fix needs to touch.
+ * Shared by PrivacyMonitorService and PrivacyActionWorker rather than each holding its own copy:
+ * two independent copies of this same check previously drifted (one failed open on an
+ * exception, the other failed closed), so a fix to one silently left the other wrong. One shared
+ * function means only one place is left to get this right.
  */
 fun isScreenCurrentlyLocked(context: Context, tag: String): Boolean {
     return try {

@@ -21,12 +21,12 @@
          launcher icon - the picker's own text promises "exempt ANY app including
          system apps" (ExemptAppsDialogFragment.kt), and a narrower <queries> block
          could not keep that promise. Android 11+ hides installed apps from each
-         other by default unless the app declares it needs to see everything. #30 -->
+         other by default unless the app declares it needs to see everything. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- Bluetooth connection-state check for "disable on lock only if not connected"
-         (#28). BLUETOOTH_CONNECT is a runtime-prompted permission from Android 12+;
-         below that, the older BLUETOOTH permission covers it with no prompt. -->
+    <!-- Bluetooth connection-state check for "disable on lock only if not connected".
+         BLUETOOTH_CONNECT is a runtime-prompted permission from Android 12+; below
+         that, the older BLUETOOTH permission covers it with no prompt. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 

@@ -18,11 +18,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * Proves #D5 (PLAN.md): isScreenCurrentlyLocked() must fail CLOSED (assume still locked) when
- * reading real lock state throws, matching every other lock-state read in this app. It used to
- * fail open (assume unlocked) - harmless on its own before #C2, but #C2 wired this same read
- * into stamping PrivacyActionWorker.lastUnlockAtMillis and cancelling real pending protection,
- * so a wrong "unlocked" answer here now has a real, user-visible consequence.
+ * Proves isScreenCurrentlyLocked() must fail CLOSED (assume still locked) when reading real lock
+ * state throws, matching every other lock-state read in this app. It used to fail open (assume
+ * unlocked) - harmless on its own before this same read got wired into stamping
+ * PrivacyActionWorker.lastUnlockAtMillis and cancelling real pending protection, at which point a
+ * wrong "unlocked" answer here gained a real, user-visible consequence.
  *
  * isScreenCurrentlyLocked() is private, so this forces the exception it catches (a bad
  * KEYGUARD_SERVICE registration, so the cast inside it throws ClassCastException - a realistic
@@ -39,8 +39,8 @@ class PrivacyMonitorServiceTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
-        // Shared companion state (#G1/#C2) - reset so an earlier test in this JVM can never leak
-        // a stale timestamp into this one.
+        // Shared companion state - reset so an earlier test in this JVM can never leak a stale
+        // timestamp into this one.
         PrivacyActionWorker.lastUnlockAtMillis = 0L
     }
 

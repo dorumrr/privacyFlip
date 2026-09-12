@@ -94,7 +94,7 @@ class ConnectionStateChecker(
      * Check if a WiFi hotspot (tethering) is currently active and serving a device.
      *
      * WiFi client mode and hotspot/AP mode share the same radio, so disabling WiFi
-     * on lock also kills a running hotspot for anyone tethered to it (#34). Uses
+     * on lock also kills a running hotspot for anyone tethered to it. Uses
      * Android's own tethering service (dumpsys tethering), which is a stable,
      * OEM-independent part of the platform since Android 11, unlike the WiFi
      * AP-state fields in "dumpsys wifi" which vary by manufacturer and ROM.
@@ -130,10 +130,9 @@ class ConnectionStateChecker(
 
     /**
      * Check if Bluetooth is connected to any device, using Android's own
-     * BluetoothAdapter API - not dumpsys text. #28 traced back to the old
-     * approach (4 stacked guesses at raw dumpsys wording) silently failing on
-     * some phone makers whose dumpsys output doesn't match any of the guessed
-     * patterns. getProfileConnectionState() is the same synchronous, no-root
+     * BluetoothAdapter API - not dumpsys text. The old approach (4 stacked guesses at raw
+     * dumpsys wording) silently failed on some phone makers whose dumpsys output didn't match
+     * any of the guessed patterns. getProfileConnectionState() is the same synchronous, no-root
      * API real launcher/accessory apps use, and needs no shell access at all.
      *
      * Needs BLUETOOTH_CONNECT (a runtime-prompted permission from Android 12+,
@@ -184,7 +183,7 @@ class ConnectionStateChecker(
     /**
      * Check if location is currently being used by any app.
      *
-     * #20: the original version of this check grepped dumpsys location for the literal words
+     * An earlier version of this check grepped dumpsys location for the literal words
      * "LocationRequest", "UpdateRecord", "Active" and "Listener[" - words that turn out not to
      * exist at all in modern Android's actual dumpsys location output. That almost certainly
      * explains why this always reported "not in use" even during active navigation.
@@ -194,23 +193,22 @@ class ConnectionStateChecker(
      * a one-off read) or as a held-open session ("startOp"/"finishOp", which is what produces the
      * "Running start at:" line this check looks for).
      *
-     * Tracks two op families, not one, after a second audit round found the first attempt was
-     * still incomplete:
+     * Tracks two op families, not one:
      *  - COARSE_LOCATION / FINE_LOCATION: the per-app location-read ops.
      *  - MONITOR_LOCATION / MONITOR_HIGH_POWER_LOCATION: the "continually monitoring" ops -
      *    Android's own app-ops documentation (AppOps.md) names these as its example of the
      *    held-open pattern. On a real device, COARSE_LOCATION/FINE_LOCATION never once showed a
      *    held-open session across a full dumpsys appops dump, while MONITOR_LOCATION did - a
      *    navigation app's continuous fix stream is far more likely to hold that one open, so
-     *    leaving it out would have reproduced #20 under a different name.
+     *    leaving it out would reproduce the same false-negative under a different name.
      *
      * Excludes the "android" package specifically. Confirmed live: Android's own system process
      * holds MONITOR_LOCATION open near-permanently for its own bookkeeping (observed on a real,
      * otherwise-idle device: the dark-theme sunrise/sunset timer and a system sensor-notification
      * component, both "running" 30+ minutes with no navigation happening at all). Without this
      * exclusion the check would read "in use" almost always, regardless of what the user is
-     * actually doing - the opposite failure from #20, but just as broken. Any real third-party
-     * app, including OEM-preloaded ones, carries its own package name and is still caught.
+     * actually doing - the opposite failure, but just as broken. Any real third-party app,
+     * including OEM-preloaded ones, carries its own package name and is still caught.
      *
      * A dumpsys shape this parser doesn't recognise (an untested Android version, an unexpected
      * OEM change) used to print the same "NONE" as a genuinely idle device - indistinguishable
@@ -223,37 +221,36 @@ class ConnectionStateChecker(
      * this function still returns the same safe "not in use"; only the log's stated reason can
      * be wrong, never the answer.
      *
-     * #A1: confirmed live that awk does not exist at all on Android 8, and that Android 9's awk
-     * build (toybox, dated 2012) SEGFAULTS on this command - isolated all the way down to
-     * `!found` specifically, a bare logical-not on a variable inside an END block. Neither `!=`
-     * elsewhere in this same command, nor an unnegated truthy check, trips it - only that one
-     * exact shape, on that one old build. `found==0` does the identical job without it.
-     * Re-verified after the fix, live, on the same broken build (the Pixel_2_AOSP_9_API_28 AVD):
-     * no crash, right answer for an idle device, right answer for a synthetic active one, right
-     * answer for no location blocks at all, and no change on Android 10+ or the real device used
-     * all session.
+     * Confirmed live that awk does not exist at all on Android 8, and that Android 9's awk build
+     * (toybox, dated 2012) SEGFAULTS on this command - isolated all the way down to `!found`
+     * specifically, a bare logical-not on a variable inside an END block. Neither `!=` elsewhere
+     * in this same command, nor an unnegated truthy check, trips it - only that one exact shape,
+     * on that one old build. `found==0` does the identical job without it. Re-verified after the
+     * fix, live, on the same broken build (the Pixel_2_AOSP_9_API_28 AVD): no crash, right answer
+     * for an idle device, right answer for a synthetic active one, right answer for no location
+     * blocks at all, and no change on Android 10+ or the real device this was verified against.
      *
-     * #20, second gap: "Running start at" only ever appears while a session is held open
-     * (startOp called, finishOp not yet called). An app that asks for a fix in short bursts -
-     * noteOp, not startOp/finishOp - never produces that line at all, even mid-navigation, so a
-     * lock landing between two bursts used to read as "not in use". Every "Access:" line already
-     * carries how long ago that read happened, e.g. "(-2s410ms)" or "(-331ms)" - a second rule
-     * now also counts a location-family access from the last ~6 seconds as in use, same package
-     * exclusion, same op-block scoping. Matches only the two shapes dumpsys is expected to print
-     * for "just now": bare milliseconds (confirmed against real captured output, e.g. "-331ms"
-     * in android-housekeeping-api28-real.txt) or a single-digit second plus milliseconds (NOT
-     * yet seen in any real capture this repo has - both real fixtures only ever show
+     * A second gap: "Running start at" only ever appears while a session is held open (startOp
+     * called, finishOp not yet called). An app that asks for a fix in short bursts - noteOp, not
+     * startOp/finishOp - never produces that line at all, even mid-navigation, so a lock landing
+     * between two bursts used to read as "not in use". Every "Access:" line already carries how
+     * long ago that read happened, e.g. "(-2s410ms)" or "(-331ms)" - a second rule now also
+     * counts a location-family access from the last ~6 seconds as in use, same package exclusion,
+     * same op-block scoping. Matches only the two shapes dumpsys is expected to print for "just
+     * now": bare milliseconds (confirmed against real captured output, e.g. "-331ms" in
+     * android-housekeeping-api28-real.txt) or a single-digit second plus milliseconds (NOT yet
+     * seen in any real capture this repo has - both real fixtures only ever show
      * two-digit-or-larger seconds for anything under a minute, e.g. "-29s137ms", "-14s3ms"; this
      * branch is proven only against the synthetic fixture written for it,
      * active-thirdparty-burst-synthetic.txt). Neither shape is a bare whole-second form (e.g.
      * "-5s" with no trailing ms), which also has not been seen in any real capture, so this
      * cannot mistake an older access ("-14s3ms", "-58m47s35ms") for a recent one without doing
-     * time arithmetic in awk, which is exactly the kind of construct #A1 found an old toybox
-     * build cannot be trusted with. A dumpsys shape that doesn't match either rule falls back to
-     * the existing NONE/NOBLOCKS handling - never a crash, only a missed detection, same failure
-     * mode this check already had.
+     * time arithmetic in awk, which is exactly the kind of construct the old toybox build above
+     * cannot be trusted with. A dumpsys shape that doesn't match either rule falls back to the
+     * existing NONE/NOBLOCKS handling - never a crash, only a missed detection, same failure mode
+     * this check already had.
      *
-     * Audit, same night: 2 findings against the block above, both fixed here.
+     * Two more gaps found in the block above, both fixed here:
      *  - The gate that decides "did a new op start" used to require the exact shape
      *    `[A-Z_]+ \(` (op name in caps, then a space and a paren). A header this parser doesn't
      *    recognise - a lowercase or differently-punctuated OEM op name - matched nothing, so the
@@ -269,7 +266,7 @@ class ConnectionStateChecker(
      *    older access dumpsys happened to print as bare ms (nothing seen doing this, but nothing
      *    ruled it out either) would have been wrongly treated as "just now". Capped to 1-3
      *    digits (`[0-9][0-9]?[0-9]?ms`, i.e. under 1 second) with plain `?`, not a `{1,3}`
-     *    interval - interval syntax is untested on the old toybox build #A1 already found one
+     *    interval - interval syntax is untested on the old toybox build above already found one
      *    real crash on, `?` is already used elsewhere in this same command with no issue.
      */
     private suspend fun isLocationInUse(): Boolean {

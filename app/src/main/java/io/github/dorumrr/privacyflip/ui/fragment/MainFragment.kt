@@ -91,7 +91,7 @@ class MainFragment : Fragment() {
         }
     }
 
-    // Permission launcher for Bluetooth connection state (Android 12+, #28)
+    // Permission launcher for Bluetooth connection state (Android 12+)
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -138,8 +138,8 @@ class MainFragment : Fragment() {
         // the checkbox is tapped (see the listener below). If BLUETOOTH_CONNECT is revoked
         // later, in system Settings, nothing else in the app would notice - the checkbox would
         // stay ticked on every future resume with no permission behind it, and the feature
-        // would silently stop protecting anything (#G2). Runs before reloadScreenLockConfig()
-        // below, so the corrected preference is already in place by the time the UI reads it.
+        // would silently stop protecting anything. Runs before reloadScreenLockConfig() below,
+        // so the corrected preference is already in place by the time the UI reads it.
         revalidateBluetoothPermission()
 
         // Reload screen lock configuration from preferences when fragment resumes
@@ -221,11 +221,11 @@ class MainFragment : Fragment() {
             }
 
             // Samsung's payment/wallet framework can silently re-enable NFC right after this
-            // app disables it, on flagship models (#22). NFCToggle has always been able to
-            // detect that and retry, but until now there was no way to actually turn it on -
-            // the code has been recommending it in its own log message since v2.1.1, with
-            // nothing in the UI to act on that advice. Only shown on models where the override
-            // can actually happen, so it doesn't clutter the screen for everyone else.
+            // app disables it, on flagship models. NFCToggle has always been able to detect
+            // that and retry, but until now there was no way to actually turn it on - the code
+            // has been recommending it in its own log message, with nothing in the UI to act on
+            // that advice. Only shown on models where the override can actually happen, so it
+            // doesn't clutter the screen for everyone else.
             val preferenceManager = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext())
             samsungNfcAutoRetryContainer.visibility =
                 if (io.github.dorumrr.privacyflip.util.DeviceDetector.isSamsungWithPaymentOverride()) View.VISIBLE else View.GONE
@@ -998,9 +998,9 @@ class MainFragment : Fragment() {
         }
         featureBinding.onlyIfUnusedCheckbox.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUI && supportsOnlyIfUnused) {
-                // Bluetooth's connection check needs BLUETOOTH_CONNECT on Android 12+
-                // (#28 - it no longer parses dumpsys text). WiFi and Location need no
-                // extra permission, so only Bluetooth needs this branch.
+                // Bluetooth's connection check needs BLUETOOTH_CONNECT on Android 12+ (it uses
+                // BluetoothAdapter's own API, not dumpsys text). WiFi and Location need no extra
+                // permission, so only Bluetooth needs this branch.
                 if (feature == PrivacyFeature.BLUETOOTH && isChecked &&
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     ContextCompat.checkSelfPermission(
@@ -1047,7 +1047,7 @@ class MainFragment : Fragment() {
         showOnlyIfUnused: Boolean = true,
         // The row's XML default, "Only if not connected", is correct for WiFi/Bluetooth (real
         // connections) but wrong for Location, which is never "connected" - only "in use".
-        // Overridden per call site rather than duplicating the whole layout (#20 audit finding).
+        // Overridden per call site rather than duplicating the whole layout.
         onlyIfUnusedLabel: String = "Only if not connected"
     ) {
         featureBinding.disableOnLockSwitch.isChecked = disableOnLock

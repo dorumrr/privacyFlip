@@ -20,12 +20,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * Proves the #C3 regression this project actually shipped and caught by adversarial review
- * (09 Sep round) rather than by a test: the first version of the unlock-detection branch fired
- * on ANY window that wasn't lock-screen-classed, with no confirmation of the real keyguard
- * state. A call screen, an alarm, or a dismiss-animation ordering quirk where the window-class
- * event arrives before KeyguardManager's own state catches up would all have looked like an
- * unlock while the phone was genuinely still locked.
+ * Proves a regression this project actually shipped: the first version of the unlock-detection
+ * branch fired on ANY window that wasn't lock-screen-classed, with no confirmation of the real
+ * keyguard state. A call screen, an alarm, or a dismiss-animation ordering quirk where the
+ * window-class event arrives before KeyguardManager's own state catches up would all have looked
+ * like an unlock while the phone was genuinely still locked.
  *
  * Runs the real service class against Robolectric's fake Android framework - no emulator, no
  * device - so this fact stays provable by running a command, not by re-reading the code.
@@ -51,20 +50,19 @@ class PrivacyAccessibilityServiceTest {
 
     // Robolectric.setupService() only drives the plain Service lifecycle (onCreate); it does not
     // call onServiceConnected(), which real Android calls via a system binder callback, not part
-    // of that plain lifecycle. Found this round (#A3): without it, isServiceRunning stays false
-    // in every test, silently short-circuiting the new delayed-recheck guard that checks it -
-    // real Android always has onServiceConnected() fire before any accessibility event can
-    // arrive, so calling it here matches production ordering, not a workaround for it.
+    // of that plain lifecycle. Without it, isServiceRunning stays false in every test, silently
+    // short-circuiting the delayed-recheck guard that checks it - real Android always has
+    // onServiceConnected() fire before any accessibility event can arrive, so calling it here
+    // matches production ordering, not a workaround for it.
     private fun connectedService(): PrivacyAccessibilityService {
         val service = Robolectric.setupService(PrivacyAccessibilityService::class.java)
         service.onServiceConnected()
         return service
     }
 
-    // Existence, not "not finished" (found 10 Sep, /phi:debug pass - reviewer 3 challenged the
-    // original !isFinished filter, and a direct check proved it right to challenge: the enqueued
-    // CoroutineWorker can genuinely still be RUNNING at one check and SUCCEEDED microseconds
-    // later at the next, making a finished-state filter race the worker's own completion. What
+    // Existence, not "not finished": the enqueued CoroutineWorker can genuinely still be RUNNING
+    // at one check and SUCCEEDED microseconds later at the next, making a finished-state filter
+    // race the worker's own completion. What
     // this test actually needs to know is simpler and race-free: was NAME_UNLOCK ever enqueued
     // at all. shadowOf(Looper.getMainLooper()).idle() after every event lets any queued
     // WorkManager callback settle first, so this reads a stable, already-final answer.
@@ -85,7 +83,7 @@ class PrivacyAccessibilityServiceTest {
         service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardViewMediator"))
 
         // A non-lock-screen window now appears, but the keyguard STILL reports locked - the
-        // exact race the #C3 regression missed
+        // exact race the regression above missed
         service.onAccessibilityEvent(windowEvent("com.android.settings.Settings"))
         shadowOf(Looper.getMainLooper()).idle()
 
@@ -118,10 +116,9 @@ class PrivacyAccessibilityServiceTest {
 
     @Test
     fun `a missed race self-heals on the next window event once keyguard catches up`() {
-        // Checks PLAN.md's H3/A3 (found 10 Sep, /phi:debug pass): the finding claimed a missed
-        // race is permanent, "no retry or timeout". Closer reading suggested otherwise - the
+        // Checks whether a missed race is permanent, "no retry or timeout", or whether the
         // keyguard read re-runs on EVERY window event while wasShowingKeyguard stays true, not
-        // just once. This proves which reading is correct.
+        // just once. This proves which of the two is correct.
         val service = connectedService()
 
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -152,7 +149,7 @@ class PrivacyAccessibilityServiceTest {
     fun `A3 fix - a missed race is still caught after a delay even with no further window event`() {
         // The narrower defect the self-heal test above doesn't cover: what if NO further window
         // event ever arrives before the device locks again (a glance-and-relock, no navigation)?
-        // Advances Robolectric's fake clock with no second window event at all - only the #A3
+        // Advances Robolectric's fake clock with no second window event at all - only the
         // delayed re-check should be able to catch this.
         val service = connectedService()
 

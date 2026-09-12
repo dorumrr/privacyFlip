@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Tests for ConnectionStateChecker.parseLocationInUseOutput - the Kotlin-side half of the #20
+ * Tests for ConnectionStateChecker.parseLocationInUseOutput - the Kotlin-side half of the
  * location-in-use check. The other half (the actual awk command) cannot run inside a JVM test -
  * it has its own regression check instead: run `dev-local/test-location-detection.sh` (local dev
  * tool only, gitignored - see dev-local/README.md), which replays the real command against

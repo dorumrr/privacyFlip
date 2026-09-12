@@ -33,18 +33,20 @@ class PrivacyActionWorker(
     companion object {
         private const val TAG = "privacyFlip-PrivacyActionWorker"
 
-        // True for exactly the window where a sensor (camera/mic) disable is actually running.
-        // ScreenStateReceiver, PrivacyAccessibilityService and PrivacyMonitorService all check
-        // this before enqueuing the same unique lock-work under ExistingWorkPolicy.REPLACE, so
-        // none of them cancels a disable that's already mid-flight (#G1) - REPLACE would
+        // True from the start of a lock-direction doWork() invocation until that invocation's
+        // own sensor stage concludes, or until the whole invocation exits early (no privilege,
+        // global privacy off, exempt app) - not only during the moments a disable command is
+        // actually running. ScreenStateReceiver, PrivacyAccessibilityService and
+        // PrivacyMonitorService all check this before enqueuing the same unique lock-work under
+        // ExistingWorkPolicy.REPLACE, so none of them cancels an invocation that's still mid-way
+        // through, whether or not it has reached the sensor command itself yet - REPLACE would
         // otherwise silently cancel the coroutine (see the CancellationException catch below)
         // partway through, leaving sensors on with no error shown anywhere.
         //
-        // #Audit finding 3 (production-readiness audit, 10 Sep): armed at the very start of
-        // doWork(), before any setup work (privilege check, object construction) that can itself
-        // take real time talking to a real root/Shizuku shell - it used to be armed only once
-        // the sensor block itself began, well after that setup, so a second trigger for the SAME
-        // real-world lock could see this still false and REPLACE-cancel the worker mid-setup.
+        // Armed at the very start of doWork(), before any setup work (privilege check, object
+        // construction) that can itself take real time talking to a real root/Shizuku shell:
+        // arming it only once the sensor block itself began would let a second trigger for the
+        // SAME real-world lock see this still false and REPLACE-cancel the worker mid-setup.
         // Cleared explicitly right after the sensor block concludes (see doWork()), and
         // unconditionally in doWork()'s own outer finally as a safety net for every early-return
         // and exception path.
@@ -52,20 +54,19 @@ class PrivacyActionWorker(
         var sensorDisableInProgress: Boolean = false
             private set
 
-        // #A2's own #G1 gap, found by an earlier round's adversarial review: the enable-side
-        // twin of sensorDisableInProgress above never existed, so nothing stopped a THIRD unlock
-        // signal from REPLACE-enqueuing a new NAME_UNLOCK job while a SECOND one was still
-        // mid-flight, cancelling that in-flight coroutine outright. Same #G1 pattern, applied
-        // symmetrically: every unlock-enqueue call site checks this before REPLACE. Armed and
-        // cleared the same way as sensorDisableInProgress above (see #Audit finding 3).
+        // The enable-side twin of sensorDisableInProgress above: without it, nothing stops a
+        // THIRD unlock signal from REPLACE-enqueuing a new NAME_UNLOCK job while a SECOND one is
+        // still mid-flight, cancelling that in-flight coroutine outright. Applied symmetrically:
+        // every unlock-enqueue call site checks this before REPLACE. Armed and cleared the same
+        // way as sensorDisableInProgress above.
         @Volatile
         var sensorEnableInProgress: Boolean = false
             private set
 
-        // #A2: a lock cycle's sensor DISABLE and a later unlock cycle's sensor ENABLE are 2
-        // separate WorkManager jobs (different unique work names, so ExistingWorkPolicy never
-        // serialises them against each other) that this app's default WorkManager configuration
-        // can genuinely run concurrently. This Mutex makes the two blocks mutually exclusive, so
+        // A lock cycle's sensor DISABLE and a later unlock cycle's sensor ENABLE are 2 separate
+        // WorkManager jobs (different unique work names, so ExistingWorkPolicy never serialises
+        // them against each other) that this app's default WorkManager configuration can
+        // genuinely run concurrently. This Mutex makes the two blocks mutually exclusive, so
         // their privileged calls can never interleave with each other. Not the same thing as
         // sensorDisableInProgress above - that flag is a soft signal external callers read
         // before deciding whether to enqueue/cancel; this is real mutual exclusion around the
@@ -82,75 +83,65 @@ class PrivacyActionWorker(
         // instead of acting stale.
         internal val sensorMutex = Mutex()
 
-        // #A2: the lock-side twin of lastUnlockAtMillis below.
+        // The lock-side twin of lastUnlockAtMillis below.
         //
-        // #Audit finding 2 (production-readiness audit, 10 Sep), deepened by round 2's own
-        // adversarial review: this must be captured as close to the real-world trigger event as
-        // possible, same reasoning as lastUnlockAtMillis. It used to be captured inside doWork()
-        // itself - first only after real setup work (privilege check, object construction), then
-        // (round 1's fix) as doWork()'s own first statement - but doWork() starting at all is
-        // still gated on real WorkManager dispatch latency (Doze, scheduler load) outside
-        // doWork()'s own control, which could take real time on its own. A genuinely LATER real
-        // unlock, recorded promptly at its own trigger site, could still end up with a SMALLER
-        // raw timestamp than this cycle's own "start", making the supersede check below read
-        // backwards and miss it - the exact bug finding 2 already fixed once, reopened one layer
-        // out. Now written by util/PendingLockWork.kt's recordLock(), at every real lock-trigger
-        // call site, before the job is even enqueued - doWork() only ever reads this, never
-        // writes it. Read fresh at each of doWork()'s 4 supersede checkpoints (see
-        // isSupersededByFresherOppositeAction's own comment) rather than frozen into a local
-        // once - a further ultrareview finding, after this one.
+        // Must be captured as close to the real-world trigger event as possible, same reasoning
+        // as lastUnlockAtMillis: capturing it inside doWork() itself is not enough, because
+        // doWork() starting at all is gated on real WorkManager dispatch latency (Doze,
+        // scheduler load) outside doWork()'s own control, which can take real time on its own. A
+        // genuinely LATER real unlock, recorded promptly at its own trigger site, could still end
+        // up with a SMALLER raw timestamp than this cycle's own "start" if that start were read
+        // inside doWork(), making the supersede check below read backwards and miss it. Written
+        // by util/PendingLockWork.kt's recordLock(), at every real lock-trigger call site, before
+        // the job is even enqueued - doWork() only ever reads this, never writes it. Read fresh
+        // at each of doWork()'s 4 supersede checkpoints (see isSupersededByFresherOppositeAction's
+        // own comment) rather than frozen into a local once.
         @Volatile
         var lastLockAtMillis: Long = 0L
 
-        // #C2 Part 1: when an unlock is confirmed while sensorDisableInProgress is true, it is
-        // deliberately NOT cancelled above (the same #G1 reason) - but nothing recorded that the
-        // unlock happened, so this same lock cycle's own later regular-features/protection-modes
-        // stage had no way to know and could still act on a phone the user had already unlocked.
-        // Every unlock-detector (util/PendingLockWork.kt's recordUnlock(), called from all 4 call
-        // sites) writes this UNCONDITIONALLY, regardless of sensorDisableInProgress - a plain
-        // timestamp write can never interrupt anything mid-flight the way an external
-        // WorkManager cancel can, so it needs none of that guard. doWork() compares it against
-        // its OWN lock cycle's start time, so a stale write from an earlier, unrelated cycle can
-        // never wrongly cancel a new one - no explicit reset needed anywhere. SystemClock.
-        // elapsedRealtime(), not System.currentTimeMillis(): immune to the wall clock itself
-        // moving (NTP sync, the user changing the clock, DST), which a plain timestamp
-        // comparison would otherwise be exposed to.
+        // When an unlock is confirmed while sensorDisableInProgress is true, it is deliberately
+        // NOT cancelled above (the in-flight sensor disable would be interrupted mid-command with
+        // sensors left on) - but nothing recorded that the unlock happened, so this same lock
+        // cycle's own later regular-features/protection-modes stage had no way to know and could
+        // still act on a phone the user had already unlocked. Every unlock-detector
+        // (util/PendingLockWork.kt's recordUnlock(), called from all 4 call sites) writes this
+        // UNCONDITIONALLY, regardless of sensorDisableInProgress - a plain timestamp write can
+        // never interrupt anything mid-flight the way an external WorkManager cancel can, so it
+        // needs none of that guard. doWork() compares it against its OWN lock cycle's start time,
+        // so a stale write from an earlier, unrelated cycle can never wrongly cancel a new one -
+        // no explicit reset needed anywhere. SystemClock.elapsedRealtime(), not
+        // System.currentTimeMillis(): immune to the wall clock itself moving (NTP sync, the user
+        // changing the clock, DST), which a plain timestamp comparison would otherwise be exposed
+        // to.
         //
-        // Found by ultrareview to have a second role, missed when lastLockAtMillis's own second
-        // role was added: doWork()'s unlock branch also reads this as its own cycle's own
-        // reference point, not just the opposite-action value the lock side reads. Same
-        // reasoning as lastLockAtMillis: recordUnlock() stamps this at the real trigger site,
-        // before the job is even enqueued, so doWork() never needs to (and must not) re-stamp a
-        // fresh, WorkManager-dispatch-delayed value of its own. Read fresh at each of doWork()'s
-        // 4 supersede checkpoints, never frozen into a local - a further ultrareview finding,
-        // after this one (see isSupersededByFresherOppositeAction's own comment).
+        // Also has a second role: doWork()'s unlock branch reads this as its own cycle's own
+        // reference point, not just the opposite-action value the lock side reads. Same reasoning
+        // as lastLockAtMillis: recordUnlock() stamps this at the real trigger site, before the job
+        // is even enqueued, so doWork() never needs to (and must not) re-stamp a fresh,
+        // WorkManager-dispatch-delayed value of its own. Read fresh at each of doWork()'s 4
+        // supersede checkpoints, never frozen into a local.
         @Volatile
         var lastUnlockAtMillis: Long = 0L
 
-        // #Audit finding 7 (production-readiness audit, 10 Sep): the 4 supersede checks below
-        // (sensor and regularFeatures/protectionModes stage, for both lock and unlock) used to
-        // each write this comparison inline - PrivacyActionWorkerSensorMutexTest's own "ordering"
-        // test then hand-copied it a 5th time rather than calling any of the 4 real copies, so
-        // PLAN.md's "Verified at runtime" tag for this logic was not actually true: a real
-        // regression in any of the 4 inline copies could have passed that test undetected. One
-        // shared function closes both problems at once - all 4 real call sites and the test now
-        // share the same code, so a fix or a regression can never land in only one of them.
-        // internal, not private: same reason sensorMutex above is internal, so the test can call
-        // the real thing.
+        // The 4 supersede checks below (sensor and regularFeatures/protectionModes stage, for
+        // both lock and unlock) share this one comparison rather than each writing it inline: a
+        // duplicated inline comparison at only 4 of the real call sites can drift out of sync
+        // with whatever a test exercises separately, so one shared function is what lets the test
+        // below and all 4 real call sites be proven to share the same code. internal, not
+        // private: same reason sensorMutex above is internal, so the test can call the real
+        // thing.
         //
-        // Ultrareview finding: the second argument used to be a value frozen once, at the start
-        // of THIS job (thisLockCycleStartedAt/thisUnlockCycleStartedAt, each a local val read
-        // from lastLockAtMillis/lastUnlockAtMillis exactly once). That misses a re-trigger for
-        // the SAME direction that arrives later but never gets its own job, because the
-        // REPLACE-guard (sensorDisableInProgress/sensorEnableInProgress) correctly folds it into
-        // this already-running one instead of starting a new one - lock, then unlock, then
-        // re-lock, all while this job's own sensor step is still running, leaves this job
-        // comparing the unlock against the FIRST lock's stale timestamp, never learning about
-        // the re-lock at all. Now takes ownLastKnownAtMillis fresh at each call site
-        // (lastLockAtMillis/lastUnlockAtMillis read directly, not a frozen local) - always
-        // >= any earlier snapshot, since real lock/unlock timestamps only ever move forward, so
-        // this can only ever see a MORE complete picture than the frozen version did, never a
-        // worse one.
+        // The second argument is read fresh from lastLockAtMillis/lastUnlockAtMillis at each call
+        // site, never frozen into a local once at the start of the job
+        // (thisLockCycleStartedAt/thisUnlockCycleStartedAt). A frozen snapshot misses a
+        // re-trigger for the SAME direction that arrives later but never gets its own job, because
+        // the REPLACE-guard (sensorDisableInProgress/sensorEnableInProgress) correctly folds it
+        // into this already-running one instead of starting a new one - lock, then unlock, then
+        // re-lock, all while this job's own sensor step is still running, would leave this job
+        // comparing the unlock against the FIRST lock's stale timestamp, never learning about the
+        // re-lock at all. Reading lastLockAtMillis/lastUnlockAtMillis directly is always >= any
+        // earlier snapshot, since real lock/unlock timestamps only ever move forward, so this can
+        // only ever see a MORE complete picture than a frozen version, never a worse one.
         internal fun isSupersededByFresherOppositeAction(
             oppositeActionAtMillis: Long,
             ownLastKnownAtMillis: Long
@@ -198,11 +189,9 @@ class PrivacyActionWorker(
      * Checks if the screen is currently locked. Used to validate screen state after delays to
      * prevent executing stale actions.
      *
-     * #Audit finding 1 (production-readiness audit, 10 Sep): this used to be its own private
-     * copy with its own exception fallback - "default to unlocked", the exact bug #D5 fixed in
-     * PrivacyMonitorService's separate copy of the same function, left untouched here because
-     * nobody had searched for every implementation when fixing #D5. Now the shared
-     * util/ScreenLockState.kt function, so there is only one place this can go wrong.
+     * Shared with PrivacyMonitorService via util/ScreenLockState.kt rather than each holding its
+     * own copy, so a fail-closed fix to the lock-check itself (default to locked, not unlocked,
+     * when the state can't be read) only has to exist in one place.
      *
      * @return true if screen is locked, false if unlocked
      */
@@ -211,10 +200,10 @@ class PrivacyActionWorker(
 
     /**
      * Applies "only if unused" to a group of features, with an optional hotspot exception for
-     * WIFI/MOBILE_DATA (#C1/#34 - the only two that participate in it; CAMERA/MICROPHONE never
-     * are). Shared by the sensor group's immediate filter and the regular group's single filter
-     * (#C2 Part 2) so the two can never drift into checking this differently - each group used
-     * to run its own copy of this same logic at two different pre/post-delay checkpoints.
+     * WIFI/MOBILE_DATA (the only two that participate in it; CAMERA/MICROPHONE never are).
+     * Shared by the sensor group's immediate filter and the regular group's single filter so the
+     * two can never drift into checking this differently - each group used to run its own copy
+     * of this same logic at two different pre/post-delay checkpoints.
      */
     private suspend fun filterByOnlyIfUnused(
         features: List<PrivacyFeature>,
@@ -239,22 +228,21 @@ class PrivacyActionWorker(
 
     override suspend fun doWork(): Result {
         val isLocking = inputData.getBoolean("is_locking", false)
-        // #Audit finding 3: armed as the very first thing doWork() does, before any setup work
-        // below (privilege check, object construction) that can itself take real time talking
-        // to a real root/Shizuku shell - see sensorDisableInProgress's own comment above for why
-        // this matters. Cleared explicitly right after each branch's own sensor block concludes
-        // (the normal path, preserving #B2's "still cancellable during the regular-features
-        // delay" behaviour), and in the outer finally below for every early-return and exception
-        // path, for THIS direction only (see that finally's own comment).
+        // Armed as the very first thing doWork() does, before any setup work below (privilege
+        // check, object construction) that can itself take real time talking to a real
+        // root/Shizuku shell - see sensorDisableInProgress's own comment above for why this
+        // matters. Cleared explicitly right after each branch's own sensor block concludes (the
+        // normal path, preserving the "still cancellable during the regular-features delay"
+        // behaviour), and in the outer finally below for every early-return and exception path,
+        // for THIS direction only (see that finally's own comment).
         if (isLocking) {
             sensorDisableInProgress = true
         } else {
             sensorEnableInProgress = true
         }
-        // Found by round 2's own adversarial review, after round 1 had already corrected the
-        // finally below once: tracks whether THIS invocation's own explicit clear (right after
-        // its own sensor block, the normal path) has already run - see that finally's own
-        // comment for why this is needed even after round 1's cross-direction fix.
+        // Tracks whether THIS invocation's own explicit clear (right after its own sensor block,
+        // the normal path) has already run - see that finally's own comment for why this is
+        // needed even when the clear happens on the normal path.
         var ownSensorGuardCleared = false
         try {
             val isDeviceLocked = inputData.getBoolean("is_device_locked", false)
@@ -308,31 +296,30 @@ class PrivacyActionWorker(
                 if (featuresToDisable.isNotEmpty()) {
                     logDebug("Disabling features on lock: ${featuresToDisable.map { it.displayName }}")
 
-                    // #C2 Part 1: the 2 checkpoints below read lastLockAtMillis directly, fresh,
-                    // each time - not a value frozen into a local once at the top of this
-                    // branch. Used to be frozen (thisLockCycleStartedAt); ultrareview found that
-                    // missed a re-lock that arrives while THIS job's own sensor step is still
-                    // running (lock, then unlock, then re-lock, none of the later 2 getting
+                    // The 2 checkpoints below read lastLockAtMillis directly, fresh, each time -
+                    // not a value frozen into a local once at the top of this branch. A frozen
+                    // snapshot misses a re-lock that arrives while THIS job's own sensor step is
+                    // still running (lock, then unlock, then re-lock, none of the later 2 getting
                     // their own job because the REPLACE-guard correctly folds them into this
-                    // one) - the frozen snapshot never learned about the re-lock, so the
-                    // regularFeatures checkpoint compared the unlock against the FIRST lock's
-                    // stale timestamp and wrongly concluded it had been superseded. Reading
-                    // lastLockAtMillis fresh is always safe: real lock timestamps only ever
-                    // move forward (see recordLock()'s own comment), so a fresh read can only
-                    // ever be a MORE complete picture than a frozen one, never a worse one.
+                    // one): the frozen snapshot never learns about the re-lock, so the
+                    // regularFeatures checkpoint would compare the unlock against the FIRST
+                    // lock's stale timestamp and wrongly conclude it had been superseded. Reading
+                    // lastLockAtMillis fresh is always safe: real lock timestamps only ever move
+                    // forward (see recordLock()'s own comment), so a fresh read can only ever be
+                    // a MORE complete picture than a frozen one, never a worse one.
 
-                    // Categorise by TYPE ONLY, unfiltered (#C2 Part 2). Filtering used to happen
-                    // here too, in a shared pass, before the lock delay - narrowing this list
-                    // once, then (for regular features) narrowing it again after the delay, only
-                    // ever able to subtract. A feature excluded at THIS point (in use, or
-                    // hotspot active) could then never be re-added even if the reason stopped
-                    // applying before the delay ended. Each group below is now filtered exactly
-                    // once, at the latest moment safe for that group: sensors immediately, since
-                    // they act with no delay anyway and always have; regular features and
-                    // protection modes together after the delay (or immediately if lockDelay==0).
-                    // Ultrareview nit: hoisted once, not called again for every feature inside
-                    // each filter predicate below (getSensorFeatures()/getSystemModeFeatures()
-                    // each allocate their own Set on every call).
+                    // Categorise by TYPE ONLY, unfiltered. Filtering used to happen here too, in
+                    // a shared pass, before the lock delay - narrowing this list once, then (for
+                    // regular features) narrowing it again after the delay, only ever able to
+                    // subtract. A feature excluded at THIS point (in use, or hotspot active)
+                    // could then never be re-added even if the reason stopped applying before the
+                    // delay ended. Each group below is now filtered exactly once, at the latest
+                    // moment safe for that group: sensors immediately, since they act with no
+                    // delay anyway and always have; regular features and protection modes
+                    // together after the delay (or immediately if lockDelay==0). Hoisted once,
+                    // not called again for every feature inside each filter predicate below
+                    // (getSensorFeatures()/getSystemModeFeatures() each allocate their own Set on
+                    // every call).
                     val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
                     val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
                     val sensorFeatures = featuresToDisable.filter { it in sensorFeatureSet }
@@ -343,42 +330,35 @@ class PrivacyActionWorker(
 
                     // Disable camera/microphone - attempted immediately, no artificial delay.
                     //
-                    // #F1b, confirmed live this session: the old code waited 75ms then re-checked
-                    // isScreenCurrentlyLocked() (isKeyguardLocked || !isInteractive) before
-                    // attempting anything. That re-check can never say "still unlocked" for this
-                    // branch specifically - it only runs because ACTION_SCREEN_OFF already fired,
-                    // and the screen being off is exactly what makes !isInteractive true, on its
-                    // own, regardless of whether the keyguard itself has engaged yet. A real lock
-                    // was watched go through this exact path: 5/5 regular features disabled
-                    // correctly, camera and microphone silently skipped every time, "by design",
-                    // because the check could never pass. Waiting 75ms before even trying only
-                    // made it worse - it handed the keyguard 75ms head start to win the race
-                    // before the attempt was even made.
-                    //
-                    // Fixed by removing that 75ms wait and its live re-check, and trusting the
-                    // real outcome of the command instead: attempt the disable right away, and
-                    // let privacyManager.disableFeatures()'s own success/failure (already
+                    // This branch only runs because ACTION_SCREEN_OFF already fired, and the
+                    // screen being off is exactly what makes the device's isInteractive flag
+                    // false, on its own, regardless of whether the keyguard itself has engaged
+                    // yet. A re-check of isScreenCurrentlyLocked() (isKeyguardLocked ||
+                    // !isInteractive) here can therefore never say "still unlocked", no matter how
+                    // long it waits first - waiting before trying only hands the keyguard a head
+                    // start to win the race before the attempt is even made. Instead, the real
+                    // outcome of the command is trusted directly: attempt the disable right away,
+                    // and let privacyManager.disableFeatures()'s own success/failure (already
                     // captured and logged below via processResults, same as every other feature)
-                    // be the source of truth. If the keyguard genuinely wins the race, the
-                    // command fails and that's reported honestly.
+                    // be the source of truth. If the keyguard genuinely wins the race, the command
+                    // fails and that's reported honestly.
                     //
                     // One narrower gate does remain, and it is NOT that heuristic: the
                     // `else if (!isDeviceLocked)` below reads the flag the trigger supplied,
-                    // meaning the device was already locked when the screen went off, rather
-                    // than guessing from screen state. Skipping there is right, not pessimistic:
-                    // measured on a real device on 12 Sep, `cmd sensor_privacy enable 0 camera`
-                    // leaves the camera allowed when the keyguard is up, and flips it the moment
-                    // the same command runs unlocked. Attempting it would cost a shell round
-                    // trip to change nothing.
+                    // meaning the device was already locked when the screen went off, rather than
+                    // guessing from screen state. Skipping there is right, not pessimistic: on a
+                    // real device, `cmd sensor_privacy enable 0 camera` leaves the camera allowed
+                    // when the keyguard is up, and flips it the moment the same command runs
+                    // unlocked. Attempting it would cost a shell round trip to change nothing.
                     if (sensorFeatures.isNotEmpty()) {
                       val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, connectionChecker, hotspotActiveNow = false)
                       if (filteredSensorFeatures.isNotEmpty()) {
-                        // #A2: waits its turn if an unlock cycle's own sensor enable (below) is
+                        // Waits its turn if an unlock cycle's own sensor enable (below) is
                         // currently running - see sensorMutex's own comment above. Uncontended in
                         // the common case, so this changes nothing except in the exact race it
                         // exists to close.
                         sensorMutex.withLock {
-                          // #A2: this cycle may have waited its turn at the mutex above - re-check
+                          // This cycle may have waited its turn at the mutex above - re-check
                           // right before acting, still inside the lock, whether a fresher unlock
                           // has already been recorded. If so, that unlock's own enable either
                           // already ran or is queued right behind this check - disabling now
@@ -411,13 +391,12 @@ class PrivacyActionWorker(
                         }
                       }
                     }
-                    // #Audit finding 3: sensorDisableInProgress cleared HERE, right after the
-                    // sensor block concludes (whether or not there was anything to disable) -
-                    // not left true through the delay below, which would silently take away
-                    // #B2's own "still cancellable while waiting" behaviour. The outer finally
-                    // is a safety net for early returns/exceptions above this point only - marked
-                    // done here so it knows not to touch the flag again (see that finally's own
-                    // comment, round 2 of this round's adversarial review).
+                    // sensorDisableInProgress cleared HERE, right after the sensor block
+                    // concludes (whether or not there was anything to disable) - not left true
+                    // through the delay below, which would silently take away the "still
+                    // cancellable while waiting" behaviour. The outer finally is a safety net for
+                    // early returns/exceptions above this point only - marked done here so it
+                    // knows not to touch the flag again (see that finally's own comment).
                     sensorDisableInProgress = false
                     ownSensorGuardCleared = true
 
@@ -428,9 +407,9 @@ class PrivacyActionWorker(
                         logDebug("📊 regularFeatures: ${regularFeatures.map { it.displayName }}")
 
                         // Always honour the user's configured delay, even if the device is
-                        // already locked by the time this job runs (#30). Most phones lock
-                        // instantly on screen-off, so skipping the delay in that case used to
-                        // mean the delay setting rarely applied at all. Safe to always wait:
+                        // already locked by the time this job runs. Most phones lock instantly on
+                        // screen-off, so skipping the delay in that case would mean the delay
+                        // setting rarely applied at all. Safe to always wait:
                         // the isStillLocked check right below already cancels the whole action
                         // if the user unlocks again during the wait.
                         val lockDelay = preferenceManager.lockDelaySeconds
@@ -476,16 +455,16 @@ class PrivacyActionWorker(
                             logDebug("⚡ Skipping delay (lockDelay=0), proceeding directly to disable features")
                         }
 
-                        // #C2 Part 1: catches an unlock that this cycle's own sensor block above
-                        // deliberately did not cancel for (#G1), plus - since this is the ONLY
-                        // check on the lockDelay==0 path - is that path's sole re-validation of
-                        // any kind. On the lockDelay>0 path this is a second, independent signal
-                        // alongside isStillLocked just above: that already catches a LASTING
-                        // unlock by the time the delay ends, this also catches one that happened
-                        // and was recorded during the sensor block, closing the window before it
-                        // rather than only after the wait. Compares against lastLockAtMillis read
-                        // fresh here, not a value frozen at this job's own start - ultrareview's
-                        // own finding, see isSupersededByFresherOppositeAction's comment above.
+                        // Catches an unlock that this cycle's own sensor block above deliberately
+                        // did not cancel for, plus - since this is the ONLY check on the
+                        // lockDelay==0 path - is that path's sole re-validation of any kind. On
+                        // the lockDelay>0 path this is a second, independent signal alongside
+                        // isStillLocked just above: that already catches a LASTING unlock by the
+                        // time the delay ends, this also catches one that happened and was
+                        // recorded during the sensor block, closing the window before it rather
+                        // than only after the wait. Compares against lastLockAtMillis read fresh
+                        // here, not a value frozen at this job's own start - see
+                        // isSupersededByFresherOppositeAction's comment above.
                         if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
                             logWarning("⚠️ Unlocked since this lock - cancelling remaining disable actions")
                             debugNotifier.notifyActionCancelled("Unlocked during lock cycle - disable cancelled")
@@ -494,24 +473,24 @@ class PrivacyActionWorker(
 
                         logDebug("📍 CHECKPOINT: Passed all validations, proceeding to disable features")
 
-                        // Re-check hotspot state once, here - the latest safe moment (#B1, #C1),
-                        // and now the ONLY moment (#C2 Part 2) rather than a pre-delay sample
-                        // plus a post-delay re-sample. WiFi shares its radio with the hotspot's
-                        // access point (#34); Mobile Data is the hotspot's own upstream
-                        // connection, so cutting it leaves the hotspot broadcasting with nothing
-                        // to share; Airplane Mode is a full radio kill switch with no per-feature
-                        // "only if unused" setting of its own, so this check is the only thing
-                        // standing between it and taking a live hotspot down outright (#C1).
+                        // Re-check hotspot state once, here - the latest safe moment, and the
+                        // ONLY moment, rather than a pre-delay sample plus a post-delay
+                        // re-sample. WiFi shares its radio with the hotspot's access point;
+                        // Mobile Data is the hotspot's own upstream connection, so cutting it
+                        // leaves the hotspot broadcasting with nothing to share; Airplane Mode is
+                        // a full radio kill switch with no per-feature "only if unused" setting
+                        // of its own, so this check is the only thing standing between it and
+                        // taking a live hotspot down outright.
                         val needsHotspotCheck = PrivacyFeature.WIFI in regularFeatures ||
                             PrivacyFeature.MOBILE_DATA in regularFeatures ||
                             PrivacyFeature.AIRPLANE_MODE in protectionModes
                         val hotspotActiveNow = needsHotspotCheck && connectionChecker.isHotspotActive()
                         if (hotspotActiveNow) {
-                            // #A5: Airplane Mode is deliberately NOT named here any more. This
-                            // notification fires before the regularFeatures round-trip below, but
-                            // Airplane Mode's own decision is now made LATER, with its own fresh
-                            // re-check (hotspotActiveForAirplaneMode, in the protection-modes loop)
-                            // - naming it here could tell the user it was kept off while the fresh
+                            // Airplane Mode is deliberately NOT named here. This notification
+                            // fires before the regularFeatures round-trip below, but Airplane
+                            // Mode's own decision is made LATER, with its own fresh re-check
+                            // (hotspotActiveForAirplaneMode, in the protection-modes loop) -
+                            // naming it here could tell the user it was kept off while the fresh
                             // check then actually turns it on, or the reverse. Notified at the
                             // point the real decision is made instead, below.
                             val keptOn = buildList {
@@ -525,8 +504,8 @@ class PrivacyActionWorker(
                         }
 
                         // Disable regular features (WiFi, Bluetooth, NFC, etc.) - filtered
-                        // exactly once, here (#C2 Part 2): "only if unused" needs re-testing at
-                        // whatever point actually precedes the disable call, since a feature
+                        // exactly once, here: "only if unused" needs re-testing at whatever
+                        // point actually precedes the disable call, since a feature
                         // reported free earlier could be in genuine active use by now - e.g.
                         // navigation started during the wait. An unconditionally included
                         // feature's presence here never depended on any snapshot to begin with.
@@ -557,34 +536,33 @@ class PrivacyActionWorker(
                             // Get current status to check if already enabled
                             val currentStatus = privacyManager.getCurrentStatus()
 
-                            // #A5: hotspotActiveNow was computed once, above, before the
+                            // hotspotActiveNow was computed once, above, before the
                             // regularFeatures block's own disableFeatures() root/Shizuku
                             // round-trip just ran - a real, possibly slow call. A hotspot
                             // starting or stopping in that gap would have been invisible to the
-                            // Airplane Mode decision below, which is exactly the check #C1 added
-                            // to stop Airplane Mode taking a live hotspot down. Re-read fresh,
-                            // right here, rather than reusing the stale value - only when
-                            // Airplane Mode is actually configured, so this never costs an extra
-                            // shell call for the common case where it isn't.
+                            // Airplane Mode decision below, so it is re-read fresh, right here,
+                            // rather than reusing the stale value - only when Airplane Mode is
+                            // actually configured, so this never costs an extra shell call for
+                            // the common case where it isn't.
                             val hotspotActiveForAirplaneMode = PrivacyFeature.AIRPLANE_MODE in protectionModes &&
                                 connectionChecker.isHotspotActive()
 
                             for (mode in protectionModes) {
-                                // #C1: Airplane Mode is a full radio kill switch - unlike WiFi/
-                                // Mobile Data it has no per-feature "only if unused" setting to
-                                // check, so this hotspot re-check is the only thing standing
-                                // between it and taking a live hotspot down outright. Battery
-                                // Saver does NOT get the same treatment: Android documents it as
-                                // throttling background activity, not disabling radios - unlike
-                                // the Airplane Mode case, this was not verified live against a
-                                // real hotspot (this device's shell lacks the permission to start
-                                // one), so it rests on documented platform behaviour, not a test.
+                                // Airplane Mode is a full radio kill switch - unlike WiFi/Mobile
+                                // Data it has no per-feature "only if unused" setting to check, so
+                                // this hotspot re-check is the only thing standing between it and
+                                // taking a live hotspot down outright. Battery Saver does NOT get
+                                // the same treatment: Android documents it as throttling
+                                // background activity, not disabling radios - unlike the Airplane
+                                // Mode case, this rests on documented platform behaviour, not a
+                                // live-verified test (this device's shell lacks the permission to
+                                // start a hotspot to test against).
                                 if (mode == PrivacyFeature.AIRPLANE_MODE && hotspotActiveForAirplaneMode) {
-                                    // #A5: the user-facing notification for this now happens HERE,
-                                    // at the fresh re-check, not at the earlier hotspotActiveNow
-                                    // point above - so what the user is told always matches what
-                                    // the code actually does, even if hotspot state changed
-                                    // between the two checks.
+                                    // The user-facing notification for this happens HERE, at the
+                                    // fresh re-check, not at the earlier hotspotActiveNow point
+                                    // above - so what the user is told always matches what the
+                                    // code actually does, even if hotspot state changed between
+                                    // the two checks.
                                     logDebug("🛡️ Skipping Airplane Mode - hotspot is active")
                                     debugNotifier.notifyFeatureSkipped("Airplane Mode", "hotspot is active")
                                     continue
@@ -618,21 +596,20 @@ class PrivacyActionWorker(
                 if (featuresToEnable.isNotEmpty()) {
                     logDebug("Enabling features on unlock: ${featuresToEnable.map { it.displayName }}")
 
-                    // #A2, the enable-side twin of the lock branch's own lastLockAtMillis reads.
-                    // The 2 checkpoints below read lastUnlockAtMillis directly, fresh, each time
-                    // - not a value frozen into a local once here. Ultrareview found the frozen
-                    // version (thisUnlockCycleStartedAt) missed a re-trigger for the same
-                    // direction that arrives while THIS job's own sensor step is still running -
-                    // see isSupersededByFresherOppositeAction's own comment above for the full
-                    // reasoning, symmetric here.
+                    // The enable-side twin of the lock branch's own lastLockAtMillis reads. The 2
+                    // checkpoints below read lastUnlockAtMillis directly, fresh, each time - not
+                    // a value frozen into a local once here. A frozen version misses a
+                    // re-trigger for the same direction that arrives while THIS job's own sensor
+                    // step is still running - see isSupersededByFresherOppositeAction's own
+                    // comment above for the full reasoning, symmetric here.
 
-                    // Split into sensor features, protection modes, and regular features.
-                    // Ultrareview nit, fixed: used to hardcode CAMERA/MICROPHONE here while the
-                    // lock branch's own split (above) used PrivacyFeature.getSensorFeatures() -
-                    // the same categorisation expressed 2 different ways in the same doWork(), so
-                    // a future change to what counts as a sensor feature could be applied to only
-                    // one. Now shares the same helper, hoisted once for the same reason as the
-                    // lock branch's own equivalent hoist above.
+                    // Split into sensor features, protection modes, and regular features. Shares
+                    // the same PrivacyFeature.getSensorFeatures()/getSystemModeFeatures() helper
+                    // as the lock branch's own split above, rather than hardcoding
+                    // CAMERA/MICROPHONE separately here - the same categorisation expressed 2
+                    // different ways in the same doWork() would let a future change to what
+                    // counts as a sensor feature be applied to only one. Hoisted once for the
+                    // same reason as the lock branch's own equivalent hoist above.
                     val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
                     val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
                     val sensorFeatures = featuresToEnable.filter { it in sensorFeatureSet }
@@ -644,13 +621,13 @@ class PrivacyActionWorker(
                     // Enable camera/microphone IMMEDIATELY (no delay), skipping ones already on.
                     // CAMERA_ONLY_IF_NOT_ENABLED / MICROPHONE_ONLY_IF_NOT_ENABLED both default to
                     // true (Constants.kt) - the intent was always to skip a redundant re-enable
-                    // here, same as regular features already do below, but this block never
-                    // actually read that preference (#21's real, if minor, finding: every
-                    // catch-up re-check - the app can only detect a real lock while its
-                    // background service is alive, and gets restarted often on some phones -
-                    // was unconditionally re-enabling the microphone even when it was already on).
+                    // here, same as regular features already do below. Reading that preference
+                    // matters because every catch-up re-check - the app can only detect a real
+                    // lock while its background service is alive, and gets restarted often on
+                    // some phones - would otherwise unconditionally re-enable the microphone even
+                    // when it was already on.
                     if (sensorFeatures.isNotEmpty()) {
-                        // #A2: waits its turn if a lock cycle's own sensor disable is currently
+                        // Waits its turn if a lock cycle's own sensor disable is currently
                         // running - see sensorMutex's own comment in the companion object. A real
                         // unlock enqueues this as a SEPARATE WorkManager job from whatever lock
                         // cycle preceded it (different unique work name, so nothing else
@@ -671,7 +648,7 @@ class PrivacyActionWorker(
                                   !isAlreadyEnabled
                               }
                           }
-                          // #A2: symmetric to the lock-side check - if a fresher lock has already
+                          // Symmetric to the lock-side check - if a fresher lock has already
                           // been recorded, that lock's own disable either already ran or is
                           // queued right behind this check, so enabling now would stomp on it
                           // with a stale instruction.
@@ -689,10 +666,9 @@ class PrivacyActionWorker(
                           }
                         }
                     }
-                    // #Audit finding 3: sensorEnableInProgress cleared HERE, right after the
-                    // sensor block concludes - same reasoning as sensorDisableInProgress above,
-                    // including marking ownSensorGuardCleared (round 2 of this round's
-                    // adversarial review).
+                    // sensorEnableInProgress cleared HERE, right after the sensor block
+                    // concludes - same reasoning as sensorDisableInProgress above, including
+                    // marking ownSensorGuardCleared.
                     sensorEnableInProgress = false
                     ownSensorGuardCleared = true
 
@@ -718,17 +694,15 @@ class PrivacyActionWorker(
                             }
                         }
 
-                        // #Audit finding 4 (production-readiness audit, 10 Sep): the enable-side
-                        // twin of the lock branch's own lastUnlockAtMillis check above - this
-                        // simply never existed before. With unlockDelaySeconds==0 (a real,
-                        // ordinary setting, symmetric to lockDelaySeconds==0) this is the ONLY
-                        // re-validation this stage gets, the same reason that check is
-                        // unconditional on the lock side. Without it, a lock recorded after this
-                        // unlock started was never consulted before WiFi/Bluetooth/NFC got
-                        // switched back on and Airplane Mode/Battery Saver got switched off - on
-                        // a phone that is actually locked right now. Compares against
-                        // lastUnlockAtMillis read fresh here, not a value frozen at this job's
-                        // own start - ultrareview's finding, see
+                        // The enable-side twin of the lock branch's own lastUnlockAtMillis check
+                        // above. With unlockDelaySeconds==0 (a real, ordinary setting, symmetric
+                        // to lockDelaySeconds==0) this is the ONLY re-validation this stage gets,
+                        // the same reason that check is unconditional on the lock side. Without
+                        // it, a lock recorded after this unlock started would never be consulted
+                        // before WiFi/Bluetooth/NFC got switched back on and Airplane Mode/
+                        // Battery Saver got switched off - on a phone that is actually locked
+                        // right now. Compares against lastUnlockAtMillis read fresh here, not a
+                        // value frozen at this job's own start - see
                         // isSupersededByFresherOppositeAction's comment above.
                         if (isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
                             logWarning("⚠️ Locked since this unlock - cancelling remaining enable actions")
@@ -805,34 +779,33 @@ class PrivacyActionWorker(
             debugNotifier.notifyError("Worker failed: ${e.message}")
             return Result.failure()
         } finally {
-            // #Audit finding 3: safety net for every early-return and exception path above (no
-            // privilege, global privacy disabled, exempt app, or a genuine exception during
-            // setup) that happens BEFORE the normal path's own explicit clear, right after this
-            // branch's own sensor block - without this, one of those early paths would leave the
-            // flag stuck true forever, since nothing else ever clears it.
+            // Safety net for every early-return and exception path above (no privilege, global
+            // privacy disabled, exempt app, or a genuine exception during setup) that happens
+            // BEFORE the normal path's own explicit clear, right after this branch's own sensor
+            // block - without this, one of those early paths would leave the flag stuck true
+            // forever, since nothing else ever clears it.
             //
-            // Found by round 1 of this round's adversarial review: this used to clear BOTH flags
-            // unconditionally - but a lock-direction and unlock-direction doWork() are 2 separate
-            // WorkManager jobs (different unique work names) that this app's default
-            // configuration can genuinely run concurrently (see sensorMutex's own comment above).
-            // Clearing both here would wipe the OTHER, still in-flight direction's flag the
-            // moment THIS direction reaches an early return - reopening the exact
-            // REPLACE-cancels-an-in-flight-worker race this finally exists to close, just
-            // cross-direction. Fixed to only ever touch the ONE flag this invocation itself armed
-            // at the top of doWork(), symmetric to that arming.
+            // Clearing BOTH flags unconditionally here is not safe: a lock-direction and
+            // unlock-direction doWork() are 2 separate WorkManager jobs (different unique work
+            // names) that this app's default configuration can genuinely run concurrently (see
+            // sensorMutex's own comment above), so clearing both would wipe the OTHER, still
+            // in-flight direction's flag the moment THIS direction reaches an early return -
+            // reopening the exact REPLACE-cancels-an-in-flight-worker race this finally exists to
+            // close, just cross-direction. Only the ONE flag this invocation itself armed at the
+            // top of doWork() is touched, symmetric to that arming.
             //
-            // Found by round 2: touching even that ONE flag unconditionally was still not safe.
-            // If THIS invocation reaches its own explicit clear (ownSensorGuardCleared = true),
-            // then later gets cancelled (e.g. REPLACE-cancelled by a NEWER same-direction trigger
-            // while still waiting out the regularFeatures delay), this finally still runs - and
-            // by the time it does, that newer invocation may have already armed the SAME flag
-            // and be actively mid-sensor-block. Clearing it here would wipe THAT invocation's
-            // flag while its own sensor action is genuinely in flight - the same #G1 race,
-            // reopened one layer later, same-direction instead of cross-direction. Only acts when
-            // ownSensorGuardCleared is still false - meaning the normal path never got this far,
-            // so no newer invocation could have raced in yet (every REPLACE/enqueue guard still
-            // correctly sees this invocation's own flag as true and skips), and the flag really
-            // would otherwise be stuck true forever with nothing else to clear it.
+            // Touching even that ONE flag unconditionally is still not safe. If THIS invocation
+            // reaches its own explicit clear (ownSensorGuardCleared = true), then later gets
+            // cancelled (e.g. REPLACE-cancelled by a NEWER same-direction trigger while still
+            // waiting out the regularFeatures delay), this finally still runs - and by the time
+            // it does, that newer invocation may have already armed the SAME flag and be actively
+            // mid-sensor-block. Clearing it here would wipe THAT invocation's flag while its own
+            // sensor action is genuinely in flight - the same race, reopened one layer later,
+            // same-direction instead of cross-direction. Only acts when ownSensorGuardCleared is
+            // still false - meaning the normal path never got this far, so no newer invocation
+            // could have raced in yet (every REPLACE/enqueue guard still correctly sees this
+            // invocation's own flag as true and skips), and the flag really would otherwise be
+            // stuck true forever with nothing else to clear it.
             if (!ownSensorGuardCleared) {
                 if (isLocking) {
                     sensorDisableInProgress = false

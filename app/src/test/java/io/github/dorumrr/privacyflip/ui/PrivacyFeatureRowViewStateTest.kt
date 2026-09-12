@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Issue #38. privacy_feature_row.xml is <include>d 5 times and privacy_protection_mode_row.xml
+ * privacy_feature_row.xml is <include>d 5 times and privacy_protection_mode_row.xml
  * twice, and both declare the same child ids, so up to 7 live controls share one id. Android's
  * view state is a SparseArray keyed by view id, so whichever control saved last was restored
  * into all of them, and each resulting change fired the listener that persists it - rewriting

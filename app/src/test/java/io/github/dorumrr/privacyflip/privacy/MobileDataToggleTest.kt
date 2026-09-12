@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Regression test for the exact bug this project hit (#J1): the telephony status line's own
+ * Regression test for the exact bug this project hit: the telephony status line's own
  * field NAME contains the word "enabled" ("mIsDataEnabled") regardless of its actual value,
  * which breaks a naive `.contains("enabled")`-style check. MobileDataToggle.parseStatusOutput()
  * checks the value after the '=' explicitly instead - these tests prove that differential is

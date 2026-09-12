@@ -1,7 +1,7 @@
 # PrivacyFlip Permission & Privilege Workflow
 
 ## Overview
-PrivacyFlip requires privileged access (Shizuku or Root) to control system-level privacy features. This document describes the user experience for each privilege scenario.
+PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control system-level privacy features. This document describes the user experience for each privilege scenario.
 
 ---
 
@@ -12,7 +12,7 @@ PrivacyFlip requires privileged access (Shizuku or Root) to control system-level
 ### Behavior:
 - App starts and displays UI
 - **Red alert card shown:** "Root or Shizuku Required"
-  - Message: "Privacy Flip requires Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
+  - Message: "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
 - **System Requirements card shown** (reddish background):
   - **Privileged Access:** "Not Available"
   - Action button: "INSTALL SHIZUKU OR ROOT DEVICE"

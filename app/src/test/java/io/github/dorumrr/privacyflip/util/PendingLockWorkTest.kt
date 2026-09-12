@@ -20,23 +20,22 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 
 /**
- * Proves #A4 (PLAN.md, confirmed 10 Sep by /phi:debug): cancel()'s Operation result is actually
- * read, not discarded - the log this test checks for only exists because something now listens
- * for the real, asynchronously-resolved outcome instead of assuming success at the call site.
+ * Proves cancel()'s Operation result is actually read, not discarded - the log this test checks
+ * for only exists because something now listens for the real, asynchronously-resolved outcome
+ * instead of assuming success at the call site.
  *
- * Enqueues a REAL NAME_LOCK unique work item first (found necessary this round - the first draft
- * only ever cancelled a no-op, which cannot tell "genuinely reading the Operation" apart from
- * "a relabeled synchronous log"), so this exercises the actual cancel-something-real path.
+ * Enqueues a REAL NAME_LOCK unique work item first - a version that only ever cancelled a no-op
+ * cannot tell "genuinely reading the Operation" apart from "a relabeled synchronous log" - so
+ * this exercises the actual cancel-something-real path.
  *
  * Not provable here: whether a genuine Operation FAILURE specifically gets logged as failure -
  * Robolectric's test WorkManager has no way to force cancelUniqueWork() to fail, only to
- * succeed (trivially, even against a no-op). That half of A4 stays Verified in code only.
+ * succeed (trivially, even against a no-op). That half stays Verified in code only.
  *
- * #Audit finding 7 (production-readiness audit, 10 Sep): the assertion used to accept EITHER
- * "cancel confirmed" or "cancel FAILED" appearing - but only "confirmed" can ever actually occur
- * in this test setup (see the paragraph above), so accepting "FAILED" too meant a bug that
- * swapped the success/failure log branches would pass undetected. Now asserts "confirmed"
- * specifically appears and "FAILED" specifically does not.
+ * The assertion checks for "confirmed" specifically appearing and "FAILED" specifically not
+ * appearing, rather than accepting either: only "confirmed" can ever actually occur in this test
+ * setup (see the paragraph above), so accepting "FAILED" too would let a bug that swapped the
+ * success/failure log branches pass undetected.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])

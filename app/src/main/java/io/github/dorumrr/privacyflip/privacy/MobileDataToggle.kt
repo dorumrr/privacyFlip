@@ -27,8 +27,7 @@ class MobileDataToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager
     // for the specific SIM that's actually carrying data. A dual-SIM phone's dumpsys
     // output lists one "mIsDataEnabled" line per SIM (per "Phone Id="), and a plain
     // "grab the first one" reads whichever SIM happens to be listed first, not
-    // necessarily the one the phone is actually using for data - confirmed on a real
-    // dual-SIM phone during this project's own post-release audit. This command reads
+    // necessarily the one the phone is actually using for data. This command reads
     // "mActiveDataSubId" (which SIM is actually carrying data), matches it to its
     // "Phone Id=" block via a "phoneId=... subId=..." line dumpsys also logs, then
     // reads that specific block's "mIsDataEnabled" - not just whichever comes first.
@@ -46,8 +45,8 @@ class MobileDataToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager
     )
 
     // Public (widened from the base class's protected, which Kotlin allows) so the regression
-    // test for this exact parsing logic (#J1, MobileDataToggleTest.kt) can call it directly
-    // instead of needing a subclass or reflection just to reach it.
+    // test for this exact parsing logic (MobileDataToggleTest.kt) can call it directly instead
+    // of needing a subclass or reflection just to reach it.
     public override fun parseStatusOutput(output: String): FeatureState {
         // The telephony line looks like "mIsDataEnabled=true". Its field NAME
         // contains the word "enabled" regardless of the actual value, so the

@@ -203,7 +203,7 @@ class DebugLogHelper private constructor(private val context: Context) {
         log("SESSION", "Privacy Flip Debug Session Started")
         // Added so a user-submitted log is self-identifying: a bug report's log used to carry
         // no app version at all, so confirming which release it came from meant checking commit
-        // dates against release tags by hand (github.com/dorumrr/privacyFlip/issues/22).
+        // dates against release tags by hand.
         log("SESSION", "App version: ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
         log("SESSION", "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
         log("SESSION", "Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")

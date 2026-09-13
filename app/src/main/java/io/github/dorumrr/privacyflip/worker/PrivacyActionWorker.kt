@@ -330,7 +330,7 @@ class PrivacyActionWorker(
                           } else if (!isDeviceLocked) {
                               logDebug("🔒 Attempting to disable sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
                               val sensorResults = privacyManager.disableFeatures(filteredSensorFeatures.toSet())
-                              processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                              processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                               val stillFailed = sensorResults.filter { !it.success }
                               if (stillFailed.isNotEmpty()) {
                                   logWarning("⚠️ Sensor disable failed, keyguard likely won the race: ${stillFailed.map { it.feature.displayName }}")
@@ -478,7 +478,7 @@ class PrivacyActionWorker(
 
                                 logDebug("🔒 privacyManager.disableFeatures() returned ${regularResults.size} results")
 
-                                processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockAction = true)
+                                processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                             } else {
                                 logDebug("ℹ️ No regular features left to disable after the in-use/hotspot check")
                             }
@@ -541,7 +541,7 @@ class PrivacyActionWorker(
                                         preferenceManager.setFeatureEnabledByApp(mode, true)
                                         logDebug("🛡️ ${mode.displayName} enabled by app")
                                     }
-                                    processResults(results, listOf(mode), "🛡️", "enabled", "Enabled", isLockAction = true)
+                                    processResults(results, listOf(mode), "🛡️", "enabled", "Enabled", isLockCycle = true, didEnable = true)
                                 }
                             }
                         }
@@ -620,7 +620,7 @@ class PrivacyActionWorker(
                           } else if (filteredSensorFeatures.isNotEmpty()) {
                               logDebug("⚡ Enabling sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
                               val sensorResults = privacyManager.enableFeatures(filteredSensorFeatures.toSet())
-                              processResults(sensorResults, filteredSensorFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                              processResults(sensorResults, filteredSensorFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                           }
                         }
                     }
@@ -693,7 +693,7 @@ class PrivacyActionWorker(
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔓 Enabling regular features: ${filteredRegularFeatures.map { it.displayName }}")
                                 val regularResults = privacyManager.enableFeatures(filteredRegularFeatures.toSet())
-                                processResults(regularResults, filteredRegularFeatures, "🔓", "enabled", "Re-enabled", isLockAction = false)
+                                processResults(regularResults, filteredRegularFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                             }
                         }
 
@@ -716,7 +716,7 @@ class PrivacyActionWorker(
                                     // Disable it and clear the flag
                                     val results = privacyManager.disableFeatures(setOf(mode))
                                     preferenceManager.setFeatureEnabledByApp(mode, false)
-                                    processResults(results, listOf(mode), "🛡️", "disabled", "Disabled", isLockAction = false)
+                                    processResults(results, listOf(mode), "🛡️", "disabled", "Disabled", isLockCycle = false, didEnable = false)
                                 }
                             }
                         }
@@ -780,7 +780,8 @@ class PrivacyActionWorker(
         logIcon: String,
         actionPastTense: String,
         toastPrefix: String,
-        isLockAction: Boolean
+        isLockCycle: Boolean,
+        didEnable: Boolean
     ) {
         val successCount = results.count { it.success }
         val failedResults = results.filter { !it.success }
@@ -800,17 +801,13 @@ class PrivacyActionWorker(
             showToast(toastMessage)
 
             // Send debug notification for successful actions
-            if (isLockAction) {
-                debugNotifier.notifyLockAction(successfulFeatures)
-            } else {
-                debugNotifier.notifyUnlockAction(successfulFeatures)
-            }
+            debugNotifier.notifyPrivacyAction(isLockCycle, didEnable, successfulFeatures)
         }
 
         // Notify about failures
         if (failedResults.isNotEmpty()) {
             val failedFeatureNames = failedResults.map { it.feature.displayName }
-            debugNotifier.notifyError("Failed to ${if (isLockAction) "disable" else "enable"}: ${failedFeatureNames.joinToString(", ")}")
+            debugNotifier.notifyError("Failed to ${if (didEnable) "enable" else "disable"}: ${failedFeatureNames.joinToString(", ")}")
         }
     }
 }

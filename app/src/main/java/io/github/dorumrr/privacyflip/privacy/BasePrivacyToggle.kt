@@ -48,7 +48,11 @@ abstract class BasePrivacyToggle(
                 } else {
                     "Failed to $action $featureName: ${result.error}"
                 },
-                commandUsed = if (result.success) commands.first().primary else null
+                // Every command that could have run, not one guessed winner. executeWithFallbacks
+                // does not report which of them succeeded, and this used to be null on exactly
+                // the failure path that is the only thing reading it - so the diagnostic said
+                // "Command used: null" every single time it mattered.
+                commandUsed = commands.joinToString(" | ") { it.primary }
             )
         } catch (e: Exception) {
             Log.e(TAG, "❌ EXCEPTION ${action}ing $featureName", e)

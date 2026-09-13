@@ -684,8 +684,8 @@ class MainViewModel : ViewModel() {
      * No longer drives a UI warning box - that duplicated the camera/mic (?) info dialog
      * verbatim (same string resource) whenever both were visible at once. The explanation now
      * lives only behind that (?) icon (showCameraMicInfoDialog, MainFragment.kt); this function
-     * still runs and still logs, since the diagnostic trail is useful on its own for debugging a
-     * user's bug report even without a UI element to show it in.
+     * still runs and still logs. Note the trail goes to logcat only: it writes through LogManager,
+     * which no longer writes a file, so it will NOT appear in a log a user shares from the app.
      */
     fun checkLockDelayConfiguration(context: Context) {
         handleError("checking lock delay configuration") {
@@ -712,9 +712,9 @@ class MainViewModel : ViewModel() {
             logManager.i(TAG, "=== LOCK DELAY WARNING DECISION ===")
             logManager.i(TAG, "Show warning: $finalShowWarning")
             if (finalShowWarning) {
-                logManager.w(TAG, "⚠️ WARNING WILL BE DISPLAYED TO USER")
+                logManager.w(TAG, "⚠️ Lock delay would prevent reliable sensor disabling")
                 logManager.w(TAG, "Reason: Device configuration prevents reliable sensor disabling on lock")
-                logManager.w(TAG, "Action required: User must configure lock delay settings")
+                logManager.w(TAG, "Not shown to the user: the explanation lives behind the camera/mic (?) icon")
             } else {
                 logManager.i(TAG, "✅ No warning needed")
                 if (!isCameraOrMicEnabled) {

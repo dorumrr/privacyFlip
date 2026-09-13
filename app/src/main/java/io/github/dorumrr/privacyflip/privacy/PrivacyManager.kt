@@ -87,7 +87,7 @@ class PrivacyManager private constructor(
                     val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
                     logDebug("$status $action ${feature.displayName}: ${result.message}")
                     if (!result.success) {
-                        logWarning("❌ Command used: ${result.commandUsed}")
+                        logWarning("❌ Commands attempted: ${result.commandUsed}")
                         logWarning("❌ Error details: ${result.message}")
                     }
                 } catch (e: Exception) {

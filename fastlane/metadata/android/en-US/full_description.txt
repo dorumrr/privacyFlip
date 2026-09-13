@@ -6,7 +6,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 
 • Manage your device privacy based on lock/unlock state
 • Dual privilege support: Root OR Shizuku (no root required!)
-• Automatic privilege detection (Sui > Root > Shizuku)
+• Automatic privilege detection (Sui > Root > Dhizuku > Shizuku)
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone, Airplane Mode, Battery Saver)
 • Customizable timing delays (0-60 seconds granular, 2 minutes, or 5 minutes)
 • Smart "only if unused/not connected" modes for WiFi, Bluetooth, Location

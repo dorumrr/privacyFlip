@@ -115,19 +115,19 @@ class DebugNotificationHelper private constructor(private val context: Context) 
      * Convenience methods for common notification types
      */
     
-    fun notifyLockAction(features: List<String>) {
+    /**
+     * The lock cycle and the action are separate facts, and for protection modes they are
+     * opposites: locking the screen ENABLES Airplane Mode. One flag for both used to read
+     * "Screen Locked / Disabling: Airplane Mode" for an action that enabled it.
+     *
+     * @param isLockCycle which cycle this is, for the title
+     * @param didEnable what was actually done to these features, for the body
+     */
+    fun notifyPrivacyAction(isLockCycle: Boolean, didEnable: Boolean, features: List<String>) {
         if (features.isEmpty()) return
         notify(
-            "🔒 Screen Locked",
-            "Disabling: ${features.joinToString(", ")}"
-        )
-    }
-
-    fun notifyUnlockAction(features: List<String>) {
-        if (features.isEmpty()) return
-        notify(
-            "🔓 Screen Unlocked",
-            "Enabling: ${features.joinToString(", ")}"
+            if (isLockCycle) "🔒 Screen Locked" else "🔓 Screen Unlocked",
+            "${if (didEnable) "Enabling" else "Disabling"}: ${features.joinToString(", ")}"
         )
     }
 

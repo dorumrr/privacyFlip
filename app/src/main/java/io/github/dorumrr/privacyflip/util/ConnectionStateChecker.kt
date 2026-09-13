@@ -210,16 +210,14 @@ class ConnectionStateChecker(
      * actually doing - the opposite failure, but just as broken. Any real third-party app,
      * including OEM-preloaded ones, carries its own package name and is still caught.
      *
-     * A dumpsys shape this parser doesn't recognise (an untested Android version, an unexpected
-     * OEM change) used to print the same "NONE" as a genuinely idle device - indistinguishable
-     * even in debug logs. The command now prints "NOBLOCKS" instead when it never matched a
-     * single location-family op header at all, so the two are told apart in the logs. This
-     * reliably catches awk itself being missing (a pipeline's exit status is its last stage's,
-     * so a missing awk fails the whole pipe and is caught by result.success below). It does NOT
-     * reliably catch dumpsys itself failing partway through while awk still exits 0 on whatever
-     * partial input it got - that case is indistinguishable from NOBLOCKS from here. Either way
-     * this function still returns the same safe "not in use"; only the log's stated reason can
-     * be wrong, never the answer.
+     * A dumpsys shape this parser doesn't recognise used to print the same "NONE" as a genuinely
+     * idle device - indistinguishable even in debug logs. "NOBLOCKS" now marks that case
+     * separately in the logs (both still classify as not-in-use either way, proven by
+     * ConnectionStateCheckerTest's NONE and NOBLOCKS tests). This reliably catches awk itself
+     * being missing (a pipeline's exit status is its last stage's), but does NOT catch dumpsys
+     * itself failing partway through while awk still exits 0 on partial input - indistinguishable
+     * from NOBLOCKS from here, though the returned answer stays the same safe "not in use"
+     * either way.
      *
      * Confirmed live that awk does not exist at all on Android 8, and that Android 9's awk build
      * (toybox, dated 2012) SEGFAULTS on this command - isolated all the way down to `!found`

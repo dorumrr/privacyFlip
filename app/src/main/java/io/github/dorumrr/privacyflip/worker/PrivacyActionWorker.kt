@@ -47,9 +47,10 @@ class PrivacyActionWorker(
         // construction) that can itself take real time talking to a real root/Shizuku shell:
         // arming it only once the sensor block itself began would let a second trigger for the
         // SAME real-world lock see this still false and REPLACE-cancel the worker mid-setup.
-        // Cleared explicitly right after the sensor block concludes (see doWork()), and
-        // unconditionally in doWork()'s own outer finally as a safety net for every early-return
-        // and exception path.
+        // Cleared explicitly right after the sensor block concludes (see doWork()), with
+        // doWork()'s own outer finally as a safety net for every early-return and exception path
+        // that never reaches that explicit clear - guarded there against wiping a newer
+        // invocation's still-in-flight flag (see that finally's own comment).
         @Volatile
         var sensorDisableInProgress: Boolean = false
             private set
@@ -63,85 +64,51 @@ class PrivacyActionWorker(
         var sensorEnableInProgress: Boolean = false
             private set
 
-        // A lock cycle's sensor DISABLE and a later unlock cycle's sensor ENABLE are 2 separate
-        // WorkManager jobs (different unique work names, so ExistingWorkPolicy never serialises
-        // them against each other) that this app's default WorkManager configuration can
-        // genuinely run concurrently. This Mutex makes the two blocks mutually exclusive, so
-        // their privileged calls can never interleave with each other. Not the same thing as
-        // sensorDisableInProgress above - that flag is a soft signal external callers read
-        // before deciding whether to enqueue/cancel; this is real mutual exclusion around the
-        // actual privileged disable/enable calls themselves. internal, not private: exposed so
-        // PrivacyActionWorkerSensorMutexTest can prove the mutex itself actually serialises 2
-        // concurrent coroutines - doWork() as a whole needs a real root/Shizuku shell and isn't
-        // otherwise unit-testable, so this is the part of the fix that can be proven directly.
-        //
-        // Mutual exclusion alone is NOT enough on its own: it stops the two calls overlapping,
-        // but says nothing about ORDER. Closed with lastLockAtMillis/lastUnlockAtMillis below:
-        // each side checks, right before its own privileged call and still inside the mutex,
-        // whether the OPPOSITE action has already been recorded as happening after this cycle
-        // started - if so, a fresher instruction has already superseded this one, so it skips
-        // instead of acting stale.
+        // Makes a lock cycle's sensor disable and a later unlock cycle's sensor enable (2
+        // separate WorkManager jobs, so ExistingWorkPolicy never serialises them against each
+        // other) mutually exclusive, so their privileged calls can never interleave. Mutual
+        // exclusion alone says nothing about ORDER, which lastLockAtMillis/lastUnlockAtMillis
+        // below close - see isSupersededByFresherOppositeAction. internal, not private, so
+        // PrivacyActionWorkerSensorMutexTest can hold it directly: "sensorMutex serialises two
+        // concurrent holders..." proves the exclusion, "a stale lock-side disable is skipped...
+        // even if it wins the mutex race last" proves the order guarantee. doWork() as a whole
+        // needs a real root/Shizuku shell and isn't otherwise unit-testable.
         internal val sensorMutex = Mutex()
 
-        // The lock-side twin of lastUnlockAtMillis below.
-        //
-        // Must be captured as close to the real-world trigger event as possible, same reasoning
-        // as lastUnlockAtMillis: capturing it inside doWork() itself is not enough, because
-        // doWork() starting at all is gated on real WorkManager dispatch latency (Doze,
-        // scheduler load) outside doWork()'s own control, which can take real time on its own. A
-        // genuinely LATER real unlock, recorded promptly at its own trigger site, could still end
-        // up with a SMALLER raw timestamp than this cycle's own "start" if that start were read
-        // inside doWork(), making the supersede check below read backwards and miss it. Written
-        // by util/PendingLockWork.kt's recordLock(), at every real lock-trigger call site, before
-        // the job is even enqueued - doWork() only ever reads this, never writes it. Read fresh
-        // at each of doWork()'s 4 supersede checkpoints (see isSupersededByFresherOppositeAction's
-        // own comment) rather than frozen into a local once.
+        // The lock-side twin of lastUnlockAtMillis below. Written by util/PendingLockWork.kt's
+        // recordLock(), at every real lock-trigger call site, before the job is even enqueued -
+        // not inside doWork() itself, because doWork() starting at all is gated on real
+        // WorkManager dispatch latency (Doze, scheduler load) outside its own control, which
+        // could otherwise make a genuinely LATER unlock look earlier than this cycle's own
+        // "start". Read fresh at each supersede checkpoint, never frozen into a local - proven
+        // necessary by PrivacyActionWorkerSensorMutexTest's "a re-lock during a slow sensor
+        // step..." test.
         @Volatile
         var lastLockAtMillis: Long = 0L
 
-        // When an unlock is confirmed while sensorDisableInProgress is true, it is deliberately
-        // NOT cancelled above (the in-flight sensor disable would be interrupted mid-command with
-        // sensors left on) - but nothing recorded that the unlock happened, so this same lock
-        // cycle's own later regular-features/protection-modes stage had no way to know and could
-        // still act on a phone the user had already unlocked. Every unlock-detector
-        // (util/PendingLockWork.kt's recordUnlock(), called from all 4 call sites) writes this
-        // UNCONDITIONALLY, regardless of sensorDisableInProgress - a plain timestamp write can
-        // never interrupt anything mid-flight the way an external WorkManager cancel can, so it
-        // needs none of that guard. doWork() compares it against its OWN lock cycle's start time,
-        // so a stale write from an earlier, unrelated cycle can never wrongly cancel a new one -
-        // no explicit reset needed anywhere. SystemClock.elapsedRealtime(), not
-        // System.currentTimeMillis(): immune to the wall clock itself moving (NTP sync, the user
-        // changing the clock, DST), which a plain timestamp comparison would otherwise be exposed
-        // to.
-        //
-        // Also has a second role: doWork()'s unlock branch reads this as its own cycle's own
-        // reference point, not just the opposite-action value the lock side reads. Same reasoning
-        // as lastLockAtMillis: recordUnlock() stamps this at the real trigger site, before the job
-        // is even enqueued, so doWork() never needs to (and must not) re-stamp a fresh,
-        // WorkManager-dispatch-delayed value of its own. Read fresh at each of doWork()'s 4
-        // supersede checkpoints, never frozen into a local.
+        // When an unlock is confirmed while sensorDisableInProgress is true, the in-flight
+        // sensor disable is deliberately NOT cancelled (would leave sensors on mid-command) - so
+        // this cycle's own later regular-features/protection-modes stage needs another way to
+        // learn the unlock happened. Every unlock-detector writes this UNCONDITIONALLY (a plain
+        // timestamp write can't interrupt anything mid-flight, so it needs no guard). Read fresh
+        // at each supersede checkpoint, never frozen, mirroring lastLockAtMillis above, whose own
+        // frozen-vs-fresh behavior is what PrivacyActionWorkerSensorMutexTest's "a re-lock during
+        // a slow sensor step..." test actually exercises. SystemClock.elapsedRealtime(), not
+        // System.currentTimeMillis(): immune to the wall clock moving (NTP sync, DST), which a
+        // plain timestamp comparison would otherwise be exposed to.
         @Volatile
         var lastUnlockAtMillis: Long = 0L
 
-        // The 4 supersede checks below (sensor and regularFeatures/protectionModes stage, for
-        // both lock and unlock) share this one comparison rather than each writing it inline: a
-        // duplicated inline comparison at only 4 of the real call sites can drift out of sync
-        // with whatever a test exercises separately, so one shared function is what lets the test
-        // below and all 4 real call sites be proven to share the same code. internal, not
-        // private: same reason sensorMutex above is internal, so the test can call the real
-        // thing.
-        //
-        // The second argument is read fresh from lastLockAtMillis/lastUnlockAtMillis at each call
-        // site, never frozen into a local once at the start of the job
-        // (thisLockCycleStartedAt/thisUnlockCycleStartedAt). A frozen snapshot misses a
-        // re-trigger for the SAME direction that arrives later but never gets its own job, because
-        // the REPLACE-guard (sensorDisableInProgress/sensorEnableInProgress) correctly folds it
-        // into this already-running one instead of starting a new one - lock, then unlock, then
-        // re-lock, all while this job's own sensor step is still running, would leave this job
-        // comparing the unlock against the FIRST lock's stale timestamp, never learning about the
-        // re-lock at all. Reading lastLockAtMillis/lastUnlockAtMillis directly is always >= any
-        // earlier snapshot, since real lock/unlock timestamps only ever move forward, so this can
-        // only ever see a MORE complete picture than a frozen version, never a worse one.
+        // Shared by all 4 of doWork()'s supersede checks (sensor and regularFeatures/
+        // protectionModes stage, for both lock and unlock) rather than each writing its own
+        // inline comparison, so a regression in the logic fails every call site the same way.
+        // internal, not private, so PrivacyActionWorkerSensorMutexTest can call the real
+        // function: its truth table ("isSupersededByFresherOppositeAction is the exact
+        // boolean...") proves the comparison itself; "a re-lock during a slow sensor step..."
+        // proves callers must pass a value read fresh at each checkpoint, never one frozen at
+        // job start - a frozen snapshot misses a same-direction re-trigger that arrives while
+        // this job's own sensor step is still running and gets folded into it instead of
+        // starting a new job.
         internal fun isSupersededByFresherOppositeAction(
             oppositeActionAtMillis: Long,
             ownLastKnownAtMillis: Long
@@ -330,24 +297,25 @@ class PrivacyActionWorker(
 
                     // Disable camera/microphone - attempted immediately, no artificial delay.
                     //
-                    // This branch only runs because ACTION_SCREEN_OFF already fired, and the
-                    // screen being off is exactly what makes the device's isInteractive flag
-                    // false, on its own, regardless of whether the keyguard itself has engaged
-                    // yet. A re-check of isScreenCurrentlyLocked() (isKeyguardLocked ||
-                    // !isInteractive) here can therefore never say "still unlocked", no matter how
-                    // long it waits first - waiting before trying only hands the keyguard a head
-                    // start to win the race before the attempt is even made. Instead, the real
-                    // outcome of the command is trusted directly: attempt the disable right away,
-                    // and let privacyManager.disableFeatures()'s own success/failure (already
-                    // captured and logged below via processResults, same as every other feature)
-                    // be the source of truth. If the keyguard genuinely wins the race, the command
-                    // fails and that's reported honestly.
+                    // Whichever of the 3 producers enqueued this job (ScreenStateReceiver,
+                    // PrivacyAccessibilityService, or PrivacyMonitorService's restart catch-up -
+                    // see sensorDisableInProgress's own comment above; doWork() never branches on
+                    // the "trigger" field itself, only logs it), a fresh re-check of
+                    // isScreenCurrentlyLocked() here would only hand the keyguard more time to win
+                    // the race before the attempt is even made, without changing what the command
+                    // itself can prove. Instead, the real outcome of the command is trusted
+                    // directly: attempt the disable right away, and let
+                    // privacyManager.disableFeatures()'s own success/failure (already captured and
+                    // logged below via processResults, same as every other feature) be the source
+                    // of truth. If the keyguard genuinely wins the race, the command fails and
+                    // that's reported honestly.
                     //
                     // One narrower gate does remain, and it is NOT that heuristic: the
-                    // `else if (!isDeviceLocked)` below reads the flag the trigger supplied,
-                    // meaning the device was already locked when the screen went off, rather than
-                    // guessing from screen state. Skipping there is right, not pessimistic: on a
-                    // real device, `cmd sensor_privacy enable 0 camera` leaves the camera allowed
+                    // `else if (!isDeviceLocked)` below reads the flag the trigger supplied - each
+                    // producer sets it from its own best knowledge of whether the device is
+                    // already locked, rather than this code guessing from screen state. Skipping
+                    // there is right, not pessimistic: on a real device, `cmd sensor_privacy
+                    // enable 0 camera` leaves the camera allowed
                     // when the keyguard is up, and flips it the moment the same command runs
                     // unlocked. Attempting it would cost a shell round trip to change nothing.
                     if (sensorFeatures.isNotEmpty()) {
@@ -473,14 +441,14 @@ class PrivacyActionWorker(
 
                         logDebug("📍 CHECKPOINT: Passed all validations, proceeding to disable features")
 
-                        // Re-check hotspot state once, here - the latest safe moment, and the
-                        // ONLY moment, rather than a pre-delay sample plus a post-delay
+                        // Re-check hotspot state once, here - the latest safe moment for WiFi and
+                        // Mobile Data, rather than a pre-delay sample plus a post-delay
                         // re-sample. WiFi shares its radio with the hotspot's access point;
-                        // Mobile Data is the hotspot's own upstream connection, so cutting it
-                        // leaves the hotspot broadcasting with nothing to share; Airplane Mode is
-                        // a full radio kill switch with no per-feature "only if unused" setting
-                        // of its own, so this check is the only thing standing between it and
-                        // taking a live hotspot down outright.
+                        // Mobile Data is the hotspot's own upstream connection, so cutting either
+                        // leaves the hotspot broadcasting with nothing to share. Airplane Mode
+                        // does NOT rely on this value - it gets its own later, independently
+                        // fresh check below (hotspotActiveForAirplaneMode), since disableFeatures()
+                        // for regularFeatures runs a real, possibly slow call in between.
                         val needsHotspotCheck = PrivacyFeature.WIFI in regularFeatures ||
                             PrivacyFeature.MOBILE_DATA in regularFeatures ||
                             PrivacyFeature.AIRPLANE_MODE in protectionModes

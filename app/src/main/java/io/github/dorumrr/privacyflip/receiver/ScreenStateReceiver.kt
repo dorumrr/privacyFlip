@@ -111,14 +111,12 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     if (!PrivacyActionWorker.sensorDisableInProgress) {
                         PendingLockWork.cancel(context, TAG, WORK_NAME_LOCK)
                     }
-                    // Unlike the other 3 unlock-detection paths, this branch must also re-enable,
-                    // not only cancel: it exists for screen off during Android's own pre-keyguard
-                    // grace period, then back on before the keyguard actually engaged, where a
-                    // real unlock is never technically dismissed and ACTION_USER_PRESENT never
-                    // fires either - with no re-enable call here, whatever the immediate sensor
-                    // block had already disabled would have no way to be given back. Mirrors
-                    // ACTION_USER_PRESENT's own call below, matching what every other
-                    // confirmed-unlock path already does.
+                    // This branch re-enables, not only cancels, same as the app's other 3
+                    // unlock-detection paths - proven by ScreenStateReceiverTest's "ACTION_SCREEN_ON
+                    // while not locked..." test, which failed when this branch had no re-enable
+                    // call at all and passes now that it does. It exists for screen off during
+                    // Android's pre-keyguard grace period then back on before the keyguard
+                    // engages, where ACTION_USER_PRESENT never fires either.
                     triggerPrivacyAction(context, isLocking = false, isDeviceLocked = false, reason = "Screen On (Not Locked)")
                 }
             }

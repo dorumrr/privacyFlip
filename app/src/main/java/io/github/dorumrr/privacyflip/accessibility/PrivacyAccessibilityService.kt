@@ -52,16 +52,12 @@ class PrivacyAccessibilityService : AccessibilityService() {
         @Volatile
         private var wasShowingKeyguard = false
 
-        // The isStillLocked re-check below only ever runs when a NEW window-state-change event
-        // arrives. If KeyguardManager's own
-        // internal state lags the event that triggered the check (a dismiss animation, an OEM
-        // ordering quirk) AND no further window event happens before the device locks again - a
-        // user who unlocks just to glance at something and re-locks without navigating anywhere
-        // else - the miss can persist through that whole cycle with nothing to catch it. This
-        // delay is how long to wait before checking again anyway, with no new event required.
-        // Short enough to be irrelevant to normal use (this only matters when
-        // PrivacyMonitorService is already dead, the one situation this detector exists for),
-        // long enough to clear a real dismiss-animation lag.
+        // Without this, a missed unlock (KeyguardManager's own state lagging the event that
+        // triggered the check - a dismiss animation, an OEM quirk) can persist forever if no
+        // further window event ever arrives (a glance-and-relock with no navigation) - proven by
+        // "A3 fix - a missed race is still caught after a delay..." in
+        // PrivacyAccessibilityServiceTest, which fails with this removed. Short enough to be
+        // irrelevant to normal use, long enough to clear a real dismiss-animation lag.
         private const val UNLOCK_RECHECK_DELAY_MS = 500L
     }
 
@@ -113,16 +109,12 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 triggerEarlyPrivacyActions()
             } else if (wasShowingKeyguard) {
                 // A non-keyguard window can appear while the device is genuinely still locked -
-                // an incoming call, the
-                // lock screen's own camera shortcut, an alarm, the notification shade pulled
-                // down ON the lock screen, an always-on-display or OEM overlay. None of those
-                // are an unlock. Unlike the lock branch above, there is no timing pressure here
-                // forcing a guess - Android's restriction is on CHANGING sensor privacy while
-                // locked, not on READING keyguard state - so this confirms the real state before
-                // acting, the same way ScreenStateReceiver's own ACTION_SCREEN_ON handler already
-                // does. A first version of this fix skipped that check and could cancel a
-                // genuine pending disable, and re-enable sensors, on a phone that was never
-                // actually unlocked. PrivacyAccessibilityServiceTest proves this stays caught.
+                // an incoming call, the lock screen's own camera shortcut, an alarm, the
+                // notification shade pulled down ON the lock screen, an always-on-display or OEM
+                // overlay - none of which are an unlock. Confirmed against real keyguard state
+                // before acting, since (unlike the lock branch above) there is no timing
+                // pressure forcing a guess here. Proven by PrivacyAccessibilityServiceTest's
+                // first two tests, plus the self-heal and delayed-recheck tests below them.
                 val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
                 val isStillLocked = keyguardManager?.isKeyguardLocked ?: true // fail closed
                 if (isStillLocked) {

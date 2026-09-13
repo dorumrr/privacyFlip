@@ -209,11 +209,13 @@ class PrivacyMonitorService : Service() {
                 return
             }
 
-            // This restart catch-up is the only place that can cancel a still-pending lock-side
-            // job left behind while this service was dead: ScreenStateReceiver is only
-            // registered while the service is alive, so nothing else gets a chance to cancel it.
-            // Handled below, in the isUnlocking branch, the same way every other confirmed-unlock
-            // path does.
+            // This restart catch-up can cancel a still-pending lock-side job left behind while
+            // this service was dead: ScreenStateReceiver is only registered while the service is
+            // alive, so it gets no chance to cancel one itself. PrivacyAccessibilityService can
+            // also cancel the same job independently, since it shares this app's process and can
+            // outlive this one Service component being stopped - this path is a catch-up for
+            // when neither has already. Handled below, in the isUnlocking branch, the same way
+            // every other confirmed-unlock path does.
             if (isUnlocking) {
                 // Recorded unconditionally, same reason as the other 3 call sites: a plain
                 // timestamp write cannot interrupt anything mid-flight, so it needs none of the

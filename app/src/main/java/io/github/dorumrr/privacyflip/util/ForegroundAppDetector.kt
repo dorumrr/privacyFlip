@@ -108,23 +108,6 @@ class ForegroundAppDetector(private val context: Context) {
     }
     
     /**
-     * Check if a specific app is currently in the foreground.
-     * 
-     * @param packageName Package name to check
-     * @return true if the app is in foreground, false otherwise
-     */
-    fun isAppInForeground(packageName: String): Boolean {
-        val foregroundApp = getForegroundApp()
-        val isInForeground = foregroundApp == packageName
-        
-        if (isInForeground) {
-            Log.i(TAG, "App $packageName is in foreground")
-        }
-        
-        return isInForeground
-    }
-    
-    /**
      * Check if any of the given apps is currently in the foreground.
      * 
      * @param packageNames List of package names to check

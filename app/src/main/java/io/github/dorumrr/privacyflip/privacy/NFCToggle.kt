@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
-import io.github.dorumrr.privacyflip.util.DeviceDetector
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.delay
 
@@ -50,45 +49,39 @@ class NFCToggle(
     }
 
     /**
-     * Override disable() to add Samsung payment framework override detection and auto-retry.
-     * 
-     * Samsung devices with payment capabilities (Galaxy S, Note, Z series) have a system-level
-     * framework that can re-enable NFC for payment/wallet functionality even after it's disabled.
-     * This method detects the override and optionally retries the disable command.
+     * Re-checks NFC after disabling it, and optionally retries.
+     *
+     * A payment or wallet framework can silently turn NFC back on moments after this app turns
+     * it off. This was first reported on Samsung, but the check itself is not Samsung-specific:
+     * it only asks whether NFC came back on, never why, so every device gets it.
      */
     override suspend fun disable(): PrivacyResult {
         Log.d(TAG, "📍 Starting NFC disable sequence...")
 
         val initialResult = super.disable()
 
-        if (!DeviceDetector.isSamsungWithPaymentOverride()) {
-            return initialResult
-        }
-
-        Log.d(TAG, "🔍 Samsung device with payment override detected - checking for override...")
-
-        // Wait for potential Samsung payment framework override
+        // Give whatever might re-enable NFC a moment to do so before re-reading the state.
         delay(500)
 
         val actualState = getCurrentState()
         val wasOverridden = (initialResult.success && actualState == FeatureState.ENABLED)
 
         if (!wasOverridden) {
-            Log.d(TAG, "✅ NFC successfully disabled (no Samsung override detected)")
+            Log.d(TAG, "✅ NFC successfully disabled (it stayed off)")
             return initialResult
         }
 
-        Log.w(TAG, "⚠️ Samsung payment framework overrode NFC disable (NFC re-enabled)")
+        Log.w(TAG, "⚠️ NFC reports enabled again right after being disabled")
 
         val preferenceManager = PreferenceManager.getInstance(context)
         val autoRetryEnabled = preferenceManager.samsungNfcAutoRetry
 
         if (!autoRetryEnabled) {
-            Log.i(TAG, "Auto-retry disabled by user preference - returning override warning")
+            Log.i(TAG, "Auto-retry disabled by user preference - reporting what was observed")
             return PrivacyResult(
                 feature = feature,
                 success = false,
-                message = "Samsung payment override detected. Enable 'Samsung Auto-Retry' in settings or disable payment cards in Google Wallet/Samsung Pay."
+                message = "NFC turned itself back on right after being disabled. Turn on 'NFC Auto-Retry' in settings, or remove payment cards from your wallet app."
             )
         }
 
@@ -111,18 +104,20 @@ class NFCToggle(
                 return PrivacyResult(
                     feature = feature,
                     success = true,
-                    message = "NFC disabled (Samsung auto-retry succeeded on attempt $retryCount)"
+                    message = "NFC disabled (auto-retry succeeded on attempt $retryCount)"
                 )
             }
 
-            Log.d(TAG, "❌ Retry attempt $retryCount failed - Samsung framework re-enabled NFC")
+            Log.d(TAG, "❌ Retry attempt $retryCount did not read back as disabled (state: $newState)")
         }
 
-        Log.w(TAG, "❌ Auto-retry exhausted all $maxRetries attempts - Samsung payment override persists")
+        // Says what was observed, not why. A read can also come back UNKNOWN mid-transition, so
+        // claiming "still enabled" here would sometimes be telling the user something untrue.
+        Log.w(TAG, "❌ Auto-retry exhausted all $maxRetries attempts - NFC never read back as disabled")
         return PrivacyResult(
             feature = feature,
             success = false,
-            message = "Samsung payment override persists despite $maxRetries retry attempts. Disable payment cards in Google Wallet/Samsung Pay."
+            message = "NFC did not read back as disabled after $maxRetries retries. A payment or wallet app may be turning it back on - removing payment cards from it usually stops that."
         )
     }
 }

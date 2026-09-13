@@ -44,11 +44,13 @@ class PreferenceManager private constructor(private val context: Context) {
         set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_DEBUG_LOGS_ENABLED, value).apply()
 
     /**
-     * Samsung NFC auto-retry preference.
-     * When enabled, the app will automatically retry disabling NFC if Samsung's payment
-     * framework overrides the initial disable command. This may cause slight battery drain
-     * but ensures NFC is properly disabled on Samsung devices.
-     * Default: false (opt-in)
+     * NFC auto-retry preference. When on, NFC is disabled again (up to 3 times) if it reports
+     * itself enabled right after being turned off, which a payment or wallet app can cause.
+     * Default: false (opt-in).
+     *
+     * Name and stored key both still say "samsung" because the behaviour was first reported
+     * there and the key cannot be renamed without losing the setting for everyone who has
+     * already turned it on. The feature itself applies to every device.
      */
     var samsungNfcAutoRetry: Boolean
         get() = prefs.getBoolean(Constants.Preferences.KEY_SAMSUNG_NFC_AUTO_RETRY, false)
@@ -203,12 +205,6 @@ class PreferenceManager private constructor(private val context: Context) {
         }
     }
 
-    fun updateBatch(updates: (SharedPreferences.Editor) -> Unit) {
-        val editor = prefs.edit()
-        updates(editor)
-        editor.apply()
-    }
-
     fun getRawPreferences(): SharedPreferences = prefs
 
     // ========== App Exemption Methods ==========
@@ -260,13 +256,4 @@ class PreferenceManager private constructor(private val context: Context) {
         setExemptApps(currentExempt)
     }
 
-    /**
-     * Check if an app is exempt from privacy toggles.
-     *
-     * @param packageName Package name to check
-     * @return true if the app is exempt, false otherwise
-     */
-    fun isAppExempt(packageName: String): Boolean {
-        return getExemptApps().contains(packageName)
-    }
 }

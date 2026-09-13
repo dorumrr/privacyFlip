@@ -25,6 +25,3 @@ open class SingletonHolder<out T : Any, in A>(creator: (A) -> T) {
         }
     }
 }
-
-// Consolidated singleton holder - use SingletonHolder<T, Unit> for no-arg singletons
-typealias SingletonHolderNoArg<T> = SingletonHolder<T, Unit>

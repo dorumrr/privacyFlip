@@ -1,8 +1,8 @@
 package io.github.dorumrr.privacyflip.root
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
+import io.github.dorumrr.privacyflip.privilege.CommandResult
 import io.github.dorumrr.privacyflip.privilege.PrivilegeManager
 import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.util.LogManager
@@ -57,59 +57,21 @@ class RootManager private constructor() {
 
     suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         try {
-            val result = privilegeManager?.executeCommand(command)
-            if (result != null) {
-                return@withContext CommandResult(
-                    success = result.success,
-                    output = result.output,
-                    error = result.error,
-                    exitCode = result.exitCode
-                )
-            }
-
-            return@withContext CommandResult(
-                success = false,
-                output = emptyList(),
-                error = "Privilege manager not initialized"
-            )
+            return@withContext privilegeManager?.executeCommand(command)
+                ?: CommandResult.failure("Privilege manager not initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Error executing command: $command", e)
-            return@withContext CommandResult(
-                success = false,
-                output = emptyList(),
-                error = e.message ?: "Unknown error"
-            )
+            return@withContext CommandResult.failure(e.message ?: "Unknown error")
         }
-    }
-
-    suspend fun executeCommands(commands: List<String>): List<CommandResult> = withContext(Dispatchers.IO) {
-        commands.map { executeCommand(it) }
     }
 
     suspend fun executeWithFallbacks(commands: List<String>): CommandResult = withContext(Dispatchers.IO) {
         try {
-            val result = privilegeManager?.executeWithFallbacks(commands)
-            if (result != null) {
-                return@withContext CommandResult(
-                    success = result.success,
-                    output = result.output,
-                    error = result.error,
-                    exitCode = result.exitCode
-                )
-            }
-
-            return@withContext CommandResult(
-                success = false,
-                output = emptyList(),
-                error = "Privilege manager not initialized"
-            )
+            return@withContext privilegeManager?.executeWithFallbacks(commands)
+                ?: CommandResult.failure("Privilege manager not initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Error executing commands with fallbacks", e)
-            return@withContext CommandResult(
-                success = false,
-                output = emptyList(),
-                error = e.message ?: "Unknown error"
-            )
+            return@withContext CommandResult.failure(e.message ?: "Unknown error")
         }
     }
 
@@ -140,30 +102,5 @@ class RootManager private constructor() {
         return privilegeManager?.getCurrentMethod() ?: PrivilegeMethod.NONE
     }
 
-    suspend fun redetectPrivilegeMethod(): PrivilegeMethod {
-        return privilegeManager?.redetectPrivilegeMethod() ?: PrivilegeMethod.NONE
-    }
-
-    fun getDeviceInfo(): DeviceInfo {
-        return DeviceInfo(
-            apiLevel = Build.VERSION.SDK_INT,
-            manufacturer = Build.MANUFACTURER,
-            model = Build.MODEL,
-            buildId = Build.ID
-        )
-    }
 }
 
-data class CommandResult(
-    val success: Boolean,
-    val output: List<String>,
-    val error: String? = null,
-    val exitCode: Int = -1
-)
-
-data class DeviceInfo(
-    val apiLevel: Int,
-    val manufacturer: String,
-    val model: String,
-    val buildId: String
-)

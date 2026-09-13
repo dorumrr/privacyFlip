@@ -4,31 +4,23 @@ import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.workDataOf
-import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.DualLogger
 import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
+import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
 class ScreenStateReceiver : BroadcastReceiver() {
 
-    private fun logDebug(context: Context, message: String) {
-        Log.i(TAG, message)
-        DebugLogHelper.getInstance(context).i(TAG, message)
-    }
+    // A receiver gets its Context per delivery rather than holding one, so the logger is built
+    // per call here instead of once per instance like the other users of DualLogger.
+    private fun logDebug(context: Context, message: String) = DualLogger(context, TAG).i(message)
 
-    private fun logWarning(context: Context, message: String) {
-        Log.w(TAG, message)
-        DebugLogHelper.getInstance(context).w(TAG, message)
-    }
+    private fun logWarning(context: Context, message: String) = DualLogger(context, TAG).w(message)
 
-    private fun logError(context: Context, message: String, e: Exception? = null) {
-        Log.e(TAG, message, e)
-        DebugLogHelper.getInstance(context).e(TAG, message, e)
-    }
+    private fun logError(context: Context, message: String, e: Exception? = null) =
+        DualLogger(context, TAG).e(message, e)
 
     override fun onReceive(context: Context, intent: Intent) {
         logDebug(context, "Screen state changed: ${intent.action}")
@@ -146,24 +138,12 @@ class ScreenStateReceiver : BroadcastReceiver() {
             return
         }
         try {
-            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
-                .setInputData(
-                    workDataOf(
-                        "is_locking" to isLocking,
-                        "is_device_locked" to isDeviceLocked,
-                        "trigger" to "screen_state",
-                        "reason" to reason
-                    )
-                )
-                .build()
-
-            // Use unique work names to prevent multiple workers from running simultaneously
-            // REPLACE policy cancels any existing work with the same name
-            val workName = if (isLocking) WORK_NAME_LOCK else WORK_NAME_UNLOCK
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                workName,
-                ExistingWorkPolicy.REPLACE,
-                workRequest
+            val workName = PrivacyActionWork.enqueue(
+                context = context,
+                isLocking = isLocking,
+                isDeviceLocked = isDeviceLocked,
+                trigger = "screen_state",
+                reason = reason
             )
             logDebug(context, "Privacy action work enqueued (unique: $workName) for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
 

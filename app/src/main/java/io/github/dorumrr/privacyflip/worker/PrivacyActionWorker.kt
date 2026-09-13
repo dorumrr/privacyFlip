@@ -16,7 +16,7 @@ import io.github.dorumrr.privacyflip.data.PrivacyResult
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.util.ConnectionStateChecker
-import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.DualLogger
 import io.github.dorumrr.privacyflip.util.DebugNotificationHelper
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.FeatureConfigurationManager
@@ -24,6 +24,7 @@ import io.github.dorumrr.privacyflip.util.ForegroundAppDetector
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
 class PrivacyActionWorker(
     context: Context,
@@ -119,28 +120,17 @@ class PrivacyActionWorker(
         DebugNotificationHelper.getInstance(applicationContext)
     }
 
-    private val debugLogger: DebugLogHelper by lazy {
-        DebugLogHelper.getInstance(applicationContext)
-    }
-
     private val preferenceManager: PreferenceManager by lazy {
         PreferenceManager.getInstance(applicationContext)
     }
 
-    private fun logDebug(message: String) {
-        Log.i(TAG, message)
-        debugLogger.i(TAG, message)
-    }
+    private val dualLog: DualLogger by lazy { DualLogger(applicationContext, TAG) }
 
-    private fun logWarning(message: String) {
-        Log.w(TAG, message)
-        debugLogger.w(TAG, message)
-    }
+    private fun logDebug(message: String) = dualLog.i(message)
 
-    private fun logError(message: String, e: Exception? = null) {
-        Log.e(TAG, message, e)
-        debugLogger.e(TAG, message, e)
-    }
+    private fun logWarning(message: String) = dualLog.w(message)
+
+    private fun logError(message: String, e: Exception? = null) = dualLog.e(message, e)
 
     private fun showToast(message: String) {
         // Only show toast if debug notifications are enabled
@@ -194,7 +184,7 @@ class PrivacyActionWorker(
     }
 
     override suspend fun doWork(): Result {
-        val isLocking = inputData.getBoolean("is_locking", false)
+        val isLocking = inputData.getBoolean(PrivacyActionWork.KEY_IS_LOCKING, false)
         // Armed as the very first thing doWork() does, before any setup work below (privilege
         // check, object construction) that can itself take real time talking to a real
         // root/Shizuku shell - see sensorDisableInProgress's own comment above for why this
@@ -212,9 +202,9 @@ class PrivacyActionWorker(
         // needed even when the clear happens on the normal path.
         var ownSensorGuardCleared = false
         try {
-            val isDeviceLocked = inputData.getBoolean("is_device_locked", false)
-            val trigger = inputData.getString("trigger") ?: "unknown"
-            val reason = inputData.getString("reason") ?: "Unknown"
+            val isDeviceLocked = inputData.getBoolean(PrivacyActionWork.KEY_IS_DEVICE_LOCKED, false)
+            val trigger = inputData.getString(PrivacyActionWork.KEY_TRIGGER) ?: "unknown"
+            val reason = inputData.getString(PrivacyActionWork.KEY_REASON) ?: "Unknown"
 
             logDebug("🔒 Executing privacy actions: locking=$isLocking, deviceLocked=$isDeviceLocked, trigger=$trigger, reason=$reason")
 

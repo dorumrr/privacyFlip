@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import io.github.dorumrr.privacyflip.util.PreferenceManager
 
 /**
  * Handles the widget's tap-to-toggle action only.
@@ -30,18 +29,7 @@ class PrivacyFlipWidgetToggleReceiver : BroadcastReceiver() {
         Log.d(TAG, "Widget toggle privacy action received")
 
         try {
-            val preferenceManager = PreferenceManager.getInstance(context)
-
-            // Toggle global privacy state
-            val currentState = preferenceManager.isGlobalPrivacyEnabled
-            val newState = !currentState
-            preferenceManager.isGlobalPrivacyEnabled = newState
-
-            Log.d(TAG, "Global privacy toggled from widget: $currentState -> $newState")
-
-            // Update all widgets to reflect new state
-            PrivacyFlipWidget.updateAllWidgets(context)
-
+            PrivacyFlipWidget.toggleGlobalPrivacy(context, TAG)
         } catch (e: Exception) {
             Log.e(TAG, "Error toggling privacy from widget", e)
         }

@@ -114,37 +114,7 @@ class RootExecutor : PrivilegeExecutor {
         }
     }
 
-    override suspend fun executeWithFallbacks(commands: List<String>): CommandResult {
-        if (commands.isEmpty()) {
-            return CommandResult.failure("No commands provided")
-        }
-
-        var lastResult: CommandResult? = null
-
-        for (command in commands) {
-            val result = executeCommand(command)
-            if (result.success) {
-                return result
-            }
-            lastResult = result
-        }
-
-        return lastResult ?: CommandResult.failure("All commands failed")
-    }
-
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.ROOT
-
-    override suspend fun getUid(): Int = withContext(Dispatchers.IO) {
-        try {
-            val result = Shell.cmd("id -u").exec()
-            if (result.isSuccess && result.out.isNotEmpty()) {
-                return@withContext result.out[0].toIntOrNull() ?: -1
-            }
-        } catch (e: Exception) {
-            // Ignore
-        }
-        return@withContext -1
-    }
 
     override fun cleanup() {
         // libsu handles cleanup automatically

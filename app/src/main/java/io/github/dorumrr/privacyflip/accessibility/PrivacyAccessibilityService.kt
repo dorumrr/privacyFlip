@@ -7,13 +7,11 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
+import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
 /**
  * Accessibility Service that detects screen-off / lock events earlier than the standard
@@ -35,12 +33,6 @@ class PrivacyAccessibilityService : AccessibilityService() {
         
         @Volatile
         private var isServiceRunning = false
-
-        /**
-         * Check if the accessibility service is currently running.
-         * Used by UI to show service status.
-         */
-        fun isRunning(): Boolean = isServiceRunning
 
         // Tracks whether the last window this service saw was the lock screen. This service has
         // its own, fully independent way to arm a lock cycle - it never relied on
@@ -206,25 +198,15 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
-                .setInputData(
-                    workDataOf(
-                        "is_locking" to true,
-                        "is_device_locked" to false,  // Device not fully locked yet
-                        "trigger" to "accessibility_service",
-                        "reason" to "Early Lock Detection (Accessibility)"
-                    )
-                )
-                .build()
-
-            // Same unique work name every lock-trigger site uses (Constants.Work.NAME_LOCK).
-            // REPLACE policy ensures no duplicate execution once this one starts.
-            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK,
-                ExistingWorkPolicy.REPLACE,
-                workRequest
+            PrivacyActionWork.enqueue(
+                context = applicationContext,
+                isLocking = true,
+                isDeviceLocked = false,  // Device not fully locked yet
+                trigger = "accessibility_service",
+                reason = "Early Lock Detection (Accessibility)"
             )
-            
+
+
             Log.i(TAG, "✅ Early privacy actions triggered (unique work: privacy_action_lock)")
 
         } catch (e: Exception) {
@@ -262,21 +244,12 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
-                .setInputData(
-                    workDataOf(
-                        "is_locking" to false,
-                        "is_device_locked" to false,
-                        "trigger" to "accessibility_service",
-                        "reason" to "Early Unlock Detection (Accessibility)"
-                    )
-                )
-                .build()
-
-            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK,
-                ExistingWorkPolicy.REPLACE,
-                workRequest
+            PrivacyActionWork.enqueue(
+                context = applicationContext,
+                isLocking = false,
+                isDeviceLocked = false,
+                trigger = "accessibility_service",
+                reason = "Early Unlock Detection (Accessibility)"
             )
 
             Log.i(TAG, "✅ Early unlock actions triggered (unique work: privacy_action_unlock)")

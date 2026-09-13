@@ -9,13 +9,6 @@ data class CommandResult(
     val error: String? = null,
     val exitCode: Int = if (success) 0 else 1
 ) {
-    fun getOutputString(): String = output.joinToString("\n")
-    
-    /**
-     * Returns true if the command succeeded and produced output
-     */
-    fun hasOutput(): Boolean = success && output.isNotEmpty()
-    
     companion object {
         fun failure(error: String, exitCode: Int = 1): CommandResult {
             return CommandResult(

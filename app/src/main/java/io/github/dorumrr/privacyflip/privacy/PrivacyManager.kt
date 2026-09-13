@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
-import io.github.dorumrr.privacyflip.util.DebugLogHelper
+import io.github.dorumrr.privacyflip.util.DualLogger
 import io.github.dorumrr.privacyflip.util.SingletonHolder
 import kotlinx.coroutines.*
 
@@ -22,64 +22,30 @@ class PrivacyManager private constructor(
         private const val TAG = "privacyFlip-PrivacyManager"
     }
 
-    private val debugLogger: DebugLogHelper by lazy {
-        DebugLogHelper.getInstance(context)
-    }
+    private val dualLog = DualLogger(context, TAG)
 
-    private fun logDebug(message: String) {
-        Log.i(TAG, message)
-        debugLogger.i(TAG, message)
-    }
+    private fun logDebug(message: String) = dualLog.i(message)
 
-    private fun logWarning(message: String) {
-        Log.w(TAG, message)
-        debugLogger.w(TAG, message)
-    }
+    private fun logWarning(message: String) = dualLog.w(message)
 
-    private fun logError(message: String, e: Exception? = null) {
-        Log.e(TAG, message, e)
-        debugLogger.e(TAG, message, e)
-    }
+    private fun logError(message: String, e: Exception? = null) = dualLog.e(message, e)
     
-    private val toggles = mutableMapOf<PrivacyFeature, PrivacyToggle>()
-    
-    init {
-        initializeToggles()
-    }
-    
-    private fun initializeToggles() {
-        toggles[PrivacyFeature.WIFI] = WiFiToggle(rootManager)
-        toggles[PrivacyFeature.BLUETOOTH] = BluetoothToggle(rootManager)
-        toggles[PrivacyFeature.MOBILE_DATA] = MobileDataToggle(rootManager)
-        toggles[PrivacyFeature.LOCATION] = LocationToggle(rootManager)
-        toggles[PrivacyFeature.NFC] = NFCToggle(rootManager, context)
-        toggles[PrivacyFeature.CAMERA] = CameraToggle(rootManager)
-        toggles[PrivacyFeature.MICROPHONE] = MicrophoneToggle(rootManager)
-        toggles[PrivacyFeature.AIRPLANE_MODE] = AirplaneModeToggle(rootManager)
-        toggles[PrivacyFeature.BATTERY_SAVER] = BatterySaverToggle(rootManager)
-    }
-    
-    fun getAvailableToggles(): Map<PrivacyFeature, PrivacyToggle> {
-        return toggles.toMap()
-    }
-    
-    fun getToggle(feature: PrivacyFeature): PrivacyToggle? {
-        return toggles[feature]
-    }
-    
-    suspend fun checkFeatureSupport(): Map<PrivacyFeature, FeatureSupport> = withContext(Dispatchers.IO) {
-        val supportMap = mutableMapOf<PrivacyFeature, FeatureSupport>()
-        
-        toggles.forEach { (feature, toggle) ->
-            try {
-                supportMap[feature] = toggle.isSupported()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking support for $feature", e)
-                supportMap[feature] = FeatureSupport.UNSUPPORTED
-            }
-        }
-        
-        return@withContext supportMap
+    // Built from the enum itself, through an exhaustive `when`: adding a PrivacyFeature without
+    // giving it a toggle here is a compile error, not a feature that silently does nothing at
+    // runtime.
+    private val toggles: Map<PrivacyFeature, PrivacyToggle> =
+        PrivacyFeature.values().associateWith { createToggle(it) }
+
+    private fun createToggle(feature: PrivacyFeature): PrivacyToggle = when (feature) {
+        PrivacyFeature.WIFI -> WiFiToggle(rootManager)
+        PrivacyFeature.BLUETOOTH -> BluetoothToggle(rootManager)
+        PrivacyFeature.MOBILE_DATA -> MobileDataToggle(rootManager)
+        PrivacyFeature.LOCATION -> LocationToggle(rootManager)
+        PrivacyFeature.NFC -> NFCToggle(rootManager, context)
+        PrivacyFeature.CAMERA -> CameraToggle(rootManager)
+        PrivacyFeature.MICROPHONE -> MicrophoneToggle(rootManager)
+        PrivacyFeature.AIRPLANE_MODE -> AirplaneModeToggle(rootManager)
+        PrivacyFeature.BATTERY_SAVER -> BatterySaverToggle(rootManager)
     }
     
     suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> = withContext(Dispatchers.IO) {

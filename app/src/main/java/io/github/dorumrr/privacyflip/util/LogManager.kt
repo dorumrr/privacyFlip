@@ -2,70 +2,36 @@ package io.github.dorumrr.privacyflip.util
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.*
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.ConcurrentLinkedQueue
 
-class LogManager private constructor(private val context: Context) {
+/**
+ * Tag-prefixing wrapper around android.util.Log, so every log line this app emits is findable
+ * under one logcat filter regardless of which class wrote it.
+ *
+ * Logs are NOT written to a file here. The user-facing log file, the one the log viewer screen
+ * reads and shares, belongs to [DebugLogHelper] and is gated behind the user's own
+ * "Debug Logs" preference.
+ */
+class LogManager private constructor(context: Context) {
 
     companion object : SingletonHolder<LogManager, Context>({ context ->
         LogManager(context.applicationContext)
     }) {
-        private const val TAG = "privacyFlip-LogManager"
         private const val LOG_PREFIX = "privacyFlip-"
 
-        /**
-         * Ensures all log tags are prefixed with "privacyFlip-"
-         */
         private fun prefixTag(tag: String): String {
             return if (tag.startsWith(LOG_PREFIX)) tag else "$LOG_PREFIX$tag"
         }
     }
 
-    private val logFile = File(context.filesDir, Constants.Logging.LOG_FILE_NAME)
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
-    private val logQueue = ConcurrentLinkedQueue<String>()
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val logFileRotator = LogFileRotator()
-
-    private var isProcessing = false
-
-    init {
-        try {
-            if (!logFile.exists()) {
-                logFile.createNewFile()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create log file", e)
-        }
-
-        startLogProcessor()
-    }
-
     fun log(level: String, tag: String, message: String) {
-        try {
-            val prefixedTag = prefixTag(tag)
+        val prefixedTag = prefixTag(tag)
 
-            when (level) {
-                "D" -> Log.d(prefixedTag, message)
-                "I" -> Log.i(prefixedTag, message)
-                "W" -> Log.w(prefixedTag, message)
-                "E" -> Log.e(prefixedTag, message)
-                else -> Log.d(prefixedTag, message)
-            }
-
-            val timestamp = dateFormat.format(Date())
-            val logEntry = "$timestamp $level/$prefixedTag: $message"
-            logQueue.offer(logEntry)
-
-            if (!isProcessing) {
-                processLogQueue()
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to queue log entry", e)
+        when (level) {
+            "D" -> Log.d(prefixedTag, message)
+            "I" -> Log.i(prefixedTag, message)
+            "W" -> Log.w(prefixedTag, message)
+            "E" -> Log.e(prefixedTag, message)
+            else -> Log.d(prefixedTag, message)
         }
     }
 
@@ -73,59 +39,4 @@ class LogManager private constructor(private val context: Context) {
     fun i(tag: String, message: String) = log("I", tag, message)
     fun w(tag: String, message: String) = log("W", tag, message)
     fun e(tag: String, message: String) = log("E", tag, message)
-
-
-
-    private fun startLogProcessor() {
-        scope.launch {
-            while (true) {
-                delay(Constants.Logging.LOG_PROCESSING_INTERVAL_MS)
-                if (logQueue.isNotEmpty()) {
-                    processLogQueue()
-                }
-            }
-        }
-    }
-
-    private fun processLogQueue() {
-        if (isProcessing) return
-        
-        scope.launch {
-            isProcessing = true
-            try {
-                val entries = mutableListOf<String>()
-                
-                while (logQueue.isNotEmpty() && entries.size < Constants.Logging.MAX_BATCH_SIZE) {
-                    logQueue.poll()?.let { entries.add(it) }
-                }
-                
-                if (entries.isNotEmpty()) {
-                    writeToFile(entries)
-                }
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing log queue", e)
-            } finally {
-                isProcessing = false
-            }
-        }
-    }
-
-    private suspend fun writeToFile(entries: List<String>) = withContext(Dispatchers.IO) {
-        try {
-            synchronized(logFile) {
-                if (logFileRotator.needsRotation(logFile)) {
-                    logFileRotator.rotateLogFile(logFile)
-                }
-
-                logFile.appendText(entries.joinToString("\n") + "\n")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to write to log file", e)
-        }
-    }
-
-    fun cleanup() {
-        scope.cancel()
-    }
 }

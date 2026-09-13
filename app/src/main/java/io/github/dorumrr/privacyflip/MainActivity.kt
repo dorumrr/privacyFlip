@@ -2,7 +2,6 @@ package io.github.dorumrr.privacyflip
 
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -24,13 +23,6 @@ class MainActivity : AppCompatActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     private lateinit var binding: ActivityMainBinding
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        Log.d(TAG, "Permission results: $permissions")
-        viewModel.requestPermissions(permissions.keys.toTypedArray())
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,13 +56,6 @@ class MainActivity : AppCompatActivity() {
         var hasPromptedBatteryOptimization = false
 
         viewModel.uiState.observe(this) { uiState ->
-            // Handle permission requests
-            uiState.pendingPermissionRequest?.let { permissions ->
-                Log.d(TAG, "Auto-requesting permissions: ${permissions.contentToString()}")
-                permissionLauncher.launch(permissions)
-                viewModel.clearPendingPermissionRequest()
-            }
-
             // Handle battery optimization after root is granted (only once)
             if (uiState.isRootGranted && !hasPromptedBatteryOptimization) {
                 hasPromptedBatteryOptimization = true
@@ -83,7 +68,7 @@ class MainActivity : AppCompatActivity() {
 
                         delay(1000)
 
-                        Log.i("MainActivity", "Auto-prompting for battery optimization exemption (after root granted)")
+                        Log.i(TAG, "Auto-prompting for battery optimization exemption (after root granted)")
 
                         try {
                             val intent = batteryManager.createBatteryOptimizationIntent()
@@ -96,10 +81,10 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         } catch (e: Exception) {
-                            Log.w("MainActivity", "Failed to auto-prompt for battery optimization", e)
+                            Log.w(TAG, "Failed to auto-prompt for battery optimization", e)
                         }
                     } else {
-                        Log.d("MainActivity", "Battery optimization already granted or not supported")
+                        Log.d(TAG, "Battery optimization already granted or not supported")
                     }
                 }
             }

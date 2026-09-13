@@ -1,7 +1,6 @@
 package io.github.dorumrr.privacyflip.service
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -13,16 +12,13 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.MainActivity
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.receiver.ScreenStateReceiver
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.ScreenStateReceiverManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
+import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
 class PrivacyMonitorService : Service() {
 
@@ -100,19 +96,16 @@ class PrivacyMonitorService : Service() {
     }
     
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                Constants.ServiceNotification.CHANNEL_ID,
-                "Privacy Monitor",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Monitors screen state for privacy actions"
-                setShowBadge(false)
-            }
-
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+        // vibration/lights deliberately not set: this is an ongoing, quiet service notification
+        // and IMPORTANCE_LOW's own defaults are what it wants.
+        io.github.dorumrr.privacyflip.util.NotificationChannels.create(
+            context = this,
+            id = Constants.ServiceNotification.CHANNEL_ID,
+            name = "Privacy Monitor",
+            importance = NotificationManager.IMPORTANCE_LOW,
+            description = "Monitors screen state for privacy actions",
+            showBadge = false
+        )
     }
     
     private fun createNotification(): Notification {
@@ -241,24 +234,12 @@ class PrivacyMonitorService : Service() {
             // Check if device is currently locked to pass correct flag to worker
             val isDeviceLocked = isScreenCurrentlyLocked()
 
-            val workRequest = OneTimeWorkRequestBuilder<PrivacyActionWorker>()
-                .setInputData(
-                    workDataOf(
-                        "is_locking" to isLocking,
-                        "is_device_locked" to isDeviceLocked,
-                        "trigger" to "service_init",
-                        "reason" to reason
-                    )
-                )
-                .build()
-
-            // Unique work names shared with ScreenStateReceiver and PrivacyAccessibilityService
-            val workName = if (isLocking) io.github.dorumrr.privacyflip.util.Constants.Work.NAME_LOCK
-                            else io.github.dorumrr.privacyflip.util.Constants.Work.NAME_UNLOCK
-            WorkManager.getInstance(this).enqueueUniqueWork(
-                workName,
-                ExistingWorkPolicy.REPLACE,
-                workRequest
+            val workName = PrivacyActionWork.enqueue(
+                context = this,
+                isLocking = isLocking,
+                isDeviceLocked = isDeviceLocked,
+                trigger = "service_init",
+                reason = reason
             )
             Log.i(TAG, "🔄 Initial privacy action enqueued (unique: $workName): ${if (isUnlocking) "unlock" else "lock"} actions (deviceLocked=$isDeviceLocked)")
 

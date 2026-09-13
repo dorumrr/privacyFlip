@@ -73,11 +73,6 @@ class DebugLogHelper private constructor(private val context: Context) {
     fun i(tag: String, message: String) = log(tag, "I: $message")
 
     /**
-     * Log a debug-level message.
-     */
-    fun d(tag: String, message: String) = log(tag, "D: $message")
-
-    /**
      * Log a warning-level message.
      */
     fun w(tag: String, message: String) = log(tag, "W: $message")

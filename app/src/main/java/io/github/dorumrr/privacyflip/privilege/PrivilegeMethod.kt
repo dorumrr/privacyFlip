@@ -32,27 +32,7 @@ enum class PrivilegeMethod {
      * Best of both worlds: automatic like root, uses Shizuku API
      */
     SUI;
-    
-    /**
-     * Returns true if this method provides root-level privileges (UID 0)
-     */
-    fun isRootLevel(): Boolean = this == ROOT || this == SUI
-    
-    /**
-     * Returns true if this method provides ADB-level privileges (UID 2000)
-     */
-    fun isAdbLevel(): Boolean = this == SHIZUKU
 
-    /**
-     * Returns true if this method provides Device Owner privileges
-     */
-    fun isDeviceOwnerLevel(): Boolean = this == DHIZUKU
-    
-    /**
-     * Returns true if any privilege is available
-     */
-    fun isAvailable(): Boolean = this != NONE
-    
     /**
      * Returns user-friendly name for this privilege method
      */

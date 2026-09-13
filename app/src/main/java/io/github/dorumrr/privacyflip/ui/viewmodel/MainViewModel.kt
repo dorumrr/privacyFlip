@@ -10,7 +10,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dorumrr.privacyflip.data.*
 
-import io.github.dorumrr.privacyflip.permission.PermissionChecker
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.root.RootManager
@@ -22,9 +21,6 @@ import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
 import io.github.dorumrr.privacyflip.worker.ServiceHealthWorker
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.work.PeriodicWorkRequestBuilder
@@ -47,7 +43,6 @@ class MainViewModel : ViewModel() {
 
     private val rootManager = RootManager.getInstance(Unit)
     private lateinit var privacyManager: PrivacyManager
-    private lateinit var permissionChecker: PermissionChecker
     private lateinit var logManager: LogManager
     private lateinit var preferenceManager: PreferenceManager
     private var context: Context? = null
@@ -55,10 +50,7 @@ class MainViewModel : ViewModel() {
 
     private val _uiState = MutableLiveData(UiState())
     val uiState: LiveData<UiState> = _uiState
-    
-    private val _privacyConfig = MutableStateFlow(PrivacyConfig())
-    val privacyConfig: StateFlow<PrivacyConfig> = _privacyConfig.asStateFlow()
-    
+
     fun initialize(context: Context) {
         if (isInitialized) {
             return
@@ -66,7 +58,6 @@ class MainViewModel : ViewModel() {
 
         this.context = context
         privacyManager = PrivacyManager.getInstance(context)
-        permissionChecker = PermissionChecker(context)
         logManager = LogManager.getInstance(context)
         preferenceManager = PreferenceManager.getInstance(context)
 
@@ -83,7 +74,6 @@ class MainViewModel : ViewModel() {
         loadScreenLockConfig(context)
         loadServiceSettings()
         startBackgroundServiceIfEnabled()
-        loadPermissionStatus()
 
         logManager.i(TAG, "Performing initial lock delay configuration check...")
         checkLockDelayConfiguration(context)
@@ -140,7 +130,6 @@ class MainViewModel : ViewModel() {
 
                 if (isPrivilegeGranted) {
                     loadPrivacyStatus()
-                    loadPermissionStatus()
                 }
             } catch (e: Exception) {
                 logManager.e(TAG, "Error checking privilege status: ${e.message}")
@@ -173,10 +162,6 @@ class MainViewModel : ViewModel() {
         }
     }
     
-    fun updatePrivacyConfig(config: PrivacyConfig) {
-        _privacyConfig.value = config
-    }
-    
     fun updateTimerSettings(settings: TimerSettings) {
         if (settings.isValid()) {
             // Update UiState for UI binding
@@ -204,73 +189,6 @@ class MainViewModel : ViewModel() {
             )
             updateUiState { it.copy(timerSettings = settings) }
         }
-    }
-
-    fun toggleLockFeature(feature: PrivacyFeature, enabled: Boolean) {
-        val currentConfig = _privacyConfig.value
-        val newLockFeatures = if (enabled) {
-            currentConfig.lockFeatures + feature
-        } else {
-            currentConfig.lockFeatures - feature
-        }
-        
-        _privacyConfig.value = currentConfig.copy(lockFeatures = newLockFeatures)
-    }
-    
-    fun toggleUnlockFeature(feature: PrivacyFeature, enabled: Boolean) {
-        val currentConfig = _privacyConfig.value
-        val newUnlockFeatures = if (enabled) {
-            currentConfig.unlockFeatures + feature
-        } else {
-            currentConfig.unlockFeatures - feature
-        }
-        
-        _privacyConfig.value = currentConfig.copy(unlockFeatures = newUnlockFeatures)
-    }
-
-    private fun loadPermissionStatus() {
-        viewModelScope.launch {
-            try {
-                val ungrantedPermissions = permissionChecker.getUngrantedPermissions()
-
-                if (ungrantedPermissions.isNotEmpty()) {
-                    val currentState = _uiState.value ?: UiState()
-
-                    if (!currentState.hasTriedAutoRequest) {
-                        val permissionsToRequest = ungrantedPermissions.map { it.permission }.toTypedArray()
-                        _uiState.value = currentState.copy(
-                            ungrantedPermissions = emptyList(),
-                            pendingPermissionRequest = permissionsToRequest,
-                            hasTriedAutoRequest = true
-                        )
-                    } else {
-                        _uiState.value = currentState.copy(
-                            ungrantedPermissions = ungrantedPermissions,
-                            pendingPermissionRequest = null
-                        )
-                    }
-                } else {
-                    updateUiState {
-                        it.copy(
-                            ungrantedPermissions = emptyList(),
-                            pendingPermissionRequest = null,
-                            hasTriedAutoRequest = false
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                logManager.e(TAG, "Error loading permission status: ${e.message}")
-            }
-        }
-    }
-
-    fun requestPermissions(@Suppress("UNUSED_PARAMETER") permissions: Array<String>) {
-        updateUiState { it.copy(hasTriedAutoRequest = true) }
-        loadPermissionStatus()
-    }
-
-    fun clearPendingPermissionRequest() {
-        updateUiState { it.copy(pendingPermissionRequest = null) }
     }
 
     fun updateScreenLockConfig(feature: PrivacyFeature, disableOnLock: Boolean, enableOnUnlock: Boolean) {
@@ -374,9 +292,8 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (isRootGranted) {
-                    logManager.d(TAG, "requestRootPermission() - Permission granted, loading privacy and permission status...")
+                    logManager.d(TAG, "requestRootPermission() - Permission granted, loading privacy status...")
                     loadPrivacyStatus()
-                    loadPermissionStatus()
                 } else {
                     logManager.w(TAG, "requestRootPermission() - Permission NOT granted")
                 }
@@ -418,7 +335,6 @@ class MainViewModel : ViewModel() {
 
                 if (isPrivilegeGranted) {
                     loadPrivacyStatus()
-                    loadPermissionStatus()
                 }
             } catch (e: Exception) {
                 logManager.e(TAG, "refresh() - Error: ${e.message}")
@@ -900,62 +816,26 @@ class MainViewModel : ViewModel() {
         updateScreenLockConfig(feature, newDisableOnLock, newEnableOnUnlock)
     }
 
-    fun updateWifiSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.WIFI, disableOnLock, enableOnUnlock,
-            { it.wifiDisableOnLock }, { it.wifiEnableOnUnlock })
-    }
-
-    fun updateBluetoothSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.BLUETOOTH, disableOnLock, enableOnUnlock,
-            { it.bluetoothDisableOnLock }, { it.bluetoothEnableOnUnlock })
-    }
-
-    fun updateMobileDataSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.MOBILE_DATA, disableOnLock, enableOnUnlock,
-            { it.mobileDataDisableOnLock }, { it.mobileDataEnableOnUnlock })
-    }
-
-    fun updateLocationSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.LOCATION, disableOnLock, enableOnUnlock,
-            { it.locationDisableOnLock }, { it.locationEnableOnUnlock })
-    }
-
-    fun updateNFCSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.NFC, disableOnLock, enableOnUnlock,
-            { it.nfcDisableOnLock }, { it.nfcEnableOnUnlock })
-    }
-
-    fun updateCameraSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.CAMERA, disableOnLock, enableOnUnlock,
-            { it.cameraDisableOnLock }, { it.cameraEnableOnUnlock })
-    }
-
-    fun updateMicrophoneSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.MICROPHONE, disableOnLock, enableOnUnlock,
-            { it.microphoneDisableOnLock }, { it.microphoneEnableOnUnlock })
-    }
-
-    fun updateAirplaneModeSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.AIRPLANE_MODE, disableOnLock, enableOnUnlock,
-            { it.airplaneModeDisableOnLock }, { it.airplaneModeEnableOnUnlock })
-    }
-
-    fun updateBatterySaverSettings(disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
-        updateFeatureSettings(PrivacyFeature.BATTERY_SAVER, disableOnLock, enableOnUnlock,
-            { it.batterySaverDisableOnLock }, { it.batterySaverEnableOnUnlock })
-    }
-
     fun updateFeatureSetting(feature: PrivacyFeature, disableOnLock: Boolean? = null, enableOnUnlock: Boolean? = null) {
         when (feature) {
-            PrivacyFeature.WIFI -> updateWifiSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.BLUETOOTH -> updateBluetoothSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.MOBILE_DATA -> updateMobileDataSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.LOCATION -> updateLocationSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.NFC -> updateNFCSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.CAMERA -> updateCameraSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.MICROPHONE -> updateMicrophoneSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.AIRPLANE_MODE -> updateAirplaneModeSettings(disableOnLock, enableOnUnlock)
-            PrivacyFeature.BATTERY_SAVER -> updateBatterySaverSettings(disableOnLock, enableOnUnlock)
+            PrivacyFeature.WIFI -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.wifiDisableOnLock }, { it.wifiEnableOnUnlock })
+            PrivacyFeature.BLUETOOTH -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.bluetoothDisableOnLock }, { it.bluetoothEnableOnUnlock })
+            PrivacyFeature.MOBILE_DATA -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.mobileDataDisableOnLock }, { it.mobileDataEnableOnUnlock })
+            PrivacyFeature.LOCATION -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.locationDisableOnLock }, { it.locationEnableOnUnlock })
+            PrivacyFeature.NFC -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.nfcDisableOnLock }, { it.nfcEnableOnUnlock })
+            PrivacyFeature.CAMERA -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.cameraDisableOnLock }, { it.cameraEnableOnUnlock })
+            PrivacyFeature.MICROPHONE -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.microphoneDisableOnLock }, { it.microphoneEnableOnUnlock })
+            PrivacyFeature.AIRPLANE_MODE -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.airplaneModeDisableOnLock }, { it.airplaneModeEnableOnUnlock })
+            PrivacyFeature.BATTERY_SAVER -> updateFeatureSettings(feature, disableOnLock, enableOnUnlock,
+                { it.batterySaverDisableOnLock }, { it.batterySaverEnableOnUnlock })
         }
     }
 
@@ -1139,9 +1019,6 @@ data class UiState(
     val featureStates: Map<PrivacyFeature, FeatureState> = emptyMap(),
     val privacyStatus: PrivacyStatus = PrivacyStatus(),
     val isGlobalPrivacyEnabled: Boolean = true,
-    val ungrantedPermissions: List<PermissionChecker.PermissionStatus> = emptyList(),
-    val pendingPermissionRequest: Array<String>? = null,
-    val hasTriedAutoRequest: Boolean = false,
     val hasTriedAutoRootRequest: Boolean = false,
     val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
     val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,

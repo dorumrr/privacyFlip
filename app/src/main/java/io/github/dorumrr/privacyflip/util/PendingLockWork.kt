@@ -2,7 +2,6 @@ package io.github.dorumrr.privacyflip.util
 
 import android.content.Context
 import android.os.SystemClock
-import android.util.Log
 import androidx.work.WorkManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import java.util.concurrent.Executor
@@ -20,21 +19,13 @@ import java.util.concurrent.Executor
  * runs to completion regardless and re-enables features on a phone the user has since locked.
  */
 object PendingLockWork {
-    // cancel() below would otherwise hand-write every log call twice (Log.X, then the identical
-    // message again to DebugLogHelper.X) at each of the 4 log statements inside its own body -
-    // the same dual-write pattern PrivacyActionWorker/PrivacyMonitorService already collapse
-    // into their own logDebug/logWarning/logError helpers. One shared pair here does the same
-    // for this object's own single caller-supplied tag, so a message can only ever drift
-    // between the two sinks if this one place gets it wrong, not up to 4 places inside cancel().
-    private fun logInfo(context: Context, tag: String, message: String) {
-        Log.i(tag, message)
-        DebugLogHelper.getInstance(context).i(tag, message)
-    }
+    // The tag comes from the caller here rather than being fixed per class, so the logger is
+    // built per call - same as ScreenStateReceiver, which gets its Context per delivery.
+    private fun logInfo(context: Context, tag: String, message: String) =
+        DualLogger(context, tag).i(message)
 
-    private fun logError(context: Context, tag: String, message: String, e: Exception? = null) {
-        Log.e(tag, message, e)
-        DebugLogHelper.getInstance(context).e(tag, message, e)
-    }
+    private fun logError(context: Context, tag: String, message: String, e: Exception? = null) =
+        DualLogger(context, tag).e(message, e)
 
     fun cancel(context: Context, tag: String, workName: String) {
         try {

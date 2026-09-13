@@ -75,12 +75,4 @@ class BatteryOptimizationManager(private val context: Context) {
     }
     
 
-    fun logBatteryOptimizationStatus() {
-        val status = when {
-            !isBatteryOptimizationSupported() -> "NOT_SUPPORTED"
-            isIgnoringBatteryOptimizations() -> "WHITELISTED"
-            else -> "OPTIMIZED"
-        }
-        Log.i(TAG, "Battery optimization status: $status (API ${Build.VERSION.SDK_INT})")
-    }
 }

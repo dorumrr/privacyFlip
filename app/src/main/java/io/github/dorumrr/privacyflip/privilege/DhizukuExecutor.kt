@@ -15,11 +15,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.coroutines.resume
 
 @RequiresApi(Build.VERSION_CODES.O)
 class DhizukuExecutor : PrivilegeExecutor {
@@ -34,11 +31,43 @@ class DhizukuExecutor : PrivilegeExecutor {
     // Use a dedicated coroutine scope instead of GlobalScope
     private val executorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @Volatile
-    private var permissionGranted: Boolean? = null
+    // The caching, timeout and hand-back-the-answer rules live in the gate, shared with
+    // ShizukuExecutor. Everything Dhizuku-specific stays here, as the hooks below - including
+    // the fact that Dhizuku delivers its answer to a callback passed into each request, rather
+    // than to a permanent listener the way Shizuku does.
+    private val permissionGate: PrivilegePermissionGate = PrivilegePermissionGate(
+        tag = TAG,
+        logger = { logManager },
+        isBackendAvailable = { isAvailable() },
+        readPermissionFromBackend = { Dhizuku.isPermissionGranted() },
+        preCheck = {
+            if (Dhizuku.isPermissionGranted()) {
+                PermissionPreCheck.AlreadyGranted
+            } else {
+                PermissionPreCheck.AskTheUser
+            }
+        },
+        startRequest = { Dhizuku.requestPermission(permissionResultListener()) }
+    )
 
-    @Volatile
-    private var permissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
+    /**
+     * Dhizuku takes a fresh listener per request, unlike Shizuku's single permanent one. Built
+     * in a function rather than inline above, so it can refer to the gate it reports back to.
+     */
+    private fun permissionResultListener() = object : DhizukuRequestPermissionListener() {
+        override fun onRequestPermission(grantResult: Int) {
+            val granted = grantResult == PackageManager.PERMISSION_GRANTED
+            logManager?.d(TAG, "onRequestPermission() - grantResult: $grantResult, granted: $granted")
+            permissionGate.deliverResult(granted)
+
+            // Broadcast to UI to refresh when permission status changes
+            context?.let { ctx ->
+                val intent = android.content.Intent("io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED")
+                ctx.sendBroadcast(intent)
+                logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
+            }
+        }
+    }
 
     override suspend fun initialize(context: Context) {
         this.context = context
@@ -69,118 +98,18 @@ class DhizukuExecutor : PrivilegeExecutor {
     }
 
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
-        logManager?.d(TAG, "isPermissionGranted() called - cached value: $permissionGranted")
-
-        // Always check if Dhizuku is available first
-        if (!isAvailable()) {
-            logManager?.w(TAG, "isPermissionGranted() - Dhizuku is not available")
-            permissionGranted = false
-            return@withContext false
-        }
-
-        // If cached value is false but Dhizuku is now available, clear cache to re-check
-        if (permissionGranted == false) {
-            logManager?.d(TAG, "isPermissionGranted() - Dhizuku is available but cache is false, clearing cache to re-check")
-            permissionGranted = null
-        }
-
-        if (permissionGranted != null) {
-            logManager?.d(TAG, "isPermissionGranted() returning cached value: $permissionGranted")
-            return@withContext permissionGranted!!
-        }
-
-        try {
-            val granted = Dhizuku.isPermissionGranted()
-            logManager?.d(TAG, "isPermissionGranted() - checked Dhizuku.isPermissionGranted(): $granted")
-            permissionGranted = granted
-            return@withContext granted
-        } catch (e: Exception) {
-            logManager?.e(TAG, "isPermissionGranted() - exception: ${e.message}")
-            permissionGranted = false
-            return@withContext false
-        }
+        return@withContext permissionGate.isGranted()
     }
-    
+
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            logManager?.d(TAG, "========== requestPermission() START ==========")
-            logManager?.d(TAG, "requestPermission() - current cached permissionGranted: $permissionGranted")
+        val granted = permissionGate.request()
 
-            val currentPermission = Dhizuku.isPermissionGranted()
-            logManager?.d(TAG, "requestPermission() - Dhizuku.isPermissionGranted() = $currentPermission")
-
-            if (currentPermission) {
-                logManager?.d(TAG, "requestPermission() - Permission already granted, updating cache and returning true")
-                permissionGranted = true
-                return@withContext true
-            }
-
-            logManager?.d(TAG, "requestPermission() - About to show Dhizuku permission dialog...")
-
-            // 30-second timeout to match root/Shizuku permission timeout
-            val granted = withTimeoutOrNull(30000) {
-                suspendCancellableCoroutine { continuation ->
-                    logManager?.d(TAG, "requestPermission() - Setting up continuation for permission request")
-                    permissionContinuation = continuation
-
-                    try {
-                        Dhizuku.requestPermission(object : DhizukuRequestPermissionListener() {
-                            override fun onRequestPermission(grantResult: Int) {
-                                val granted = grantResult == PackageManager.PERMISSION_GRANTED
-                                logManager?.d(TAG, "onRequestPermission() - grantResult: $grantResult, granted: $granted")
-                                
-                                permissionGranted = granted
-
-                                // Only resume continuation if it's not null
-                                val cont = permissionContinuation
-                                if (cont != null) {
-                                    permissionContinuation = null
-                                    cont.resume(granted)
-                                    logManager?.d(TAG, "onRequestPermission() - resumed continuation with result: $granted")
-                                } else {
-                                    logManager?.w(TAG, "onRequestPermission() - continuation already null, ignoring duplicate call")
-                                }
-
-                                // Broadcast to UI to refresh when permission status changes
-                                context?.let { ctx ->
-                                    val intent = android.content.Intent("io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED")
-                                    ctx.sendBroadcast(intent)
-                                    logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
-                                }
-                            }
-                        })
-                        logManager?.d(TAG, "requestPermission() - Dhizuku.requestPermission() called successfully, waiting for user response...")
-                    } catch (e: Exception) {
-                        logManager?.e(TAG, "requestPermission() - Exception calling Dhizuku.requestPermission(): ${e.message}")
-                        continuation.resume(false)
-                        return@suspendCancellableCoroutine
-                    }
-
-                    continuation.invokeOnCancellation {
-                        logManager?.d(TAG, "requestPermission() - Permission request cancelled")
-                        permissionContinuation = null
-                    }
-                }
-            } ?: false
-
-            logManager?.d(TAG, "requestPermission() - User responded, result: $granted")
-            logManager?.d(TAG, "requestPermission() - Updating permissionGranted cache to: $granted")
-            permissionGranted = granted
-
-            // Double-check the actual permission state
-            val actualPermission = Dhizuku.isPermissionGranted()
-            logManager?.d(TAG, "requestPermission() - Double-checking: Dhizuku.isPermissionGranted() = $actualPermission")
-
-            logManager?.d(TAG, "========== requestPermission() END - returning $granted ==========")
-            return@withContext granted
-
-        } catch (e: Exception) {
-            logManager?.e(TAG, "requestPermission() - ERROR: ${e.message}")
-            logManager?.e(TAG, "requestPermission() - Stack trace: ${e.stackTraceToString()}")
-            permissionContinuation = null
-            permissionGranted = false
-            return@withContext false
+        // Read back what Dhizuku itself now reports, for the log only - the gate's answer is
+        // what the caller gets.
+        if (granted) {
+            logManager?.d(TAG, "requestPermission() - Dhizuku now reports: ${Dhizuku.isPermissionGranted()}")
         }
+        return@withContext granted
     }
 
     override suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
@@ -228,36 +157,7 @@ class DhizukuExecutor : PrivilegeExecutor {
         }
     }
 
-    override suspend fun executeWithFallbacks(commands: List<String>): CommandResult {
-        if (commands.isEmpty()) {
-            return CommandResult.failure("No commands provided")
-        }
-
-        var lastResult: CommandResult? = null
-
-        for (command in commands) {
-            val result = executeCommand(command)
-            if (result.success) {
-                return result
-            }
-            lastResult = result
-        }
-
-        return lastResult ?: CommandResult.failure("All commands failed")
-    }
-
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.DHIZUKU
-
-    override suspend fun getUid(): Int = withContext(Dispatchers.IO) {
-        try {
-            // Dhizuku runs with Device Owner privileges
-            // UID varies by implementation, typically system UID (1000) or similar
-            // We'll return a special value to indicate Device Owner
-            return@withContext 1000
-        } catch (e: Exception) {
-            return@withContext -1
-        }
-    }
 
     override fun cleanup() {
         try {

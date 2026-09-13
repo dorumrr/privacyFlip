@@ -44,7 +44,7 @@
   - **"Only if not manually set"** - Respect manually enabled protection modes on unlock
 
 - **App Exemptions** - Exclude specific apps from privacy actions when in foreground
-- **Samsung NFC Auto-Retry** - Opt-in feature to combat Samsung payment framework NFC override (for Galaxy S, Note, Z series)
+- **NFC Auto-Retry** - Opt-in: if a payment or wallet app turns NFC back on right after Privacy Flip turns it off, retry disabling it
 - **Accessibility Service** - Experimental support for side/power button instant-lock (opt-in, requires Accessibility permission; the instant-lock benefit applies to camera/microphone, which needs Android 12+)
 - **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 

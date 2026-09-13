@@ -1,11 +1,9 @@
 package io.github.dorumrr.privacyflip.util
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import io.github.dorumrr.privacyflip.MainActivity
@@ -47,21 +45,16 @@ class DebugNotificationHelper private constructor(private val context: Context) 
      * Called on initialization and can be called again safely.
      */
     fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                Constants.DebugNotification.CHANNEL_ID,
-                "Privacy Actions Debug",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Shows debug notifications for privacy actions (can be disabled)"
-                setShowBadge(false)
-                enableVibration(false)
-                enableLights(false)
-            }
-
-            notificationManager.createNotificationChannel(channel)
-            Log.d(TAG, "Debug notification channel created")
-        }
+        NotificationChannels.create(
+            context = context,
+            id = Constants.DebugNotification.CHANNEL_ID,
+            name = "Privacy Actions Debug",
+            importance = NotificationManager.IMPORTANCE_DEFAULT,
+            description = "Shows debug notifications for privacy actions (can be disabled)",
+            showBadge = false,
+            vibration = false,
+            lights = false
+        )
     }
 
     /**

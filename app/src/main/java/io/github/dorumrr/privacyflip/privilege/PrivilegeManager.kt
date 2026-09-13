@@ -138,16 +138,6 @@ class PrivilegeManager private constructor(private val context: Context) {
         return executor.executeWithFallbacks(commands)
     }
 
-    suspend fun getUid(): Int {
-        return currentExecutor?.getUid() ?: -1
-    }
-
-    suspend fun redetectPrivilegeMethod(): PrivilegeMethod {
-        currentExecutor?.cleanup()
-        currentExecutor = null
-        return initialize()
-    }
-
     fun cleanup() {
         currentExecutor?.cleanup()
         currentExecutor = null

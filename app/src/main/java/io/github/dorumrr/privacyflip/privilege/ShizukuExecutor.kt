@@ -12,14 +12,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.coroutines.resume
 
 class ShizukuExecutor : PrivilegeExecutor {
 
@@ -34,11 +31,38 @@ class ShizukuExecutor : PrivilegeExecutor {
     // Use a dedicated coroutine scope instead of GlobalScope
     private val executorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @Volatile
-    private var permissionGranted: Boolean? = null
-
-    @Volatile
-    private var permissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
+    // The caching, timeout and hand-back-the-answer rules live in the gate, shared with
+    // DhizukuExecutor. Everything Shizuku-specific stays here, as the hooks below.
+    private val permissionGate: PrivilegePermissionGate = PrivilegePermissionGate(
+        tag = TAG,
+        logger = { logManager },
+        isBackendAvailable = { isAvailable() },
+        readPermissionFromBackend = {
+            if (Shizuku.isPreV11()) {
+                logManager?.w(TAG, "Shizuku is pre-V11 - cannot report permission")
+                false
+            } else {
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            }
+        },
+        preCheck = {
+            when {
+                Shizuku.isPreV11() -> {
+                    logManager?.w(TAG, "Shizuku is pre-V11, cannot request permission")
+                    PermissionPreCheck.CannotAsk
+                }
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED ->
+                    PermissionPreCheck.AlreadyGranted
+                // The user previously denied with "Don't ask again", so a dialog would never show.
+                Shizuku.shouldShowRequestPermissionRationale() -> {
+                    logManager?.w(TAG, "User previously denied permission with 'Don't ask again'")
+                    PermissionPreCheck.CannotAsk
+                }
+                else -> PermissionPreCheck.AskTheUser
+            }
+        },
+        startRequest = { Shizuku.requestPermission(PERMISSION_REQUEST_CODE) }
+    )
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         onBinderReceived()
@@ -52,18 +76,10 @@ class ShizukuExecutor : PrivilegeExecutor {
         logManager?.d(TAG, "permissionResultListener called - requestCode: $requestCode, grantResult: $grantResult")
         if (requestCode == PERMISSION_REQUEST_CODE) {
             val granted = grantResult == PackageManager.PERMISSION_GRANTED
-            logManager?.d(TAG, "permissionResultListener - permission granted: $granted, updating cache")
-            permissionGranted = granted
-
-            // Only resume continuation if it's not null (prevent duplicate calls)
-            val continuation = permissionContinuation
-            if (continuation != null) {
-                permissionContinuation = null // Clear BEFORE resuming to prevent race conditions
-                continuation.resume(granted)
-                logManager?.d(TAG, "permissionResultListener - resumed continuation with result: $granted")
-            } else {
-                logManager?.w(TAG, "permissionResultListener - continuation already null, ignoring duplicate call")
-            }
+            logManager?.d(TAG, "permissionResultListener - permission granted: $granted")
+            // This listener is permanent (registered in initialize(), removed in cleanup()), so
+            // an answer can arrive with no request waiting. The gate handles both cases.
+            permissionGate.deliverResult(granted)
 
             // Broadcast to UI to refresh when permission status changes
             context?.let { ctx ->
@@ -96,113 +112,18 @@ class ShizukuExecutor : PrivilegeExecutor {
     }
 
     override suspend fun isPermissionGranted(): Boolean = withContext(Dispatchers.IO) {
-        logManager?.d(TAG, "isPermissionGranted() called - cached value: $permissionGranted")
-
-        // Always check if Shizuku is available first (binder might be dead)
-        if (!isAvailable()) {
-            logManager?.w(TAG, "isPermissionGranted() - Shizuku is not available (binder dead)")
-            permissionGranted = false
-            return@withContext false
-        }
-
-        // If cached value is false but Shizuku is now available, clear cache to re-check
-        // This handles the case where Shizuku was stopped and then restarted
-        if (permissionGranted == false) {
-            logManager?.d(TAG, "isPermissionGranted() - Shizuku is available but cache is false, clearing cache to re-check")
-            permissionGranted = null
-        }
-
-        if (permissionGranted != null) {
-            logManager?.d(TAG, "isPermissionGranted() returning cached value: $permissionGranted")
-            return@withContext permissionGranted!!
-        }
-
-        try {
-            if (Shizuku.isPreV11()) {
-                logManager?.w(TAG, "isPermissionGranted() - Shizuku is pre-V11")
-                return@withContext false
-            }
-
-            val granted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-            logManager?.d(TAG, "isPermissionGranted() - checked Shizuku.checkSelfPermission(): $granted")
-            permissionGranted = granted
-            return@withContext granted
-        } catch (e: Exception) {
-            logManager?.e(TAG, "isPermissionGranted() - exception: ${e.message}")
-            permissionGranted = false
-            return@withContext false
-        }
+        return@withContext permissionGate.isGranted()
     }
-    
+
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            logManager?.d(TAG, "========== requestPermission() START ==========")
-            logManager?.d(TAG, "requestPermission() - current cached permissionGranted: $permissionGranted")
+        val granted = permissionGate.request()
 
-            if (Shizuku.isPreV11()) {
-                logManager?.w(TAG, "requestPermission() - Shizuku is pre-V11, cannot request permission")
-                return@withContext false
-            }
-
-            val currentPermission = Shizuku.checkSelfPermission()
-            logManager?.d(TAG, "requestPermission() - Shizuku.checkSelfPermission() = $currentPermission")
-
-            if (currentPermission == PackageManager.PERMISSION_GRANTED) {
-                logManager?.d(TAG, "requestPermission() - Permission already granted, updating cache and returning true")
-                permissionGranted = true
-                return@withContext true
-            }
-
-            // Check if we should show rationale (user denied with "Don't ask again")
-            val shouldShowRationale = Shizuku.shouldShowRequestPermissionRationale()
-            logManager?.d(TAG, "requestPermission() - shouldShowRequestPermissionRationale: $shouldShowRationale")
-            if (shouldShowRationale) {
-                logManager?.w(TAG, "requestPermission() - User previously denied permission with 'Don't ask again'")
-                return@withContext false
-            }
-
-            logManager?.d(TAG, "requestPermission() - About to show Shizuku permission dialog...")
-
-            // 30-second timeout to match root permission timeout
-            val granted = withTimeoutOrNull(30000) {
-                suspendCancellableCoroutine { continuation ->
-                    logManager?.d(TAG, "requestPermission() - Setting up continuation for permission request")
-                    permissionContinuation = continuation
-
-                    try {
-                        Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
-                        logManager?.d(TAG, "requestPermission() - Shizuku.requestPermission() called successfully, waiting for user response...")
-                    } catch (e: Exception) {
-                        logManager?.e(TAG, "requestPermission() - Exception calling Shizuku.requestPermission(): ${e.message}")
-                        continuation.resume(false)
-                        return@suspendCancellableCoroutine
-                    }
-
-                    continuation.invokeOnCancellation {
-                        logManager?.d(TAG, "requestPermission() - Permission request cancelled")
-                        permissionContinuation = null
-                    }
-                }
-            } ?: false
-
-            logManager?.d(TAG, "requestPermission() - User responded, result: $granted")
-            logManager?.d(TAG, "requestPermission() - Updating permissionGranted cache to: $granted")
-            permissionGranted = granted
-
-            // Double-check the actual permission state
-            val actualPermission = Shizuku.checkSelfPermission()
-            logManager?.d(TAG, "requestPermission() - Double-checking: Shizuku.checkSelfPermission() = $actualPermission")
-
-            logManager?.d(TAG, "========== requestPermission() END - returning $granted ==========")
-            return@withContext granted
-
-        } catch (e: Exception) {
-            logManager?.e(TAG, "requestPermission() - ERROR: ${e.message}")
-            logManager?.e(TAG, "requestPermission() - Stack trace: ${e.stackTraceToString()}")
-            permissionContinuation = null
-            permissionGranted = false
-            return@withContext false
+        // Read back what Shizuku itself now reports, for the log only - the gate's answer is
+        // what the caller gets.
+        if (granted) {
+            logManager?.d(TAG, "requestPermission() - Shizuku now reports: ${Shizuku.checkSelfPermission()}")
         }
+        return@withContext granted
     }
     
     override suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
@@ -254,33 +175,7 @@ class ShizukuExecutor : PrivilegeExecutor {
         }
     }
     
-    override suspend fun executeWithFallbacks(commands: List<String>): CommandResult {
-        if (commands.isEmpty()) {
-            return CommandResult.failure("No commands provided")
-        }
-
-        var lastResult: CommandResult? = null
-
-        for (command in commands) {
-            val result = executeCommand(command)
-            if (result.success) {
-                return result
-            }
-            lastResult = result
-        }
-
-        return lastResult ?: CommandResult.failure("All commands failed")
-    }
-
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.SHIZUKU
-
-    override suspend fun getUid(): Int = withContext(Dispatchers.IO) {
-        try {
-            return@withContext Shizuku.getUid()
-        } catch (e: Exception) {
-            return@withContext -1
-        }
-    }
 
     override fun cleanup() {
         try {
@@ -330,7 +225,7 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     private fun onBinderDead() {
         logManager?.w(TAG, "Shizuku binder died - service stopped")
-        permissionGranted = null
+        permissionGate.forget()
 
         context?.let { ctx ->
             executorScope.launch {

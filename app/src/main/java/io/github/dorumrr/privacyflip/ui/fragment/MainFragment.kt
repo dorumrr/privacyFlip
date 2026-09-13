@@ -33,7 +33,6 @@ import io.github.dorumrr.privacyflip.ui.dialog.ExemptAppsDialogFragment
 import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
 import io.github.dorumrr.privacyflip.util.Constants
-import io.github.dorumrr.privacyflip.util.DebugLogHelper
 import io.github.dorumrr.privacyflip.util.DeviceDetector
 
 class MainFragment : Fragment() {
@@ -192,11 +191,6 @@ class MainFragment : Fragment() {
         setupBackgroundPermissionErrorCard()
         setupGlobalPrivacyCard()
         setupSystemRequirementsCard()
-        setupPrivilegeErrorAlert()
-    }
-
-    private fun setupPrivilegeErrorAlert() {
-        // No click listeners needed - this is a static alert card
     }
 
     private fun setupScreenLockCard() {
@@ -220,15 +214,12 @@ class MainFragment : Fragment() {
                 )
             }
 
-            // Samsung's payment/wallet framework can silently re-enable NFC right after this
-            // app disables it, on flagship models. NFCToggle has always been able to detect
-            // that and retry, but until now there was no way to actually turn it on - the code
-            // has been recommending it in its own log message, with nothing in the UI to act on
-            // that advice. Only shown on models where the override can actually happen, so it
-            // doesn't clutter the screen for everyone else.
+            // A payment or wallet app can silently turn NFC back on right after this app turns
+            // it off. First reported on Samsung, but NFCToggle's check only asks whether NFC
+            // came back on, never why, so the setting is offered on every device rather than
+            // guessed at from the model name.
             val preferenceManager = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext())
-            samsungNfcAutoRetryContainer.visibility =
-                if (io.github.dorumrr.privacyflip.util.DeviceDetector.isSamsungWithPaymentOverride()) View.VISIBLE else View.GONE
+            samsungNfcAutoRetryContainer.visibility = View.VISIBLE
             samsungNfcAutoRetryCheckbox.isChecked = preferenceManager.samsungNfcAutoRetry
             samsungNfcAutoRetryCheckbox.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
@@ -469,19 +460,12 @@ class MainFragment : Fragment() {
         updateGlobalPrivacyCard(uiState)
         updateSystemRequirementsCard(uiState)
         updateBackgroundPermissionErrorCard(uiState)
-        updatePrivilegeErrorAlert(uiState)
 
         // Update accessibility service card (refreshes on resume, config change, etc.)
         updateAccessibilityServiceUI()
 
         // Update interactive elements state (enable/disable based on privilege)
         updateInteractiveElementsState(uiState)
-    }
-
-    private fun updatePrivilegeErrorAlert(@Suppress("UNUSED_PARAMETER") uiState: UiState) {
-        // Alert removed - System Requirements card now shows all privilege status information
-        // This eliminates redundant UI elements and reduces visual clutter
-        binding.privilegeErrorAlert.root.visibility = View.GONE
     }
 
     private fun updatePrivacySettings(uiState: UiState) {

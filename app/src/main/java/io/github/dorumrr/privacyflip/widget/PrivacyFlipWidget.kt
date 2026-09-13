@@ -26,6 +26,23 @@ class PrivacyFlipWidget : AppWidgetProvider() {
         private const val TAG = "PrivacyFlipWidget"
 
         /**
+         * Flips global privacy on or off and redraws the widgets, which is what both the
+         * quick-settings tile and the widget's own tap do. Written out in both places before,
+         * so a guard added to one (making the read-flip-write safe against a concurrent
+         * writer, say) would have silently missed the other.
+         *
+         * @return the new state
+         */
+        fun toggleGlobalPrivacy(context: Context, tag: String): Boolean {
+            val preferenceManager = PreferenceManager.getInstance(context)
+            val newState = !preferenceManager.isGlobalPrivacyEnabled
+            preferenceManager.isGlobalPrivacyEnabled = newState
+            Log.d(tag, "Global privacy toggled: ${!newState} -> $newState")
+            updateAllWidgets(context)
+            return newState
+        }
+
+        /**
          * Update all widgets to reflect current privacy state.
          * Can be called from anywhere (Tile, MainViewModel, etc.)
          */

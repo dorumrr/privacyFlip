@@ -7,8 +7,10 @@ import android.service.quicksettings.TileService
 import android.util.Log
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 @TargetApi(Build.VERSION_CODES.N)
@@ -31,6 +33,14 @@ abstract class BaseTileService : TileService() {
         super.onStartListening()
         updateTileState()
     }
+
+    // onDestroy, not onStopListening: the panel closing stops listening while this same instance
+    // lives on and will be reused, and a cancelled scope never recovers - cancelling there would
+    // leave the tile unable to update again.
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
+    }
     
     override fun onClick() {
         super.onClick()
@@ -40,6 +50,11 @@ abstract class BaseTileService : TileService() {
             try {
                 executeAction()
                 updateTileState()
+            } catch (cancelled: CancellationException) {
+                // Teardown cancelled this, so the tile is already gone: reporting an error on it
+                // would touch a destroyed instance. CancellationException is an Exception, so
+                // without this it would fall into the catch below.
+                throw cancelled
             } catch (e: Exception) {
                 Log.e(tag, "Error executing tile action", e)
                 qsTile?.state = Tile.STATE_UNAVAILABLE
@@ -54,6 +69,8 @@ abstract class BaseTileService : TileService() {
         serviceScope.launch {
             try {
                 updateTileStateInternal()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Log.e(tag, "Error updating tile state", e)
                 qsTile?.state = Tile.STATE_UNAVAILABLE

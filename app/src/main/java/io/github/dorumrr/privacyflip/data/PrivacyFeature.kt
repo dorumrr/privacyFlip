@@ -15,10 +15,6 @@ enum class PrivacyFeature(
     BATTERY_SAVER("Battery Saver", "System battery saver mode");
 
     companion object {
-        fun getConnectivityFeatures(): List<PrivacyFeature> {
-            return listOf(WIFI, BLUETOOTH, MOBILE_DATA, LOCATION, NFC)
-        }
-
         // Set, not List: PrivacyActionWorker.kt calls these inside `in`/`!in` filter predicates,
         // once per feature being categorised, so a List would mean an O(n) scan every time; a
         // Set makes that O(1). Each still allocates once per call (a Kotlin literal set has no
@@ -41,20 +37,6 @@ enum class FeatureState {
     UNAVAILABLE,
     ERROR
 }
-
-enum class FeatureSupport {
-    FULLY_SUPPORTED,
-    BASIC_SUPPORT,
-    UNSUPPORTED
-}
-
-data class PrivacyConfig(
-    val lockFeatures: Set<PrivacyFeature> = emptySet(),
-    val unlockFeatures: Set<PrivacyFeature> = emptySet(),
-    val lockDelaySeconds: Int = 0,
-    val unlockDelaySeconds: Int = 0,
-    val showCountdown: Boolean = true
-)
 
 data class PrivacyResult(
     val feature: PrivacyFeature,

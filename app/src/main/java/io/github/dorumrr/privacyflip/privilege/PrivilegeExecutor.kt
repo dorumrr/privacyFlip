@@ -42,18 +42,28 @@ interface PrivilegeExecutor {
      * @param commands List of commands to try
      * @return CommandResult from the first successful command, or last failure
      */
-    suspend fun executeWithFallbacks(commands: List<String>): CommandResult
+    suspend fun executeWithFallbacks(commands: List<String>): CommandResult {
+        if (commands.isEmpty()) {
+            return CommandResult.failure("No commands provided")
+        }
+
+        var lastResult: CommandResult? = null
+
+        for (command in commands) {
+            val result = executeCommand(command)
+            if (result.success) {
+                return result
+            }
+            lastResult = result
+        }
+
+        return lastResult ?: CommandResult.failure("All commands failed")
+    }
     
     /**
      * Get the privilege method this executor provides
      */
     fun getPrivilegeMethod(): PrivilegeMethod
-    
-    /**
-     * Get the UID (user ID) this executor runs as
-     * @return 0 for root, 2000 for ADB/Shizuku, -1 for unknown
-     */
-    suspend fun getUid(): Int
     
     /**
      * Clean up resources when executor is no longer needed

@@ -15,28 +15,6 @@ abstract class BasePrivacyToggle(
     protected abstract val statusCommands: List<CommandSet>
     protected abstract val featureName: String
     
-    override suspend fun isSupported(): FeatureSupport {
-        return try {
-            // Check if privilege is granted (works for Root, Dhizuku, Shizuku, and Sui)
-            if (!rootManager.isRootGranted()) {
-                // Can't check support without permission - assume supported
-                // This is optimistic but prevents blocking UI before permission is granted
-                return FeatureSupport.FULLY_SUPPORTED
-            }
-
-            val result = rootManager.executeWithFallbacks(statusCommands.map { it.primary })
-            if (result.success) {
-                FeatureSupport.FULLY_SUPPORTED
-            } else {
-                Log.w(TAG, "$featureName support check failed: ${result.error}")
-                FeatureSupport.BASIC_SUPPORT
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking $featureName support", e)
-            FeatureSupport.UNSUPPORTED
-        }
-    }
-    
     override suspend fun enable(): PrivacyResult {
         return executeCommand(enableCommands, "enable")
     }
@@ -99,20 +77,12 @@ abstract class BasePrivacyToggle(
         }
     }
     
-    protected open fun parseStatusOutput(output: String): FeatureState {
-        return when {
-            output.contains("1") || output.contains("enabled") || output.contains("on") -> {
-                FeatureState.ENABLED
-            }
-            output.contains("0") || output.contains("disabled") || output.contains("off") -> {
-                FeatureState.DISABLED
-            }
-            else -> {
-                Log.w(TAG, "$featureName status unknown, output: '$output'")
-                FeatureState.UNKNOWN
-            }
-        }
-    }
+    // Abstract, not a default body: every subclass reads a different command's output, and the
+    // generic fallback that used to live here duplicated StatusParsingUtils.parseStandardOutput()
+    // while never running in production (all subclasses override). A new subclass that forgets to
+    // parse its own output now fails to compile, instead of silently getting a parser nothing
+    // tested against its command.
+    protected abstract fun parseStatusOutput(output: String): FeatureState
 }
 
 

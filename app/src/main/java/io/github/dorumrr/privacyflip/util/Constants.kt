@@ -41,7 +41,8 @@ object Constants {
 
         const val KEY_EXEMPT_APPS = "exempt_apps"
         
-        // Samsung NFC auto-retry preference
+        // Applies to every device despite the name: renaming the stored key would silently
+        // reset the setting for everyone who already turned it on.
         const val KEY_SAMSUNG_NFC_AUTO_RETRY = "samsung_nfc_auto_retry"
         
         // Accessibility service preference
@@ -117,15 +118,6 @@ object Constants {
         // When true, won't disable on unlock if user manually enabled the mode
         const val AIRPLANE_MODE_ONLY_IF_NOT_MANUAL = true
         const val BATTERY_SAVER_ONLY_IF_NOT_MANUAL = true
-    }
-
-    object Logging {
-        const val LOG_FILE_NAME = "app_logs.txt"
-        const val MAX_LOG_SIZE_KB = 500
-        const val LOG_ROTATION_KEEP_RATIO = 0.8f
-        const val BYTES_PER_KB = 1024
-        const val MAX_BATCH_SIZE = 50
-        const val LOG_PROCESSING_INTERVAL_MS = 1000L
     }
 
     object UI {

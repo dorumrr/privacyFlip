@@ -29,12 +29,5 @@ object SuiDetector {
         }
     }
 
-    fun isSuiAvailable(): Boolean {
-        return try {
-            Sui.isSui()
-        } catch (e: Exception) {
-            false
-        }
-    }
 }
 

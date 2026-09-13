@@ -9,8 +9,12 @@ import org.junit.Test
 
 /**
  * executeWithFallbacks() used to be copy-pasted, byte for byte, into all three executors
- * (Root, Shizuku, Dhizuku). It now lives once as a default method on this interface, so this
- * test covers the retry path behind every privileged command the app runs.
+ * (Root, Shizuku, Dhizuku). It now lives once as a default method on this interface, and this
+ * test covers that shared body.
+ *
+ * It does NOT cover every privileged command: ConnectionStateChecker calls
+ * rootManager.executeCommand() directly for its WiFi, hotspot and location checks, and that
+ * single-command path never enters executeWithFallbacks().
  *
  * The fake below implements only executeCommand(), which is the point: it inherits
  * executeWithFallbacks() from the interface, so what is tested here is the shared body itself.

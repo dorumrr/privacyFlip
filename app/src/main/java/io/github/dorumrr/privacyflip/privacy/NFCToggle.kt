@@ -81,7 +81,7 @@ class NFCToggle(
             return PrivacyResult(
                 feature = feature,
                 success = false,
-                message = "NFC turned itself back on right after being disabled. Turn on 'NFC Auto-Retry' in settings, or remove payment cards from your wallet app."
+                message = "NFC read as enabled again right after being disabled. Turn on 'NFC Auto-Retry' on the main screen to retry automatically. A payment or wallet app may be turning it back on."
             )
         }
 

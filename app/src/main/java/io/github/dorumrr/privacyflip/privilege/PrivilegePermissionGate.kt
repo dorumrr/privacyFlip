@@ -55,6 +55,12 @@ class PrivilegePermissionGate(
     @Volatile
     private var cached: Boolean? = null
 
+    // Volatile because the two ends are on different threads: request() writes this from the
+    // caller's dispatcher, while deliverResult() reads and clears it on whichever thread the
+    // backend delivers its answer on (the main thread, for both Shizuku's listener and
+    // Dhizuku's callback). Without it, deliverResult can read a stale null, decide nothing is
+    // waiting, and leave the request to time out and report refused after the user allowed it.
+    @Volatile
     private var continuation: Continuation<Boolean>? = null
 
     /** The last known answer, without asking the backend. Null means "not known". */

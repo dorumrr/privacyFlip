@@ -4,172 +4,311 @@ Tier: 3
 
    [ ]  not started        [~]  in progress        [x]  done
 
-   A. FOUND DURING C2's ADVERSARIAL REVIEW (10 Sep), CONFIRMED BY /phi:debug (10 Sep)
-   [x] A1  ACTION_SCREEN_ON's "not locked" branch never re-enables what it disabled   done 10 Sep - now enqueues the unlock-side re-enable
-   [x] A2  Unlock-side re-enable can race ahead of and finish before the sensor disable   done 10 Sep - 3 parts, 2 found by this round's own review, see below
-   [x] A3  Side-button unlock detection has a bounded, not permanent, blind spot      done 10 Sep - delayed re-check added for when no window event ever arrives
-   [x] A4  PendingLockWork.cancel() logs success even when nothing was cancelled      done 10 Sep - now reads WorkManager's real Operation result
-   [x] A5  The hotspot check goes stale between when it's read and when it's used     done 10 Sep - Airplane Mode gets a fresh re-check; found and fixed a notification-consistency bug in this same fix
-   [x] A6  Lock-delay warning text overclaims what camera protection does             done 10 Sep - Doru chose: correct the wording, not build real detection
+   B. FOUND BY /phi:tidy'S WHOLE-REPO SWEEP (13 Sep)
+   [ ] B1   LogManager writes a log file nothing ever reads                    /phi:fix
+   [ ] B2   Decide the permission-request flow's fate: real checks, or gone    decided 13 Sep - remove it, superseded by MainFragment's own per-feature request flows
+   [ ] B3   Remove the 31 confirmed-dead methods, re-checked fresh             BLOCKS ON B1,B2, /phi:remove
+   [ ] B4   Merge 3 identical executeWithFallbacks() into one                  /phi:fix
+   [ ] B5   Merge 4 identical WorkManager-enqueue blocks into one              needs a new test first, /phi:fix
+   [ ] B6   Merge 3 identical "log to 2 sinks" trios into one                  /phi:fix
+   [ ] B7   Consolidate all 7 near-duplicate pairs                            decided 13 Sep - all of them. BLOCKS ON B4,B5,B6
+   [ ] B8   Tie PrivacyManager's toggle map to the feature enum                /phi:fix
+   [ ] B9   Give BasePrivacyToggle's default parser real coverage, or drop it  /phi:fix
+   [ ] B10  Cancel BaseTileService's coroutine scope on teardown               first test in tile/, /phi:fix
+   [ ] B11  Fold MainViewModel's 9 dead-end wrappers into their own switch     decided 13 Sep - fold them in, /phi:fix
+   [ ] B12  Remove MainFragment's no-op privilege-error-alert pair             decided 13 Sep - remove it, /phi:remove
+   [ ] B13  Widen Samsung's NFC-override retry to every device                decided 13 Sep - yes, all devices, incl. the setting's UI and wording, /phi:fix
+   [ ] B14  BaseTileService's single-subclass shape                            decided 13 Sep - no action, fine as-is
 
-## A1  ACTION_SCREEN_ON's "not locked" branch never re-enables what it disabled
+## B1  LogManager writes a log file nothing ever reads
 
-DONE 10 Sep. ScreenStateReceiver's ACTION_SCREEN_ON handler now calls triggerPrivacyAction(
-isLocking=false,...) in its "not locked" branch, mirroring ACTION_USER_PRESENT exactly, so it
-both cancels the pending lock job AND enqueues the unlock-side re-enable.
+util/LogManager.kt runs real disk I/O (a queue, a 1-second wake loop, file rotation) on every
+privilege/ log call, writing app_logs.txt. Nothing in the repo ever reads that file - the log
+screen you actually use reads a completely separate file, DebugLogHelper's.
 
-Watched red then green: ScreenStateReceiverTest's existing assertion (which proved the bug by
-expecting 0 enqueued NAME_UNLOCK jobs) failed the moment the fix landed, since the code now
-correctly enqueues 1 - updated the same test to assert the fix instead of the bug, watched it
-pass, ran it 5 times to confirm no flakiness.
+Audit 13 Sep settled the branch: REMOVE the file-write path. The "give it a consumer" branch is
+a trap - LogManager writes with no debugLogsEnabled gate, while the log screen's Clear and Share
+act only on DebugLogHelper's file, so a user would tap Clear, be told "Logs cleared", and still
+see LogManager lines. Anything the privilege layer should surface to the user later goes through
+DebugLogHelper's own gated API (B7 pair 4 decides that), never a second file. LogFileRotator.kt
+and Constants.Logging exist only for this path and go with it.
 
-The remaining Inferred claim from the debug round stands unchanged: whether ACTION_USER_PRESENT
-still fires on a device with no lock-screen security set ("None") was never independently tested,
-only reasoned about. Since this fix makes ACTION_SCREEN_ON itself cover the re-enable now, that
-open question matters less than it did - this path no longer depends on ACTION_USER_PRESENT to
-recover from the pre-keyguard grace-period scenario.
+Command: /phi:fix LogManager.kt's app_logs.txt has zero readers anywhere in the repo (confirmed
+by /phi:tidy, 13 Sep) but costs real disk I/O on every privilege-layer log call - remove the
+file-write path (queue, 1s loop, rotation, file, LogFileRotator, Constants.Logging), keep the
+android.util.Log output every call already makes
 
-depends on: none    touches: receiver/ScreenStateReceiver.kt (ACTION_SCREEN_ON branch)
-  [Verified at runtime - ScreenStateReceiverTest, watched fail then pass, stable across 5 runs]
+depends on: none    touches: util/LogManager.kt, util/LogFileRotator.kt, util/Constants.kt
 
-## A2  Unlock-side re-enable can race ahead of and finish before the sensor disable
+## B2  Decide the permission-request flow's fate
 
-DONE 10 Sep, 3 parts - the first was the planned fix, the other 2 were found by this round's own
-adversarial review attacking A2 itself, not pre-existing or adjacent findings.
+permission/PermissionChecker.kt's getUngrantedPermissions() is hardcoded to always return
+nothing, which makes MainActivity's generic permission-request dialog structurally unreachable.
 
-**Part 1: mutual exclusion.** PrivacyActionWorker gained `internal val sensorMutex = Mutex()`
-(kotlinx.coroutines.sync), wrapped around both the lock-side sensor-disable block and the
-unlock-side sensor-enable block, so the two privileged calls can never overlap with each other.
+DECIDED 13 Sep - Doru asked which way, investigated before answering: the app declares 2 real
+Android runtime permissions, POST_NOTIFICATIONS and BLUETOOTH_CONNECT. Both already have their
+OWN separate, working, context-specific request flows in MainFragment.kt
+(notificationPermissionLauncher around line 391-395, bluetoothPermissionLauncher around line
+999-1013, each fires when the relevant feature is turned on) - confirmed by reading both call
+sites directly. The generic PermissionChecker/MainActivity chain covers nothing those two
+don't already cover; every other manifest permission is either normal (no runtime prompt) or a
+special-access permission granted via a Settings intent, not this mechanism. Answer: remove the
+generic flow, it is genuinely superseded, not masking a live gap.
 
-**Part 2: correct ordering, not just exclusion.** Found by this round's own review: a mutex only
-proves mutual exclusion, not real-world order. Each job does variable-latency setup (privilege
-checks, singleton lookups) before ever reaching the mutex, so whichever one arrives first wins it
-first - not necessarily the one whose real-world event happened first. A lock immediately undone
-by a fast unlock could still see the unlock's enable finish before the lock's disable even reaches
-the mutex, leaving sensors disabled after the real, later unlock. Closed with `lastLockAtMillis`,
-the lock-side twin of the already-existing `lastUnlockAtMillis` (#C2 Part 1) - each side checks,
-still inside the mutex and right before its own privileged call, whether the opposite action has
-already been recorded as happening after this cycle started, and skips if so.
+Command: /phi:remove permission/PermissionChecker.kt's generic permission-request chain
+(getAllPermissionStatus, getUngrantedPermissions, getRequiredUngrantedPermissions,
+isPermissionGranted, areAllRequiredPermissionsGranted, getPermissionsToRequest, all hardcoded or
+unreachable) plus MainActivity.kt's permissionLauncher/pendingPermissionRequest wiring and
+MainViewModel.kt's requestPermissions() - superseded by MainFragment's own per-feature launchers
 
-**Part 3: the #G1 pattern's missing twin.** Also found by this round's own review: nothing stopped
-a 3rd unlock signal (any of this app's 3 independent unlock-detection paths noticing the same real
-unlock) from REPLACE-enqueuing NAME_UNLOCK while a 2nd unlock job was still mid-way through
-enableFeatures() - WorkManager's REPLACE cancels a running coroutine, the exact #G1 race already
-guarded on the lock/disable side (sensorDisableInProgress) but never extended to the unlock/enable
-side. Closed with the new `sensorEnableInProgress` flag, checked at all 3 unlock-enqueue call
-sites the same way sensorDisableInProgress already guards the lock-enqueue sites.
+depends on: none    touches: permission/PermissionChecker.kt, MainActivity.kt,
+  ui/viewmodel/MainViewModel.kt    [Verified in code - read MainFragment's notification and
+  Bluetooth permission launchers directly, confirmed both real requests already happen there]
 
-Watched red then green twice: PrivacyActionWorkerSensorMutexTest's first case (mutual exclusion)
-and second case (ordering) were each watched fail with the relevant check deliberately bypassed,
-then pass once restored, each run 5 times to confirm stability. sensorEnableInProgress's guard is
-Verified in code only, matching the exact evidence tier its own precedent (sensorDisableInProgress)
-has always carried in this codebase - that flag is private-set and not writable from a test
-without either a test-only setter or the full doWork() pipeline, neither of which exists here.
+## B3  Remove the 31 confirmed-dead methods
 
-depends on: none    touches: worker/PrivacyActionWorker.kt (sensorMutex, lastLockAtMillis,
-  sensorEnableInProgress, both sensor blocks), receiver/ScreenStateReceiver.kt,
-  accessibility/PrivacyAccessibilityService.kt, service/PrivacyMonitorService.kt (the 3
-  sensorEnableInProgress-guarded enqueue sites)    [Verified at runtime - the mutex and the
-  ordering check, both watched fail then pass; Verified in code - sensorEnableInProgress's guard]
+Zero callers anywhere in the repo, independently verified twice (once by me, once by an
+adversarial reviewer who tried and failed to prove one wrong). Full list is in the /phi:tidy
+report from this session. Must run after B2, and /phi:remove re-checks callers fresh anyway -
+note B2 already removes several of these (the PermissionChecker methods), so B3's real
+remaining scope is the other 27.
 
-Not verified: no live device run of any of the 3 parts; ScreenStateReceiverTest checks that
-  NAME_UNLOCK work was enqueued but not that it carries correct input Data - a real, low-risk,
-  filed-not-fixed test-coverage gap (the call reuses the exact same, already-tested
-  triggerPrivacyAction() shape ACTION_USER_PRESENT already uses correctly)
+The full 31, so this step does not depend on a chat transcript (4 marked * are PermissionChecker's
+and go with B2; 2 marked + live in code B1 deletes outright):
+  privilege/CommandResult.kt: getOutputString(), hasOutput()
+  privilege/PrivilegeMethod.kt: isRootLevel(), isAdbLevel(), isDeviceOwnerLevel(), isAvailable()
+  privilege/PrivilegeManager.kt: getUid() - cascades to PrivilegeExecutor.getUid() and its 3
+    implementations, which have no other caller
+  privilege/SuiDetector.kt: isSuiAvailable()
+  privacy/PrivacyManager.kt: getAvailableToggles(), getToggle(), checkFeatureSupport()
+  util/LogFileRotator.kt: ROTATION_KEEP_SIZE +
+  util/LogManager.kt: cleanup() +
+  util/SingletonHolder.kt: SingletonHolderNoArg
+  util/BatteryOptimizationManager.kt: logBatteryOptimizationStatus()
+  util/ForegroundAppDetector.kt: isAppInForeground()
+  util/PreferenceManager.kt: updateBatch(), isAppExempt()
+  util/DebugLogHelper.kt: d()
+  root/RootManager.kt: getDeviceInfo() + data class DeviceInfo, executeCommands(),
+    redetectPrivilegeMethod() - cascades to privilege/PrivilegeManager.kt:145's
+    redetectPrivilegeMethod(), whose only caller is this dead wrapper (audit 13 Sep)
+  accessibility/PrivacyAccessibilityService.kt: isRunning()
+  permission/PermissionChecker.kt: getAllPermissionStatus()*, isPermissionGranted()*,
+    areAllRequiredPermissionsGranted()*, getPermissionsToRequest()*
+  ui/viewmodel/MainViewModel.kt: updatePrivacyConfig(), toggleLockFeature(),
+    toggleUnlockFeature() - cascades to _privacyConfig/privacyConfig and data/PrivacyFeature.kt's
+    PrivacyConfig class, which nothing else uses
+  data/PrivacyFeature.kt: getConnectivityFeatures()
 
-## A3  Side-button unlock detection has a bounded, not permanent, blind spot
+Command: /phi:remove the dead methods listed above under B3 - re-verify callers fresh against
+the tree as it stands, not the 13 Sep snapshot
 
-DONE 10 Sep. PrivacyAccessibilityService gained scheduleUnlockRecheck(): when the "keyguard still
-locked" race is hit, a Handler.postDelayed re-checks real keyguard state again after 500ms,
-regardless of whether any further window-state-change event ever arrives - closing the gap the
-self-heal-on-next-event behaviour (still true, unchanged) doesn't cover: a user who unlocks just
-to glance and re-locks without navigating anywhere generates no further window event to trigger
-the existing re-check.
+depends on: B1, B2    touches: 20 files across privilege/, privacy/, util/, root/, accessibility/,
+  ui/viewmodel/, data/
 
-Found and fixed along the way: Robolectric.setupService() only drives the plain Service lifecycle
-(onCreate) - it never calls onServiceConnected(), the AccessibilityService-specific system binder
-callback real Android always fires before any accessibility event can arrive. Every existing test
-was silently running with isServiceRunning permanently false, which the new delayed-recheck guard
-depends on - would have made the whole fix untestable, not a bug in the fix itself. Fixed by
-widening onServiceConnected() from the inherited protected to public (idempotent, no real
-downside) and adding a connectedService() test helper that calls it, matching real lifecycle order.
+## B4  Merge 3 identical executeWithFallbacks() into one
 
-Watched red then green: the new test failed first (isServiceRunning false, guard short-circuited),
-fixed the test's own setup gap, watched it pass, ran it 5 times to confirm no flakiness.
+privilege/RootExecutor.kt, DhizukuExecutor.kt, ShizukuExecutor.kt each implement this
+byte-for-byte identically - confirmed twice, held under adversarial review both times.
 
-depends on: none    touches: accessibility/PrivacyAccessibilityService.kt (scheduleUnlockRecheck,
-  onServiceConnected widened to public)    [Verified at runtime - PrivacyAccessibilityServiceTest,
-  watched fail then pass, stable across 5 runs]
+Command: /phi:fix privilege/RootExecutor.kt:117-133, DhizukuExecutor.kt:231-247,
+ShizukuExecutor.kt:257-273 implement executeWithFallbacks() byte-for-byte identically - merge
+into one shared implementation (PrivilegeExecutor interface default method) all 3 inherit
 
-Not verified: no live device run; whether 500ms is the right delay for a real dismiss-animation
-  lag on real hardware, versus this session's own reasoning about what "short enough to be
-  irrelevant, long enough to clear a lag" means
+depends on: none    touches: privilege/RootExecutor.kt, DhizukuExecutor.kt, ShizukuExecutor.kt,
+  PrivilegeExecutor.kt
 
-## A4  PendingLockWork.cancel() logs success even when nothing was cancelled
+## B5  Merge 4 identical WorkManager-enqueue blocks into one
 
-DONE 10 Sep. cancel() now reads the Operation cancelUniqueWork() returns: a listener on its
-result (a ListenableFuture, resolved asynchronously by WorkManager) logs whichever real outcome
-actually happens - confirmed or failed - instead of the call site optimistically logging success
-up front. Runs on an inline same-thread Executor (logging is cheap and thread-safe, no need to
-hop threads); the call site itself stays non-blocking, matching all 4 of its callers (broadcast
-receivers, an accessibility event handler - none of them coroutines).
+receiver/ScreenStateReceiver.kt, service/PrivacyMonitorService.kt, and 2 sites in
+accessibility/PrivacyAccessibilityService.kt build the same OneTimeWorkRequestBuilder+workDataOf
+shape. Caution: no existing test checks the enqueued Data payload contents at any of these 4
+sites, and PrivacyAccessibilityService's 2nd site isn't exercised by any test at all - write a
+test asserting the payload first, or a merge could silently swap which value maps to which key
+with nothing turning red.
 
-Watched red then green: PendingLockWorkTest failed against the old (Operation-discarding) shape,
-passed once the listener was added. Strengthened mid-round after this round's own adversarial
-review correctly challenged that the first draft only ever cancelled a no-op (nothing pending) -
-now enqueues a real NAME_LOCK job first, so the test exercises cancelling something genuine. A
-real Operation FAILURE specifically still cannot be forced in Robolectric's test WorkManager (no
-API for it) - that half stays Verified in code only, not overclaimed as tested.
+Command: /phi:fix the WorkManager-enqueue boilerplate in receiver/ScreenStateReceiver.kt:149-167,
+service/PrivacyMonitorService.kt:244-262, accessibility/PrivacyAccessibilityService.kt:209-226
+and :265-280 is identical except for argument values - write a test asserting the enqueued Data
+payload at all 4 sites first, then merge into one shared helper
 
-depends on: none    touches: util/PendingLockWork.kt (cancel())
-  [Verified at runtime - PendingLockWorkTest, watched fail then pass, stable across 5 runs;
-  Verified in code - the failure-logging path specifically, not independently forced in a test]
+depends on: none    touches: receiver/ScreenStateReceiver.kt, service/PrivacyMonitorService.kt,
+  accessibility/PrivacyAccessibilityService.kt
 
-## A5  The hotspot check goes stale between when it's read and when it's used
+## B6  Merge 3 identical "log to 2 sinks" trios into one
 
-DONE 10 Sep, 2 parts - the second found by this round's own adversarial review attacking A5
-itself, not pre-existing.
+worker/PrivacyActionWorker.kt, receiver/ScreenStateReceiver.kt, privacy/PrivacyManager.kt each
+have their own logDebug/logWarning/logError trio doing the same Log.X-then-DebugLogHelper.X
+pattern. util/PendingLockWork.kt looks similar but was checked and correctly excluded - it only
+has 2 of the 3 methods, with a different signature.
 
-**Part 1: the planned fix.** The protection-modes loop now computes
-`hotspotActiveForAirplaneMode`, a fresh call to connectionChecker.isHotspotActive(), right before
-the Airplane Mode decision - only when Airplane Mode is actually configured, so this costs
-nothing extra when it isn't. Replaces reusing the earlier hotspotActiveNow, which by this point
-had already gone stale behind a real disableFeatures() root/Shizuku round-trip.
+Command: /phi:fix worker/PrivacyActionWorker.kt:130-143, receiver/ScreenStateReceiver.kt:18-31,
+privacy/PrivacyManager.kt:29-42 each hand-write the same logDebug/logWarning/logError-to-2-sinks
+trio - merge into one shared implementation all 3 can call
 
-**Part 2: a notification-consistency bug this round's own fix introduced.** Splitting the check
-into an early read (still used for the regularFeatures filter and its own notification) and a
-late, fresh read (for Airplane Mode) opened a new gap: the early notification used to name
-Airplane Mode as "kept on despite lock, hotspot is active" - but the LATE, fresh check could now
-reach a different answer and actually enable Airplane Mode anyway, contradicting what the user
-was just told. Fixed: the early notification no longer names Airplane Mode at all; the real
-notification for Airplane Mode's fate now fires at the point the fresh check actually decides it,
-so what the user is told always matches what the code does.
+depends on: none    touches: worker/PrivacyActionWorker.kt, receiver/ScreenStateReceiver.kt,
+  privacy/PrivacyManager.kt
 
-A reviewer's separate claim - that Battery Saver could be processed before Airplane Mode in the
-same loop, staling the fresh check before it's even used - was checked and disproven:
-PrivacyFeature's own enum declaration order (AIRPLANE_MODE before BATTERY_SAVER) makes that
-ordering impossible, confirmed by reading how protectionModes is actually built.
+## B7  Consolidate all 7 near-duplicate pairs
 
-depends on: none    touches: worker/PrivacyActionWorker.kt (the lock branch's hotspot check and
-  its notification)    [Verified in code - both parts; no runtime test possible without mocking
-  ConnectionStateChecker/RootManager, infrastructure this codebase does not have, same limitation
-  already disclosed for A5 in the 10 Sep debug round]
+DECIDED 13 Sep - Doru: all 7. Pairs 4 (LogManager/DebugLogHelper) and 7 (PendingLockWork vs the
+log-trio B6 merges) may already be resolved or reshaped by B1 and B6 landing first - check each
+against the current code before starting, don't assume the 13 Sep description still matches.
 
-Not verified: the live consequence - a real hotspot starting/stopping in that exact window - this
-  machine's shell still cannot start one this session (unchanged from the debug round)
+1. CameraToggle <-> MicrophoneToggle - same sensor-privacy command, differ only by sensor ID
+2. DhizukuExecutor <-> ShizukuExecutor - near-identical permission-request flow, already
+   slightly out of sync. Audit 13 Sep: this one decides whether the app gets privileged access,
+   and neither binder can be driven from a JVM test - so the ONLY acceptable shape is a shared
+   flow class (the caching, the 30s timeout, the continuation null-guard, the post-response
+   double-check) tested red-then-green against a fake backend, with each executor keeping its
+   own thin SDK hooks byte-for-byte. A refactor that cannot be tested that way stays filed, not
+   done. The 30s timeout must be an injectable parameter: this repo has no
+   kotlinx-coroutines-test, so a hard-coded 30s would cost 30 real seconds per test run
+3. privilege.CommandResult <-> root.CommandResult - same 4 fields, hand-copied in 3 places
+4. LogManager <-> DebugLogHelper - re-check after B1, may be moot if B1 removes LogManager
+5. PrivacyFlipTileService <-> PrivacyFlipWidgetToggleReceiver - same toggle sequence
+6. DebugNotificationHelper <-> PrivacyMonitorService - near-identical notification-channel setup.
+   Audit 13 Sep: the two channels differ on purpose (IMPORTANCE_LOW vs DEFAULT, vibration and
+   lights flags), so the shared helper takes those as parameters - a merge that flattens them
+   changes what the user sees and is wrong
+7. PendingLockWork's log pair <-> B6's merged trio - re-check after B6, may already fit in
 
-## A6  Lock-delay warning text overclaims what camera protection does
+Command: /phi:fix <one pair at a time from the list above, re-verified against current code>
 
-DONE 10 Sep. Asked Doru directly which path to take (correct the wording, or build real
-camera-in-use detection) - PLAN.md's own text had flagged this as a product choice, not something
-to guess at. Answer: correct the wording.
+depends on: B4, B5, B6    touches: varies per pair
 
-`lock_delay_warning_message` and the matching fastlane store-listing line no longer imply camera
-skips the immediate trigger while in use - both now say plainly that microphone can skip it
-during a genuine call (if that setting is on) while camera has no way to detect active use and
-always triggers immediately, even mid video-call. README.md was checked too (full search, not
-assumed clean) and already carried no such claim - no change needed there.
+## B8  Tie PrivacyManager's toggle map to the feature enum
 
-depends on: none    touches: res/values/strings.xml (lock_delay_warning_message),
-  fastlane/metadata/android/en-US/full_description.txt    [Verified in code - the corrected text
-  read back against ConnectionStateChecker's actual behaviour, they now agree]
+privacy/PrivacyManager.kt:50-60 hand-builds a map from the 9-value PrivacyFeature enum with no
+compile-time tie for that specific map (a 10th feature would break the build elsewhere, in
+PreferenceManager.kt's exhaustive when-blocks, but not here).
+
+Command: /phi:fix privacy/PrivacyManager.kt:50-60's toggle map has no compile-time tie to the
+PrivacyFeature enum - give it one (e.g. build it from a when-expression over the enum instead of
+hand-written assignments) so a future feature can't be silently missing from it
+
+depends on: none    touches: privacy/PrivacyManager.kt
+
+## B9  Give BasePrivacyToggle's default parser real coverage, or drop it
+
+privacy/BasePrivacyToggle.kt:102-115's default parseStatusOutput() is invoked in production code
+but every one of the 9 real subclasses overrides it, so it has zero real coverage today. Audit
+13 Sep: no subclass calls super.parseStatusOutput() either - the 5 that want a generic parse call
+util/StatusParsingUtils.parseStandardOutput() instead, and this default body is a weaker copy of
+that same function (fewer patterns). So "add a test for it" would be testing a duplicate; the
+right option is to make it abstract and delete the copy.
+
+Command: /phi:fix privacy/BasePrivacyToggle.kt:102-115's default parseStatusOutput() body never
+executes in production (all 9 subclasses override it, none calls super) and duplicates
+StatusParsingUtils.parseStandardOutput() - make it abstract and delete the body, so a future
+subclass that forgets to override it fails to compile instead of silently getting an untested
+parser
+
+depends on: none    touches: privacy/BasePrivacyToggle.kt
+
+## B10  Cancel BaseTileService's coroutine scope on teardown
+
+tile/BaseTileService.kt:22 creates a CoroutineScope per tile instance; neither it nor its one
+subclass cancels it in any teardown method. This is the first test in the tile/ package -
+service/ and accessibility/ both already have the "call the lifecycle method directly, assert
+the consequence" pattern this would reuse, tile/ does not yet.
+
+Audit 13 Sep corrected the fix: NOT onStopListening()/onTileRemoved(). A TileService instance
+stays alive across many listen/stop cycles (every time the Quick Settings panel opens and
+closes), and a cancelled CoroutineScope stays cancelled - every later serviceScope.launch{}
+would silently never run, so the tile would stop updating after the first panel close. The
+instance is only truly finished in onDestroy(), so that is where the scope gets cancelled.
+
+Command: /phi:fix tile/BaseTileService.kt:22's serviceScope is never cancelled - cancel it in
+onDestroy() (not onStopListening, which fires every time the panel closes while the instance
+lives on), with a test proving a coroutine launched before onDestroy() does not resume after it
+
+depends on: none    touches: tile/BaseTileService.kt, tile/PrivacyFlipTileService.kt
+
+## B11  Fold MainViewModel's 9 dead-end wrappers into their own switch
+
+DECIDED 13 Sep - Doru asked me to judge by actual use, investigated: MainFragment's real UI
+code (its checkbox listeners, e.g. line 218-219, 1087-1092) calls only the generic
+`viewModel.updateFeatureSetting(feature, ...)`, passing the feature dynamically - one code path
+for all 9 features. That generic function's own `when` block is the only caller of each of the
+9 named wrappers (updateWifiSettings...updateBatterySaverSettings) - nothing else, anywhere,
+calls any of them directly. They are pure indirection between the switch and the shared
+updateFeatureSettings() helper, going nowhere else. Answer: fold each wrapper's 2-line body
+directly into its own `when` branch, remove the 9 functions.
+
+Command: /phi:fix ui/viewmodel/MainViewModel.kt:903-946's 9 update<Feature>Settings functions
+are called only from updateFeatureSetting()'s own when block (confirmed 13 Sep, no other
+caller anywhere) - fold each one's body into its when branch directly, remove the 9 functions
+
+depends on: none    touches: ui/viewmodel/MainViewModel.kt:889-960
+
+## B12  Remove MainFragment's no-op privilege-error-alert pair
+
+DECIDED 13 Sep - Doru asked me to check code and behaviour before deciding, investigated:
+setupPrivilegeErrorAlert() (MainFragment.kt:198) does nothing at all.
+updatePrivilegeErrorAlert() (line 481) only force-hides a view, and its own comment says why -
+"Alert removed - System Requirements card now shows all privilege status information." Confirmed
+that card (setupSystemRequirementsCard()/updateSystemRequirementsCard()) is called right
+alongside this pair and is the real, live replacement. The view itself
+(binding.privilegeErrorAlert, from res/layout/card_privilege_error_alert.xml, included in
+fragment_main.xml) is permanently View.GONE with no click listeners. Answer: safe to remove -
+the 2 no-op functions, their call sites, the XML include, and the now-unused layout file.
+
+Command: /phi:remove MainFragment.kt's setupPrivilegeErrorAlert()/updatePrivilegeErrorAlert()
+pair (confirmed 13 Sep to be pure no-ops, superseded by the System Requirements card) plus the
+privilegeErrorAlert include in fragment_main.xml and res/layout/card_privilege_error_alert.xml
+
+depends on: none    touches: ui/fragment/MainFragment.kt, res/layout/fragment_main.xml,
+  res/layout/card_privilege_error_alert.xml
+
+## B13  Widen Samsung's NFC-override retry to every device
+
+Doru's own context (13 Sep): the Samsung-specific override-retry in NFCToggle.kt was built for
+real reported Samsung NFC issues, but he's since heard it may not work properly on other devices
+either. Investigated: the actual retry mechanism (disable, wait 500ms, check if NFC silently
+came back on, retry up to 3 times) uses no Samsung-specific API at all - the ONLY Samsung-specific
+part is the gate, DeviceDetector.isSamsungWithPaymentOverride(), which is a Build.MODEL string
+match (SM-S/N/F/Z/G prefixes) that skips this check entirely on every non-Samsung device. Other
+manufacturers' own payment/wallet frameworks could plausibly override an NFC disable the same
+way Samsung's does - the mechanism itself doesn't care why NFC came back on, only that it did.
+
+DECIDED 13 Sep - Doru: yes, all devices. This is a real behaviour change (every device now gets
+the 500ms check-and-retry after disabling NFC, not just Samsung ones), not just a cleanup.
+
+Audit 13 Sep widened the scope - the gate is not only in NFCToggle. The same Samsung check hides
+the auto-retry setting itself: MainFragment.kt:230-231 shows samsungNfcAutoRetryContainer only
+on Samsung models, and res/layout/card_screen_lock_config.xml:112-156 labels it "Samsung
+Auto-Retry" with a description naming Samsung Wallet/Pay. NFCToggle.kt's own user-facing result
+messages say "Samsung payment override detected. Enable 'Samsung Auto-Retry'...". On a
+non-Samsung device after this change, all of that would be untrue or invisible. So: show the
+setting on every device, reword the label, description and result messages to be
+manufacturer-neutral (a payment/wallet app re-enabling NFC), keep the stored preference key
+"samsung_nfc_auto_retry" exactly as-is so nobody who already turned it on loses the setting,
+and remove DeviceDetector.isSamsungDevice()/isSamsungWithPaymentOverride(), which then have no
+caller left. The docs say "Samsung" too and go stale the same moment: README.md:47,
+fastlane/metadata/android/en-US/full_description.txt:14, and the Russian line at
+fastlane/metadata/android/ru/full_description.txt:12 - all three change in the same step (the
+Russian one gets the plainest neutral wording and is flagged for Doru to confirm). Two more
+audit notes: the container's XML default is visibility="gone" (card_screen_lock_config.xml:125),
+so dropping only the Kotlin gate would leave the control hidden for everyone, including the
+Samsung users who already turned it on - the visibility must be set to VISIBLE outright. And
+the "override persists" result message must not assert a wallet override as fact: on a slow NFC
+controller the state could simply lag, so say what was observed ("NFC still reports enabled
+after N retries") rather than why.
+
+Command: /phi:fix NFCToggle.kt:64's override-retry only runs on Samsung-model-matched devices
+via DeviceDetector.isSamsungWithPaymentOverride(), and MainFragment.kt:230 hides the auto-retry
+setting behind the same check, but the retry mechanism itself is manufacturer-agnostic - drop
+the gate in both places, show the setting everywhere, make its label/description/result
+messages manufacturer-neutral, keep the stored preference key unchanged, remove the two
+now-unused DeviceDetector Samsung functions
+
+depends on: none    touches: privacy/NFCToggle.kt, util/DeviceDetector.kt,
+  ui/fragment/MainFragment.kt:230-236, res/layout/card_screen_lock_config.xml:112-156
+
+## B14  BaseTileService's single-subclass shape
+
+DECIDED 13 Sep - Doru: ok, no action needed. tile/BaseTileService.kt:15 stays abstract with its
+one real subclass (PrivacyFlipTileService) - used, just no second subclass yet to justify the
+split further.
+
+depends on: none    touches: none - no change

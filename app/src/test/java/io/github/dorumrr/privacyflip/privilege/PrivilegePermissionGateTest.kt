@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.privilege
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,7 +24,7 @@ class PrivilegePermissionGateTest {
     private class FakeBackend(
         var available: Boolean = true,
         var permission: Boolean = false,
-        var preCheck: PermissionPreCheck = PermissionPreCheck.AskTheUser,
+        var preCheckWhenNotGranted: PermissionPreCheck = PermissionPreCheck.AskTheUser,
         val failOnStart: Boolean = false,
         /** Set to have the fake answer the moment the dialog is "shown". */
         val answerImmediatelyWith: Boolean? = null
@@ -31,19 +33,31 @@ class PrivilegePermissionGateTest {
         var requestsStarted = 0
         var gate: PrivilegePermissionGate? = null
 
-        fun buildGate(timeoutMs: Long = 200L): PrivilegePermissionGate {
+        /** Test-controlled clock, so an aged grant does not need real time to age. */
+        var now = 1_000L
+
+        fun buildGate(timeoutMs: Long = 200L, grantValidForMs: Long = 5_000L): PrivilegePermissionGate {
             val built = PrivilegePermissionGate(
                 tag = "FakeBackend",
                 logger = { null },
                 isBackendAvailable = { available },
                 readPermissionFromBackend = { reads++; permission },
-                preCheck = { preCheck },
+                // A real helper reports "already granted" once it has granted, which is what
+                // makes a second request cheap rather than a second dialog.
+                preCheck = {
+                    if (permission) PermissionPreCheck.AlreadyGranted else preCheckWhenNotGranted
+                },
                 startRequest = {
                     requestsStarted++
                     if (failOnStart) throw IllegalStateException("backend refused to start the request")
-                    answerImmediatelyWith?.let { gate?.deliverResult(it) }
+                    answerImmediatelyWith?.let {
+                        permission = it
+                        gate?.deliverResult(it)
+                    }
                 },
-                timeoutMs = timeoutMs
+                timeoutMs = timeoutMs,
+                grantValidForMs = grantValidForMs,
+                nowMillis = { now }
             )
             gate = built
             return built
@@ -120,7 +134,7 @@ class PrivilegePermissionGateTest {
 
     @Test
     fun `already granted skips the dialog entirely`() = runBlocking {
-        val backend = FakeBackend(preCheck = PermissionPreCheck.AlreadyGranted)
+        val backend = FakeBackend(permission = true)
         val gate = backend.buildGate()
 
         assertTrue(gate.request())
@@ -130,7 +144,7 @@ class PrivilegePermissionGateTest {
     @Test
     fun `a backend that cannot ask says no without showing a dialog`() = runBlocking {
         // Shizuku's real cases: too old a version, or the user ticked don't-ask-again.
-        val backend = FakeBackend(preCheck = PermissionPreCheck.CannotAsk)
+        val backend = FakeBackend(preCheckWhenNotGranted = PermissionPreCheck.CannotAsk)
         val gate = backend.buildGate()
 
         assertFalse(gate.request())
@@ -167,5 +181,54 @@ class PrivilegePermissionGateTest {
         // deterministic test in this suite can stage - deliberately breaking the order leaves
         // every test in this file green. The ordering is kept by construction and by comment in
         // deliverResult(); treat it as read, not as tested.
+    }
+
+    @Test
+    fun `a grant withdrawn in the backend is noticed once the remembered yes ages out`() = runBlocking {
+        val backend = FakeBackend(permission = true)
+        val gate = backend.buildGate(grantValidForMs = 5_000L)
+
+        assertTrue(gate.isGranted())
+        assertEquals("the first call asks the backend", 1, backend.reads)
+
+        // Still fresh: answered from memory, the backend is left alone.
+        backend.now += 4_000L
+        assertTrue(gate.isGranted())
+        assertEquals(1, backend.reads)
+
+        // The user revokes authorisation in the helper's own app. The binder stays alive, so
+        // nothing tells this app - only the re-read can.
+        backend.permission = false
+        backend.now += 2_000L
+
+        assertFalse("a withdrawn grant must not keep being reported as granted", gate.isGranted())
+        assertEquals("the backend must have been asked again", 2, backend.reads)
+    }
+
+    @Test
+    fun `a second request while one is still waiting does not steal its answer`() = runBlocking {
+        // The fake never answers on its own, so the first request is genuinely parked when the
+        // second arrives - which is the only moment the single waiting slot can be stolen.
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 300L)
+
+        val first = async { gate.request() }
+        yield()
+        assertEquals("the first request must be waiting by now", 1, backend.requestsStarted)
+
+        val second = async { gate.request() }
+        yield()
+        assertEquals(
+            "the second must wait its turn, not open a second dialog over the first",
+            1,
+            backend.requestsStarted
+        )
+
+        // The user answers the dialog the FIRST request opened.
+        backend.permission = true
+        gate.deliverResult(true)
+
+        assertTrue("the request that was waiting must get the answer", first.await())
+        assertTrue("and the one behind it must not be stranded", second.await())
     }
 }

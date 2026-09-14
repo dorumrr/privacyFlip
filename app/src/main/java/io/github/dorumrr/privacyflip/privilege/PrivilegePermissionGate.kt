@@ -1,7 +1,10 @@
 package io.github.dorumrr.privacyflip.privilege
 
+import android.os.SystemClock
 import io.github.dorumrr.privacyflip.util.LogManager
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
@@ -45,15 +48,28 @@ class PrivilegePermissionGate(
     private val readPermissionFromBackend: suspend () -> Boolean,
     private val preCheck: suspend () -> PermissionPreCheck,
     private val startRequest: () -> Unit,
-    private val timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+    private val grantValidForMs: Long = DEFAULT_GRANT_VALID_MS,
+    private val nowMillis: () -> Long = { SystemClock.elapsedRealtime() }
 ) {
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 30_000L
+
+        // A grant can be withdrawn in the backend's own app without the binder dying, so a
+        // remembered "yes" is re-read once it is this old. Short enough that a revoked grant is
+        // noticed quickly, long enough that the per-command check is not a binder call each time.
+        const val DEFAULT_GRANT_VALID_MS = 5_000L
     }
 
     @Volatile
     private var cached: Boolean? = null
+
+    @Volatile
+    private var cachedAtMillis: Long = 0L
+
+    // Serialises request() so two callers cannot both own the single continuation slot below.
+    private val requestMutex = Mutex()
 
     // Volatile because the two ends are on different threads: request() writes this from the
     // caller's dispatcher, while deliverResult() reads and clears it on whichever thread the
@@ -73,7 +89,7 @@ class PrivilegePermissionGate(
 
         if (!isBackendAvailable()) {
             log?.w(tag, "isPermissionGranted() - backend is not available")
-            cached = false
+            rememberAnswer(false)
             return false
         }
 
@@ -81,6 +97,11 @@ class PrivilegePermissionGate(
         // may have been stopped and restarted, and permission re-granted, since that "no".
         if (cached == false) {
             log?.d(tag, "isPermissionGranted() - backend available but cache is false, re-checking")
+            cached = null
+        }
+
+        if (cached == true && nowMillis() - cachedAtMillis >= grantValidForMs) {
+            log?.d(tag, "isPermissionGranted() - remembered grant has aged out, re-checking")
             cached = null
         }
 
@@ -92,30 +113,30 @@ class PrivilegePermissionGate(
         return try {
             val granted = readPermissionFromBackend()
             log?.d(tag, "isPermissionGranted() - backend reports: $granted")
-            cached = granted
+            rememberAnswer(granted)
             granted
         } catch (e: Exception) {
             log?.e(tag, "isPermissionGranted() - exception: ${e.message}")
-            cached = false
+            rememberAnswer(false)
             false
         }
     }
 
-    suspend fun request(): Boolean {
+    suspend fun request(): Boolean = requestMutex.withLock {
         val log = logger()
-        return try {
+        return@withLock try {
             log?.d(tag, "========== requestPermission() START ==========")
             log?.d(tag, "requestPermission() - current cached value: $cached")
 
             when (preCheck()) {
                 PermissionPreCheck.AlreadyGranted -> {
                     log?.d(tag, "requestPermission() - already granted, updating cache")
-                    cached = true
-                    return true
+                    rememberAnswer(true)
+                    return@withLock true
                 }
                 PermissionPreCheck.CannotAsk -> {
                     log?.w(tag, "requestPermission() - backend cannot ask for permission right now")
-                    return false
+                    return@withLock false
                 }
                 PermissionPreCheck.AskTheUser -> Unit
             }
@@ -144,16 +165,21 @@ class PrivilegePermissionGate(
             } ?: false
 
             log?.d(tag, "requestPermission() - result: $granted")
-            cached = granted
+            rememberAnswer(granted)
             log?.d(tag, "========== requestPermission() END - returning $granted ==========")
             granted
 
         } catch (e: Exception) {
             log?.e(tag, "requestPermission() - ERROR: ${e.message}")
             continuation = null
-            cached = false
+            rememberAnswer(false)
             false
         }
+    }
+
+    private fun rememberAnswer(granted: Boolean) {
+        cached = granted
+        cachedAtMillis = nowMillis()
     }
 
     /**
@@ -162,7 +188,7 @@ class PrivilegePermissionGate(
      */
     fun deliverResult(granted: Boolean) {
         val log = logger()
-        cached = granted
+        rememberAnswer(granted)
 
         // Cleared BEFORE resuming: a duplicate answer must not resume the same continuation
         // twice, which throws.
@@ -179,6 +205,7 @@ class PrivilegePermissionGate(
     /** Forgets the remembered answer, for teardown. */
     fun forget() {
         cached = null
+        cachedAtMillis = 0L
         continuation = null
     }
 }

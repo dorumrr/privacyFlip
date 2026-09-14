@@ -13,6 +13,16 @@ class RootExecutor : PrivilegeExecutor {
 
         @Volatile
         private var isShellInitialized = false
+
+        // The shell is built with FLAG_REDIRECT_STDERR, which makes libsu write stderr into the
+        // SAME list as stdout, so an su banner or warning can sit ahead of `id -u`'s answer.
+        internal fun isRootUid(outputLines: List<String>): Boolean =
+            outputLines.any { it.trim() == "0" }
+
+        // Only a NON-root cached shell is ever dropped. No privileged command can be running on
+        // one, while dropping a working root shell would tear down live work for nothing.
+        internal fun shouldDropCachedShell(hasCachedShell: Boolean, cachedIsRoot: Boolean): Boolean =
+            hasCachedShell && !cachedIsRoot
     }
 
     private var logManager: LogManager? = null
@@ -75,7 +85,7 @@ class RootExecutor : PrivilegeExecutor {
             // Try to execute a simple root command to check if permission is granted
             // This is more reliable than Shell.isAppGrantedRoot() which may cache results
             val result = Shell.cmd("id -u").exec()
-            val hasRoot = result.isSuccess && result.out.isNotEmpty() && result.out[0] == "0"
+            val hasRoot = result.isSuccess && isRootUid(result.out)
             _rootPermissionGranted = hasRoot
             return@withContext hasRoot
         } catch (e: Exception) {
@@ -84,8 +94,25 @@ class RootExecutor : PrivilegeExecutor {
         }
     }
 
+    /**
+     * libsu keeps ONE main shell and only replaces it when it dies. A non-root shell stays alive,
+     * so it is never replaced, and every later check re-reads the same answer. Without dropping it
+     * here, a re-check can never see root that was granted after that shell was built.
+     */
+    private fun dropStaleNonRootShell() {
+        val cached = Shell.getCachedShell()
+        if (!shouldDropCachedShell(cached != null, cached?.isRoot ?: false)) return
+        try {
+            cached?.close()
+            logManager?.d(TAG, "Dropped the cached non-root shell so the next check can re-run su")
+        } catch (e: Exception) {
+            logManager?.w(TAG, "Could not close the cached shell: ${e.message}")
+        }
+    }
+
     override suspend fun requestPermission(): Boolean = withContext(Dispatchers.IO) {
         try {
+            dropStaleNonRootShell()
             val shell = Shell.getShell()
             val granted = shell.isRoot
             _rootPermissionGranted = granted

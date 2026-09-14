@@ -46,15 +46,6 @@ class RootManager private constructor() {
         }
     }
 
-    suspend fun requestRootPermission(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            return@withContext privilegeManager?.requestPermission() ?: false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error requesting permission", e)
-            return@withContext false
-        }
-    }
-
     suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         try {
             return@withContext privilegeManager?.executeCommand(command)

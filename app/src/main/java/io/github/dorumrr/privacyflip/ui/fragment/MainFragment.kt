@@ -789,42 +789,30 @@ class MainFragment : Fragment() {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU ->
                         "Click 'Grant Dhizuku Permission' to try again or uninstall and reinstall the app, then grant permission at first start."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT ->
-                        "To properly grant root access, please uninstall and reinstall the app, then grant permission when prompted."
+                        "Privacy Flip could not confirm root access. Open Magisk, allow Privacy Flip, then tap 'Check Again'."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI ->
                         "Sui permission required. Please grant permission when prompted."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE ->
                         "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
                 }
 
-                // Show/hide button based on privilege method
-                // ROOT method: Hide button (Magisk doesn't allow re-requesting), show instructions only
-                // SHIZUKU/DHIZUKU/SUI: Show button (can re-request permission)
-                // NONE: Show button (to open Shizuku install page)
-                when (privilegeMethod) {
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> {
-                        // Hide button for ROOT - Magisk doesn't allow re-requesting
-                        rootActionsContainer.visibility = View.GONE
-                    }
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU,
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU,
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI,
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> {
-                        // Show button for Shizuku/Dhizuku/Sui/None
-                        rootActionsContainer.visibility = View.VISIBLE
+                // Every method gets a control. ROOT used to get none, on the grounds that Magisk
+                // cannot be re-prompted, which left a phone that misread its own root state with
+                // no way back inside the app. Its button re-runs the check instead of re-asking:
+                // Shell.getShell() is cached, so it cannot pester Magisk.
+                rootActionsContainer.visibility = View.VISIBLE
 
-                        grantRootButton.text = when (privilegeMethod) {
-                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "GRANT SHIZUKU PERMISSION"
-                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "GRANT DHIZUKU PERMISSION"
-                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "GRANT SUI PERMISSION"
-                            io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "INSTALL DHIZUKU/SHIZUKU OR ROOT DEVICE"
-                            else -> "GRANT PERMISSION"
-                        }
-
-                        // Disable button if no privilege method is available
-                        grantRootButton.isEnabled = privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE
-                        grantRootButton.alpha = if (privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE) 1.0f else 0.5f
-                    }
+                grantRootButton.text = when (privilegeMethod) {
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SHIZUKU -> "GRANT SHIZUKU PERMISSION"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "GRANT DHIZUKU PERMISSION"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "GRANT SUI PERMISSION"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "CHECK AGAIN"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "INSTALL DHIZUKU/SHIZUKU OR ROOT DEVICE"
                 }
+
+                // Disable button if no privilege method is available
+                grantRootButton.isEnabled = privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE
+                grantRootButton.alpha = if (privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE) 1.0f else 0.5f
 
             } else {
                 // Privilege granted

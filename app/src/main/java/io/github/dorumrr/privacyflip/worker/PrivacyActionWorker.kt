@@ -114,6 +114,24 @@ class PrivacyActionWorker(
             oppositeActionAtMillis: Long,
             ownLastKnownAtMillis: Long
         ): Boolean = oppositeActionAtMillis > ownLastKnownAtMillis
+
+        private const val PRIVILEGE_CHECK_ATTEMPTS = 3
+        private const val PRIVILEGE_CHECK_GAP_MS = 400L
+
+        // One "no" can be a process WorkManager has only just started rather than a real refusal,
+        // and believing it abandons the whole lock. internal so a test can drive it with a fake
+        // probe instead of a real privileged shell.
+        internal suspend fun privilegeIsGranted(
+            attempts: Int = PRIVILEGE_CHECK_ATTEMPTS,
+            gapMs: Long = PRIVILEGE_CHECK_GAP_MS,
+            check: suspend () -> Boolean
+        ): Boolean {
+            repeat(attempts) { attempt ->
+                if (check()) return true
+                if (attempt < attempts - 1) delay(gapMs)
+            }
+            return false
+        }
     }
 
     private val debugNotifier: DebugNotificationHelper by lazy {
@@ -212,11 +230,11 @@ class PrivacyActionWorker(
             rootManager.initialize(applicationContext)
 
             // Check if privilege is granted (works for Root, Dhizuku, Shizuku, and Sui)
-            val hasPrivilege = rootManager.isRootGranted()
+            val hasPrivilege = privilegeIsGranted { rootManager.isRootGranted() }
 
             if (!hasPrivilege) {
-                logWarning("Privilege permission not granted - cannot execute privacy actions")
-                logWarning("User must grant permission from the UI before privacy actions can be executed")
+                logWarning("Could not confirm privileged access after $PRIVILEGE_CHECK_ATTEMPTS checks - skipping this action")
+                logWarning("If access is already granted, this was a temporary failure rather than a refusal")
                 debugNotifier.notifyNoPrivilege()
                 return Result.failure()
             }

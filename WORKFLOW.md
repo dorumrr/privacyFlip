@@ -118,10 +118,10 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 - App starts and requests root permission via Magisk/SuperSU dialog
 - **If user denies:**
   - **Red alert card shown:** "Root Permission Denied"
-    - Message: "Uninstall and reinstall the app, then grant root access when prompted by Magisk/SuperSU/etc."
+    - Message: "Privacy Flip could not confirm root access. Open Magisk, allow Privacy Flip, then tap 'Check Again'."
   - **System Requirements card shown** (reddish background):
     - **Privileged Access:** "Root Available"
-    - Action button: "GRANT ROOT PERMISSION"
+    - Action button: "CHECK AGAIN" (re-runs the root check; Magisk cannot be re-prompted, and the shell is cached, so this re-reads rather than re-asks)
     - **Battery Optimization:** Shows current status
     - Action button: "OPEN BATTERY SETTINGS" (if optimization enabled)
   - **Privacy Flip status card:** "Protection Inactive" (toggle disabled)
@@ -174,7 +174,7 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 | Shizuku denied | ✅ Shown | ✅ Shown | "Shizuku Available" + Grant button | Shown + button if needed | ❌ Disabled |
 | Shizuku granted, battery not disabled | ❌ Hidden | ✅ Shown | "Shizuku Granted" (no button) | "Enabled" + button | ✅ Enabled |
 | Shizuku granted, battery disabled | ❌ Hidden | ❌ Hidden | N/A | N/A | ✅ Enabled |
-| Root denied | ✅ Shown | ✅ Shown | "Root Available" + Grant button | Shown + button if needed | ❌ Disabled |
+| Root denied | ✅ Shown | ✅ Shown | "Root Available" + "CHECK AGAIN" button | Shown + button if needed | ❌ Disabled |
 | Root granted, battery not disabled | ❌ Hidden | ✅ Shown | "Root Granted" (no button) | "Enabled" + button | ✅ Enabled |
 | Root granted, battery disabled | ❌ Hidden | ❌ Hidden | N/A | N/A | ✅ Enabled |
 | Sui granted, battery not disabled | ❌ Hidden | ✅ Shown | "Sui Granted" (no button) | "Enabled" + button | ✅ Enabled |
@@ -218,7 +218,8 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ### User Denies with "Don't Ask Again"
 - Show red alert with reinstall instructions
-- Grant button should still attempt to request (will fail gracefully)
+- Shizuku/Dhizuku/Sui: the Grant button still attempts the request and fails gracefully
+- Root: Magisk cannot be re-prompted, so the button re-runs the check instead. The user allows Privacy Flip in Magisk, then taps "CHECK AGAIN"
 
 ### Device Reboot
 - Shizuku: May need to restart Shizuku service, then app auto-restores

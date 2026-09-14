@@ -21,6 +21,7 @@ import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
 import io.github.dorumrr.privacyflip.worker.ServiceHealthWorker
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.work.PeriodicWorkRequestBuilder
@@ -108,8 +109,10 @@ class MainViewModel : ViewModel() {
                     if (!alreadyGranted && !currentState.hasTriedAutoRootRequest) {
                         // Set flag BEFORE requesting to prevent duplicate requests if checkRootStatus() is called again
                         updateUiState { it.copy(hasTriedAutoRootRequest = true) }
-                        val granted = rootManager.requestRootPermission()
-                        granted
+                        // The same call the Grant button makes. It re-reads the real state after
+                        // asking, because a false here is as often a timeout as a refusal, and
+                        // this attempt is latched so it never runs twice.
+                        rootManager.forceRootPermissionRequest()
                     } else {
                         alreadyGranted
                     }
@@ -272,22 +275,24 @@ class MainViewModel : ViewModel() {
             updateUiState { it.copy(isLoading = true) }
 
             try {
-                val privilegeMethod = rootManager.getPrivilegeMethod()
-                logManager.d(TAG, "requestRootPermission() - Privilege method: $privilegeMethod")
-
                 logManager.d(TAG, "requestRootPermission() - Calling rootManager.forceRootPermissionRequest()...")
                 val isRootGranted = rootManager.forceRootPermissionRequest()
                 logManager.d(TAG, "requestRootPermission() - forceRootPermissionRequest() returned: $isRootGranted")
 
-                // Double-check the actual permission state
-                val actualGranted = rootManager.isRootGranted()
-                logManager.d(TAG, "requestRootPermission() - Double-checking: rootManager.isRootGranted() = $actualGranted")
+                // Read the method and availability AFTER the request, not before. Root can
+                // genuinely go away between runs, and writing only the granted flag left the card
+                // still claiming "Root Available" and still offering a check that cannot pass.
+                val isPrivilegeAvailable = rootManager.isRootAvailable()
+                val privilegeMethod = rootManager.getPrivilegeMethod()
+                logManager.d(TAG, "requestRootPermission() - re-read: available=$isPrivilegeAvailable method=$privilegeMethod")
 
-                logManager.d(TAG, "requestRootPermission() - Updating UI state with isRootGranted=$isRootGranted")
                 updateUiState {
                     it.copy(
                         isRootGranted = isRootGranted,
-                        isLoading = false
+                        isRootAvailable = isPrivilegeAvailable,
+                        privilegeMethod = privilegeMethod,
+                        privilegeMethodName = privilegeMethod.getDisplayName(),
+                        privilegeMethodDescription = privilegeMethod.getDescription()
                     )
                 }
 
@@ -299,14 +304,15 @@ class MainViewModel : ViewModel() {
                 }
 
                 logManager.d(TAG, "========== requestRootPermission() END ==========")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logManager.e(TAG, "requestRootPermission() - ERROR: ${e.message}")
                 logManager.e(TAG, "requestRootPermission() - Stack trace: ${e.stackTraceToString()}")
-                updateUiState {
-                    it.copy(
-                        isLoading = false
-                    )
-                }
+            } finally {
+                // Cleared here and nowhere else: isLoading hides every card, so any path that
+                // leaves it set strands the user on a blank screen with no control to press.
+                updateUiState { it.copy(isLoading = false) }
             }
         }
     }

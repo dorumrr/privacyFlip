@@ -42,9 +42,11 @@ class PrivacyAccessibilityServiceTest {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         PreferenceManager.getInstance(context).accessibilityServiceEnabled = true
-        // A static, so without this the previous test's lock cycle is still armed and the arming
-        // step below quietly does nothing.
+        // Both are statics that outlive a test. Without clearing them, the previous test's lock
+        // cycle is still armed and its timestamp still set, so "it armed" reads true for a
+        // service that armed nothing.
         PrivacyAccessibilityService.wasShowingKeyguard = false
+        PrivacyActionWorker.lastLockAtMillis = 0L
     }
 
     private fun windowEvent(className: String): AccessibilityEvent {
@@ -91,6 +93,8 @@ class PrivacyAccessibilityServiceTest {
         // Robolectric's elapsedRealtime starts at zero, so move it off zero first or "armed" and
         // "never armed" read the same.
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_000))
+
+        assertEquals("nothing may be armed before the first window", 0L, PrivacyActionWorker.lastLockAtMillis)
 
         service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardViewMediator"))
         shadowOf(Looper.getMainLooper()).idle()

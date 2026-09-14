@@ -412,11 +412,24 @@ open class PrivacyActionWorker(
                                   logWarning("⚠️ Sensor disable did not take effect: ${stillFailed.map { it.feature.displayName }}")
                               }
                           } else {
-                              logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${filteredSensorFeatures.map { it.displayName }}")
-                              debugNotifier.notifyFeatureSkipped(
-                                  filteredSensorFeatures.map { it.displayName }.joinToString(", "),
-                                  "device already locked"
-                              )
+                              // One real lock can raise 2 jobs: the accessibility service fires
+                              // before ACTION_SCREEN_OFF, and the second job arrives with the
+                              // keyguard already up. Reporting the whole list here named sensors
+                              // the first job had just turned off. An unreadable state counts as
+                              // still on, so nothing is called handled that nobody observed.
+                              val status = getCurrentStatus()
+                              val stillOn = filteredSensorFeatures.filter {
+                                  status[it] != FeatureState.DISABLED
+                              }
+                              if (stillOn.isEmpty()) {
+                                  logDebug("🔒 Sensors were already off when this trigger arrived - nothing to disable")
+                              } else {
+                                  logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${stillOn.map { it.displayName }}")
+                                  debugNotifier.notifyFeatureSkipped(
+                                      stillOn.map { it.displayName }.joinToString(", "),
+                                      "device already locked"
+                                  )
+                              }
                           }
                         }
                       }

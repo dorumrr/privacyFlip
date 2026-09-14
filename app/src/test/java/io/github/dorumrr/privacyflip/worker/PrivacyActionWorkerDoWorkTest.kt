@@ -366,6 +366,68 @@ class PrivacyActionWorkerDoWorkTest {
     }
 
     @Test
+    fun `a second trigger for the same lock says nothing about sensors already off`() {
+        // One real lock can raise 2 jobs: the accessibility service fires before
+        // ACTION_SCREEN_OFF, so the second arrives with the keyguard up and isDeviceLocked=true.
+        // It used to report the whole list as skipped, naming sensors the FIRST job had just
+        // turned off a second earlier.
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        recordLock()
+
+        val second = worker(isLocking = true, isDeviceLocked = true)
+        second.states[PrivacyFeature.CAMERA] = FeatureState.DISABLED
+        second.states[PrivacyFeature.MICROPHONE] = FeatureState.DISABLED
+
+        runBlocking { second.doWork() }
+
+        assertTrue("nothing needed doing", second.disabled.isEmpty())
+        assertTrue(
+            "and nothing untrue may be said about sensors that are already off, was: ${notifications()}",
+            notifications().none { it.contains("device already locked") }
+        )
+    }
+
+    @Test
+    fun `a sensor genuinely still on when the keyguard is up is still reported`() {
+        // The other half. The message is right when it is true, and this is what proves the
+        // silence above is the code deciding, not the path being unreachable.
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = true)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        worker.states[PrivacyFeature.MICROPHONE] = FeatureState.DISABLED
+
+        runBlocking { worker.doWork() }
+
+        val said = notificationsSeen()
+        assertTrue("the camera is still on, so say so, was: $said", said.any { it.contains("device already locked") })
+        assertTrue("and it must name the camera, was: $said", said.any { it.contains("Camera") })
+        assertTrue(
+            "but never the microphone, which is already off, was: $said",
+            said.none { it.contains("Microphone") }
+        )
+    }
+
+    @Test
+    fun `a sensor whose state cannot be read is reported, never assumed handled`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = true)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ERROR
+
+        runBlocking { worker.doWork() }
+
+        assertTrue(
+            "nothing observed the camera to be off, so it must not be passed over in silence",
+            notificationsSeen().any { it.contains("device already locked") }
+        )
+    }
+
+    @Test
     fun `an exempt app in the foreground stops a lock touching anything`() {
         prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
         prefs.setFeatureDisableOnLock(PrivacyFeature.AIRPLANE_MODE, true)

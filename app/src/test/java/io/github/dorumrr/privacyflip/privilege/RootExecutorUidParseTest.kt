@@ -81,6 +81,21 @@ class RootExecutorUidParseTest {
     }
 
     @Test
+    fun `a SUCCESSFUL command reports no error even when the two streams are separate lists`() {
+        // The success check must come first. An implementation that looked at the lists before the
+        // success flag would hand every successful command on a non-redirected shell an error
+        // string, which is the exact regression this file exists to stop, in the branch the other
+        // success case never enters.
+        assertNull(
+            RootExecutor.errorFrom(
+                success = true,
+                outputLines = listOf("ordinary output"),
+                errorLines = listOf("a warning nobody asked about")
+            )
+        )
+    }
+
+    @Test
     fun `a failed command with merged streams reports the WHOLE output, not just the first line`() {
         // The first line is very often a banner. Reporting only it would show the user the banner
         // instead of the failure, which this file already proves can arrive ahead of real output.

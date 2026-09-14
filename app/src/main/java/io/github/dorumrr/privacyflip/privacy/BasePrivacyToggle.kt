@@ -57,7 +57,9 @@ abstract class BasePrivacyToggle(
                 return PrivacyResult(
                     feature = feature,
                     success = false,
-                    message = "Failed to $action $featureName: ${result.error}",
+                    // A failing command often prints nothing at all, and "...: null" told the user
+                    // less than saying so plainly.
+                    message = "Failed to $action $featureName: ${result.error ?: "the command gave no reason"}",
                     commandUsed = commandUsed
                 )
             }

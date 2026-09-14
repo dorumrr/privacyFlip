@@ -29,7 +29,13 @@ class PrivilegePermissionGateTest {
         var preCheckWhenNotGranted: PermissionPreCheck = PermissionPreCheck.AskTheUser,
         val failOnStart: Boolean = false,
         /** Set to have the fake answer the moment the dialog is "shown". */
-        val answerImmediatelyWith: Boolean? = null
+        val answerImmediatelyWith: Boolean? = null,
+        /**
+         * When false, the answer does NOT also update what the backend itself reports. That is
+         * what stops a gate which ignores the delivery and simply re-reads the backend from
+         * passing a delivery test.
+         */
+        val answerAlsoUpdatesBackend: Boolean = true
     ) {
         var reads = 0
         var requestsStarted = 0
@@ -57,7 +63,7 @@ class PrivilegePermissionGateTest {
                     lastRequestId = requestId
                     if (failOnStart) throw IllegalStateException("backend refused to start the request")
                     answerImmediatelyWith?.let {
-                        permission = it
+                        if (answerAlsoUpdatesBackend) permission = it
                         gate?.deliverResult(requestId, it)
                     }
                 },
@@ -108,12 +114,16 @@ class PrivilegePermissionGateTest {
 
     @Test
     fun `the user's answer reaches the waiting request`() = runBlocking {
-        val backend = FakeBackend(answerImmediatelyWith = true)
+        // The backend deliberately keeps saying "not granted" while the ANSWER says granted, so a
+        // gate that ignores the delivery and re-reads the backend instead cannot pass this.
+        val backend = FakeBackend(answerImmediatelyWith = true, answerAlsoUpdatesBackend = false)
         val gate = backend.buildGate()
 
         val started = System.currentTimeMillis()
         assertTrue("the granted answer must come back to the caller", gate.request())
         val waited = System.currentTimeMillis() - started
+
+        assertFalse("the backend itself still says no, so this can only have come from the answer", backend.permission)
 
         assertEquals(1, backend.requestsStarted)
         assertEquals("and be remembered", true, gate.cachedAnswer)
@@ -297,6 +307,32 @@ class PrivilegePermissionGateTest {
             "a caller that went away refused nothing, so nothing may be remembered",
             gate.cachedAnswer
         )
+    }
+
+    @Test
+    fun `a request made after a cancelled one still works`() = runBlocking {
+        // If a cancelled caller left the serialising lock or the waiting slot held, every later
+        // request would strand: a Grant button that can never obtain permission again once the
+        // user has walked away from the screen once.
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 3_000L)
+
+        val abandoned = launch { gate.request() }
+        yield()
+        assertEquals("the first request must be parked before it is cancelled", 1, backend.requestsStarted)
+        abandoned.cancelAndJoin()
+
+        val second = async { gate.request() }
+        yield()
+        assertEquals("a later request must be able to START at all", 2, backend.requestsStarted)
+
+        val started = System.currentTimeMillis()
+        gate.deliverResult(backend.lastRequestId, true)
+        val granted = second.await()
+        val waited = System.currentTimeMillis() - started
+
+        assertTrue("and it must be answered", granted)
+        assertTrue("promptly, not by sitting out the timeout (waited ${waited}ms)", waited < 500)
     }
 
     @Test

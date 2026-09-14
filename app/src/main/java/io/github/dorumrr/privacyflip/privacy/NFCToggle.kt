@@ -7,7 +7,9 @@ import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.delay
 
-class NFCToggle(
+// open so a test can stand in for the privileged shell and drive the real disable() path, which
+// is where this class's logic actually lives.
+open class NFCToggle(
     rootManager: RootManager,
     private val context: Context
 ) : BasePrivacyToggle(rootManager) {
@@ -81,11 +83,14 @@ class NFCToggle(
         val actualState = getCurrentState()
 
         if (!needsRetry(initialResult.success, actualState)) {
-            if (initialResult.success) {
-                Log.d(TAG, "✅ NFC successfully disabled (it stayed off)")
-            } else {
-                Log.w(TAG, "⚠️ NFC disable reported failure, and NFC does not read as on either (state: $actualState)")
+            // This read is fresher than the one the base class took, so it decides. "It stayed
+            // off" is now said only when the state actually says off: a state that merely cannot
+            // be read is not evidence of anything, and used to be reported as a success.
+            if (actualState == FeatureState.DISABLED) {
+                Log.d(TAG, "✅ NFC is off and stayed off")
+                return PrivacyResult(feature, true, "NFC disabled")
             }
+            Log.w(TAG, "⚠️ NFC could not be confirmed off (state: $actualState)")
             return initialResult
         }
 

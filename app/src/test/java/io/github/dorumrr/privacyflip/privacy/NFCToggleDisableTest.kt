@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import io.github.dorumrr.privacyflip.privilege.CommandResult
 import io.github.dorumrr.privacyflip.root.RootManager
+import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,6 +34,9 @@ class NFCToggleDisableTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         ShadowLog.clear()
+        // A stored preference outlives a test, so the auto-retry switch is put back to its default
+        // or one test silently changes what another is exercising.
+        PreferenceManager.getInstance(context).samsungNfcAutoRetry = false
     }
 
     /** Stands in for the privileged shell. Status reads walk the list; the last entry repeats. */
@@ -74,6 +78,24 @@ class NFCToggleDisableTest {
             result.message?.contains("NFC Auto-Retry") == true
         )
         assertFalse("and it must never claim NFC stayed off", loggedStayedOff())
+    }
+
+    @Test
+    fun `when the retry runs out it names both causes instead of asserting one`() = runBlocking {
+        // With auto-retry ON and NFC obstinately reading as on, the retry exhausts. Root revoked
+        // mid-retry looks identical from here to a wallet app turning NFC back on, so sending the
+        // user after their payment cards would be guessing.
+        PreferenceManager.getInstance(context).samsungNfcAutoRetry = true
+        val toggle = FakeNfc(context, statusOutputs = listOf("mState=on"))
+
+        val result = toggle.disable()
+
+        assertFalse(result.success)
+        val message = result.message ?: ""
+        assertTrue("it must mention the wallet possibility, was: $message", message.contains("wallet app"))
+        assertTrue("and the privilege possibility, was: $message", message.contains("privileged shell"))
+        assertTrue("and report what the last attempt actually said", message.contains("Last attempt reported"))
+        assertTrue("the retry must really have run", toggle.actionRuns > 1)
     }
 
     @Test

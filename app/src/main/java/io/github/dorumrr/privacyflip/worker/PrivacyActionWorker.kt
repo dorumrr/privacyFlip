@@ -115,6 +115,15 @@ class PrivacyActionWorker(
             ownLastKnownAtMillis: Long
         ): Boolean = oppositeActionAtMillis > ownLastKnownAtMillis
 
+        /**
+         * Whether an action really took effect, for decisions that must not be made on a guess.
+         *
+         * An EMPTY result list is not a success: it means nothing was reported at all, and
+         * treating that as "it worked" would clear state on the strength of no evidence.
+         */
+        internal fun allSucceeded(results: List<PrivacyResult>): Boolean =
+            results.isNotEmpty() && results.all { it.success }
+
         private const val PRIVILEGE_CHECK_ATTEMPTS = 3
         private const val PRIVILEGE_CHECK_GAP_MS = 400L
 
@@ -351,11 +360,12 @@ class PrivacyActionWorker(
                               processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                               val stillFailed = sensorResults.filter { !it.success }
                               if (stillFailed.isNotEmpty()) {
-                                  logWarning("⚠️ Sensor disable failed, keyguard likely won the race: ${stillFailed.map { it.feature.displayName }}")
-                                  debugNotifier.notifyFeatureSkipped(
-                                      stillFailed.map { it.feature.displayName }.joinToString(", "),
-                                      "device locked before sensors could be disabled"
-                                  )
+                                  // processResults above has already reported this failure. A second
+                                  // notification calling it "skipped", with a cause nothing
+                                  // determined, contradicted that: the keyguard winning the race is
+                                  // the usual reason but not the only one, and it was attempted,
+                                  // not skipped.
+                                  logWarning("⚠️ Sensor disable did not take effect: ${stillFailed.map { it.feature.displayName }}")
                               }
                           } else {
                               logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${filteredSensorFeatures.map { it.displayName }}")
@@ -522,6 +532,16 @@ class PrivacyActionWorker(
                             // the common case where it isn't.
                             val hotspotActiveForAirplaneMode = PrivacyFeature.AIRPLANE_MODE in protectionModes &&
                                 connectionChecker.isHotspotActive()
+
+                            // Read fresh, immediately before switching a radio kill-switch ON. The
+                            // regular-features step above can take real time, and an unlock during
+                            // it would otherwise put the phone into Airplane Mode while it is back
+                            // in the user's hands.
+                            if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
+                                logWarning("🛡️ Unlocked while this lock was still running - not enabling protection modes")
+                                debugNotifier.notifyActionCancelled("Unlocked during the lock action - protection modes not enabled")
+                                return Result.success()
+                            }
 
                             for (mode in protectionModes) {
                                 // Airplane Mode is a full radio kill switch - unlike WiFi/Mobile
@@ -733,7 +753,15 @@ class PrivacyActionWorker(
                                     // Either "only if not manually set" is disabled, or we enabled it
                                     // Disable it and clear the flag
                                     val results = privacyManager.disableFeatures(setOf(mode))
-                                    preferenceManager.setFeatureEnabledByApp(mode, false)
+                                    // Cleared only when the disable actually worked, mirroring the
+                                    // enable side. Clearing it after a FAILED disable told the app
+                                    // the user had set this themselves, so every later unlock
+                                    // skipped it and it could never be turned off again.
+                                    if (allSucceeded(results)) {
+                                        preferenceManager.setFeatureEnabledByApp(mode, false)
+                                    } else {
+                                        logWarning("🛡️ ${mode.displayName} did not turn off - keeping it marked as set by this app so the next unlock tries again")
+                                    }
                                     processResults(results, listOf(mode), "🛡️", "disabled", "Disabled", isLockCycle = false, didEnable = false)
                                 }
                             }

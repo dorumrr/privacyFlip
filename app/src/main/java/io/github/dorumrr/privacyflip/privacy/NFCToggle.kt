@@ -113,11 +113,13 @@ open class NFCToggle(
         var retryCount = 0
         val maxRetries = 3 // Hard limit to prevent infinite loop
 
+        var lastAttempt: PrivacyResult? = null
+
         while (retryCount < maxRetries) {
             retryCount++
             Log.d(TAG, "🔄 Retry attempt $retryCount of $maxRetries")
 
-            super.disable()
+            lastAttempt = super.disable()
 
             delay(300)
 
@@ -140,7 +142,12 @@ open class NFCToggle(
         return PrivacyResult(
             feature = feature,
             success = false,
-            message = "NFC did not read back as disabled after $maxRetries retries. A payment or wallet app may be turning it back on - removing payment cards from it usually stops that."
+            // Names both plausible causes instead of asserting one. Root revoked mid-retry looks
+            // identical from here to an app turning NFC back on, and sending the user after their
+            // payment cards for a privilege failure wastes their time.
+            message = "NFC did not read back as disabled after $maxRetries attempts. " +
+                "Last attempt reported: ${lastAttempt?.message ?: "nothing"}. " +
+                "A payment or wallet app may be turning it back on, or the privileged shell may be failing."
         )
     }
 }

@@ -35,6 +35,9 @@ class PrivilegePermissionGateTest {
         var requestsStarted = 0
         var gate: PrivilegePermissionGate? = null
 
+        /** The id the gate handed to the most recent startRequest, as a real backend would quote back. */
+        var lastRequestId = -1
+
         /** Test-controlled clock, so an aged grant does not need real time to age. */
         var now = 1_000L
 
@@ -49,12 +52,13 @@ class PrivilegePermissionGateTest {
                 preCheck = {
                     if (permission) PermissionPreCheck.AlreadyGranted else preCheckWhenNotGranted
                 },
-                startRequest = {
+                startRequest = { requestId ->
                     requestsStarted++
+                    lastRequestId = requestId
                     if (failOnStart) throw IllegalStateException("backend refused to start the request")
                     answerImmediatelyWith?.let {
                         permission = it
-                        gate?.deliverResult(it)
+                        gate?.deliverResult(requestId, it)
                     }
                 },
                 timeoutMs = timeoutMs,
@@ -201,7 +205,7 @@ class PrivilegePermissionGateTest {
         assertTrue(gate.request())
 
         // Shizuku's listener is permanent, so an answer can arrive when no request is in flight.
-        gate.deliverResult(false)
+        gate.deliverResult(backend.lastRequestId, false)
 
         assertEquals("the later answer still updates what we know", false, gate.cachedAnswer)
 
@@ -267,7 +271,7 @@ class PrivilegePermissionGateTest {
         gate.forget()
         // Shizuku's listener is permanent, so the user's answer can still land after the binder
         // died. Resuming the same continuation a second time throws, which would surface here.
-        gate.deliverResult(true)
+        gate.deliverResult(backend.lastRequestId, true)
 
         val granted = request.await()
         val waited = System.currentTimeMillis() - started
@@ -296,6 +300,45 @@ class PrivilegePermissionGateTest {
     }
 
     @Test
+    fun `a late answer to a timed-out request is not given to the next one`() = runBlocking {
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 150L)
+
+        // The user ignores the first dialog and it gives up.
+        assertFalse("the first request must time out", gate.request())
+        val abandonedId = backend.lastRequestId
+
+        // The user taps Grant again. A second request parks.
+        val second = async { gate.request() }
+        yield()
+        assertEquals("a second request must have started", 2, backend.requestsStarted)
+
+        // The FIRST dialog is finally answered, long after its request stopped listening. Without
+        // an id on each request this landed on whoever happened to be parked, so the second
+        // request was handed a decision made about the first.
+        gate.deliverResult(abandonedId, true)
+
+        // The second request's own answer arrives.
+        val beforeItsOwnAnswer = System.currentTimeMillis()
+        gate.deliverResult(backend.lastRequestId, false)
+
+        val answer = second.await()
+        val waitedAfterOwnAnswer = System.currentTimeMillis() - beforeItsOwnAnswer
+
+        assertFalse(
+            "the second request must get ITS answer, not the stale one",
+            answer
+        )
+        // Without this bound, a gate that simply strands the second request passes: it times out
+        // at 150ms and returns false too, which is the same answer for the opposite reason.
+        assertTrue(
+            "and it must come from the delivery, not from giving up (waited ${waitedAfterOwnAnswer}ms)",
+            waitedAfterOwnAnswer < 100
+        )
+        assertTrue("the two requests must have had different ids", abandonedId != backend.lastRequestId)
+    }
+
+    @Test
     fun `a second request while one is still waiting does not steal its answer`() = runBlocking {
         // The fake never answers on its own, so the first request is genuinely parked when the
         // second arrives - which is the only moment the single waiting slot can be stolen.
@@ -314,9 +357,10 @@ class PrivilegePermissionGateTest {
             backend.requestsStarted
         )
 
-        // The user answers the dialog the FIRST request opened.
+        // The user answers the dialog the FIRST request opened. Only the first request ever
+        // started one, so its id is the one still parked.
         backend.permission = true
-        gate.deliverResult(true)
+        gate.deliverResult(backend.lastRequestId, true)
 
         assertTrue("the request that was waiting must get the answer", first.await())
         assertTrue("and the one behind it must not be stranded", second.await())

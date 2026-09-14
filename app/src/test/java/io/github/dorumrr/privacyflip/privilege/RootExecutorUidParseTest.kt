@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.privilege
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +66,50 @@ class RootExecutorUidParseTest {
         // re-introduce the false "not granted" this whole file exists to stop.
         assertTrue(RootExecutor.isRootUid(listOf("0\r")))
         assertTrue(RootExecutor.isRootUid(listOf("\t0\t")))
+    }
+
+    @Test
+    fun `a successful command reports no error, even though the output is not empty`() {
+        // With the redirect flag applied, libsu hands back ONE list for both streams, so err is
+        // literally the same object. Reading it made every successful command carry a failure
+        // message built from its own normal output.
+        val merged = listOf("BluetoothShellCommand: Success")
+        assertNull(
+            "a command that worked has no error to report",
+            RootExecutor.errorFrom(success = true, outputLines = merged, errorLines = merged)
+        )
+    }
+
+    @Test
+    fun `a failed command with merged streams reports the WHOLE output, not just the first line`() {
+        // The first line is very often a banner. Reporting only it would show the user the banner
+        // instead of the failure, which this file already proves can arrive ahead of real output.
+        val merged = listOf("su: applying SELinux context", "cmd: Failure calling service")
+        assertEquals(
+            "su: applying SELinux context\ncmd: Failure calling service",
+            RootExecutor.errorFrom(success = false, outputLines = merged, errorLines = merged)
+        )
+    }
+
+    @Test
+    fun `a failed command with a SEPARATE stderr reports the stderr, not the stdout`() {
+        // The redirect flag is only applied if the shell had not already been built, so a real,
+        // separate stderr happens. Ignoring it would throw away the only reason a failure gives.
+        assertEquals(
+            "svc: Killed",
+            RootExecutor.errorFrom(
+                success = false,
+                outputLines = listOf("some ordinary output"),
+                errorLines = listOf("svc: Killed")
+            )
+        )
+    }
+
+    @Test
+    fun `a failed command with no output at all reports null rather than an empty string`() {
+        assertNull(RootExecutor.errorFrom(false, emptyList(), emptyList()))
+        val blank = listOf("", "   ")
+        assertNull(RootExecutor.errorFrom(false, blank, blank))
     }
 
     @Test

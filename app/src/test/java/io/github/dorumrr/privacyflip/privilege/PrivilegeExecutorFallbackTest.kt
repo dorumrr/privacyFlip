@@ -24,7 +24,9 @@ class PrivilegeExecutorFallbackTest {
     private class FakeExecutor(
         private val succeedOn: String? = null,
         /** A real backend THROWS on a dead binder; it does not return a tidy failure. */
-        private val throwOn: String? = null
+        private val throwOn: String? = null,
+        /** Most privileged commands print nothing at all when they work. */
+        private val succeedsSilently: Boolean = false
     ) : PrivilegeExecutor {
         val attempted = mutableListOf<String>()
 
@@ -39,7 +41,7 @@ class PrivilegeExecutorFallbackTest {
             attempted.add(command)
             if (command == throwOn) throw IllegalStateException("binder died on: $command")
             return if (command == succeedOn) {
-                CommandResult.success(listOf("ok: $command"))
+                if (succeedsSilently) CommandResult.success() else CommandResult.success(listOf("ok: $command"))
             } else {
                 CommandResult.failure("failed: $command")
             }
@@ -70,6 +72,20 @@ class PrivilegeExecutorFallbackTest {
         assertFalse(result.success)
         assertEquals("the caller sees why the last attempt failed", "failed: third", result.error)
         assertEquals(listOf("first", "second", "third"), executor.attempted)
+    }
+
+    @Test
+    fun `a command that succeeds with NO output still ends the chain`() = runBlocking {
+        // Most privileged commands print nothing when they work. A body that read empty output as
+        // failure would re-issue privileged commands after one had already succeeded, and then
+        // report a failure for a toggle that actually worked.
+        val executor = FakeExecutor(succeedOn = "first", succeedsSilently = true)
+
+        val result = executor.executeWithFallbacks(listOf("first", "second"))
+
+        assertTrue("no output is not a failure", result.success)
+        assertTrue("and its output really is empty", result.output.isEmpty())
+        assertEquals("the second command must never run", listOf("first"), executor.attempted)
     }
 
     @Test

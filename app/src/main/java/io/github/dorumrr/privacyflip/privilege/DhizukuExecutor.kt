@@ -47,18 +47,18 @@ class DhizukuExecutor : PrivilegeExecutor {
                 PermissionPreCheck.AskTheUser
             }
         },
-        startRequest = { Dhizuku.requestPermission(permissionResultListener()) }
+        startRequest = { requestId -> Dhizuku.requestPermission(permissionResultListener(requestId)) }
     )
 
     /**
      * Dhizuku takes a fresh listener per request, unlike Shizuku's single permanent one. Built
      * in a function rather than inline above, so it can refer to the gate it reports back to.
      */
-    private fun permissionResultListener() = object : DhizukuRequestPermissionListener() {
+    private fun permissionResultListener(requestId: Int) = object : DhizukuRequestPermissionListener() {
         override fun onRequestPermission(grantResult: Int) {
             val granted = grantResult == PackageManager.PERMISSION_GRANTED
-            logManager?.d(TAG, "onRequestPermission() - grantResult: $grantResult, granted: $granted")
-            permissionGate.deliverResult(granted)
+            logManager?.d(TAG, "onRequestPermission() - request $requestId, granted: $granted")
+            permissionGate.deliverResult(requestId, granted)
 
             // Broadcast to UI to refresh when permission status changes
             context?.let { ctx ->

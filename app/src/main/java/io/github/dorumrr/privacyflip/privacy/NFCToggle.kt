@@ -12,6 +12,21 @@ class NFCToggle(
     private val context: Context
 ) : BasePrivacyToggle(rootManager) {
 
+    companion object {
+        /**
+         * Whether NFC still reads as on after we tried to turn it off, which is the only thing
+         * that decides a retry.
+         *
+         * This used to require the disable attempt to have REPORTED success first. Once the base
+         * class started reading the state back, an app fast enough to re-enable NFC before that
+         * read made the attempt itself report failure, so the retry never ran in the one case it
+         * exists for, and the log still said "successfully disabled".
+         */
+        @Suppress("UNUSED_PARAMETER")
+        internal fun needsRetry(attemptReportedSuccess: Boolean, stateAfterDisable: FeatureState): Boolean =
+            stateAfterDisable == FeatureState.ENABLED
+    }
+
     override val feature = PrivacyFeature.NFC
     override val featureName = "NFC"
 
@@ -64,10 +79,13 @@ class NFCToggle(
         delay(500)
 
         val actualState = getCurrentState()
-        val wasOverridden = (initialResult.success && actualState == FeatureState.ENABLED)
 
-        if (!wasOverridden) {
-            Log.d(TAG, "✅ NFC successfully disabled (it stayed off)")
+        if (!needsRetry(initialResult.success, actualState)) {
+            if (initialResult.success) {
+                Log.d(TAG, "✅ NFC successfully disabled (it stayed off)")
+            } else {
+                Log.w(TAG, "⚠️ NFC disable reported failure, and NFC does not read as on either (state: $actualState)")
+            }
             return initialResult
         }
 

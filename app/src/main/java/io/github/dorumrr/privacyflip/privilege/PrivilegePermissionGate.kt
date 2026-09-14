@@ -7,6 +7,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
@@ -49,7 +50,7 @@ class PrivilegePermissionGate(
     private val isBackendAvailable: suspend () -> Boolean,
     private val readPermissionFromBackend: suspend () -> Boolean,
     private val preCheck: suspend () -> PermissionPreCheck,
-    private val startRequest: () -> Unit,
+    private val startRequest: (requestId: Int) -> Unit,
     private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     private val grantValidForMs: Long = DEFAULT_GRANT_VALID_MS,
     private val nowMillis: () -> Long = { SystemClock.elapsedRealtime() }
@@ -62,6 +63,9 @@ class PrivilegePermissionGate(
         // remembered "yes" is re-read once it is this old. Short enough that a revoked grant is
         // noticed quickly, long enough that the per-command check is not a binder call each time.
         const val DEFAULT_GRANT_VALID_MS = 5_000L
+
+        // Shizuku quotes this back as its request code, so it starts where the old fixed code was.
+        private const val FIRST_REQUEST_ID = 1001
     }
 
     @Volatile
@@ -73,9 +77,29 @@ class PrivilegePermissionGate(
     // Serialises request() so two callers cannot both own the single continuation slot below.
     private val requestMutex = Mutex()
 
+    /** The request currently parked, and the id the backend was asked to quote back. */
+    private class Waiting(val id: Int, val continuation: Continuation<Boolean>)
+
     // Atomic, not volatile: deliverResult() and forget() both take this slot from threads the
     // caller does not control, and a continuation resumed twice throws.
-    private val continuation = AtomicReference<Continuation<Boolean>?>(null)
+    private val waiting = AtomicReference<Waiting?>(null)
+
+    // Every request carries its own id. Without one, an answer to a dialog that already timed out
+    // was handed to whichever request happened to be parked when it finally arrived.
+    private val nextRequestId = AtomicInteger(FIRST_REQUEST_ID)
+
+    /** Removes and returns the parked request, but only if [id] is the one it is waiting for. */
+    private fun takeWaiting(id: Int): Continuation<Boolean>? {
+        val current = waiting.get() ?: return null
+        if (current.id != id) return null
+        return if (waiting.compareAndSet(current, null)) current.continuation else null
+    }
+
+    /** Clears the slot only if this request still owns it. */
+    private fun clearWaiting(id: Int) {
+        val current = waiting.get() ?: return
+        if (current.id == id) waiting.compareAndSet(current, null)
+    }
 
     /** The last known answer, without asking the backend. Null means "not known". */
     val cachedAnswer: Boolean?
@@ -145,24 +169,26 @@ class PrivilegePermissionGate(
 
             log?.d(tag, "requestPermission() - about to show the permission dialog...")
 
+            val requestId = nextRequestId.getAndIncrement()
+
             val granted = withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    continuation.set(cont)
+                    waiting.set(Waiting(requestId, cont))
 
                     try {
-                        startRequest()
-                        log?.d(tag, "requestPermission() - request started, waiting for the user...")
+                        startRequest(requestId)
+                        log?.d(tag, "requestPermission() - request $requestId started, waiting for the user...")
                     } catch (e: Exception) {
                         log?.e(tag, "requestPermission() - exception starting the request: ${e.message}")
                         // Taken rather than cleared: a backend can answer synchronously inside
                         // startRequest() and then throw, and that answer already resumed this.
-                        continuation.getAndSet(null)?.resume(false)
+                        takeWaiting(requestId)?.resume(false)
                         return@suspendCancellableCoroutine
                     }
 
                     cont.invokeOnCancellation {
-                        log?.d(tag, "requestPermission() - permission request cancelled")
-                        continuation.compareAndSet(cont, null)
+                        log?.d(tag, "requestPermission() - permission request $requestId cancelled")
+                        clearWaiting(requestId)
                     }
                 }
             } ?: false
@@ -175,11 +201,11 @@ class PrivilegePermissionGate(
         } catch (e: CancellationException) {
             // The caller's scope went away; nobody was refused. Recording a "no" here reports a
             // refusal the user never gave, and swallowing it keeps a dead scope alive.
-            continuation.set(null)
+            waiting.set(null)
             throw e
         } catch (e: Exception) {
             log?.e(tag, "requestPermission() - ERROR: ${e.message}")
-            continuation.set(null)
+            waiting.set(null)
             rememberAnswer(false)
             false
         }
@@ -194,17 +220,17 @@ class PrivilegePermissionGate(
      * Called by the backend's own listener when the user answers. Safe to call when nothing is
      * waiting: an answer can arrive out of band, and it still updates what we know.
      */
-    fun deliverResult(granted: Boolean) {
+    fun deliverResult(requestId: Int, granted: Boolean) {
         val log = logger()
         rememberAnswer(granted)
 
-        val waiting = continuation.getAndSet(null)
-        if (waiting == null) {
-            log?.w(tag, "permission result arrived with nothing waiting - cache updated only")
+        val parked = takeWaiting(requestId)
+        if (parked == null) {
+            log?.w(tag, "permission result for request $requestId has nothing waiting - cache updated only")
             return
         }
-        waiting.resume(granted)
-        log?.d(tag, "permission result delivered to the waiting request: $granted")
+        parked.resume(granted)
+        log?.d(tag, "permission result delivered to request $requestId: $granted")
     }
 
     /** Forgets the remembered answer, and fails any request the dead backend left waiting. */
@@ -212,7 +238,8 @@ class PrivilegePermissionGate(
         cached = null
         cachedAtMillis = 0L
         // Nothing can answer a parked request now, so fail it here rather than leave it to sit
-        // out the whole timeout and report the same refusal 30 seconds later.
-        continuation.getAndSet(null)?.resume(false)
+        // out the whole timeout and report the same refusal 30 seconds later. Whatever is parked,
+        // regardless of its id: the backend it belonged to is gone.
+        waiting.getAndSet(null)?.continuation?.resume(false)
     }
 }

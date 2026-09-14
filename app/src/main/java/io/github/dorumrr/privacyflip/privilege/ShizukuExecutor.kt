@@ -22,7 +22,6 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     companion object {
         private const val TAG = "privacyFlip-ShizukuExecutor"
-        private const val PERMISSION_REQUEST_CODE = 1001
     }
 
     private var logManager: LogManager? = null
@@ -61,7 +60,7 @@ class ShizukuExecutor : PrivilegeExecutor {
                 else -> PermissionPreCheck.AskTheUser
             }
         },
-        startRequest = { Shizuku.requestPermission(PERMISSION_REQUEST_CODE) }
+        startRequest = { requestId -> Shizuku.requestPermission(requestId) }
     )
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
@@ -74,19 +73,17 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
         logManager?.d(TAG, "permissionResultListener called - requestCode: $requestCode, grantResult: $grantResult")
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            val granted = grantResult == PackageManager.PERMISSION_GRANTED
-            logManager?.d(TAG, "permissionResultListener - permission granted: $granted")
-            // This listener is permanent (registered in initialize(), removed in cleanup()), so
-            // an answer can arrive with no request waiting. The gate handles both cases.
-            permissionGate.deliverResult(granted)
+        val granted = grantResult == PackageManager.PERMISSION_GRANTED
+        // The request code is the gate's own request id, so it decides whether this answer belongs
+        // to what is waiting. This listener is permanent, so an answer can also arrive with
+        // nothing waiting at all; the gate handles that too.
+        permissionGate.deliverResult(requestCode, granted)
 
-            // Broadcast to UI to refresh when permission status changes
-            context?.let { ctx ->
-                val intent = android.content.Intent("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
-                ctx.sendBroadcast(intent)
-                logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
-            }
+        // Broadcast to UI to refresh when permission status changes
+        context?.let { ctx ->
+            val intent = android.content.Intent("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
+            ctx.sendBroadcast(intent)
+            logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
         }
     }
     

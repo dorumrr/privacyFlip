@@ -22,6 +22,10 @@ import java.io.InputStreamReader
 class DhizukuExecutor : PrivilegeExecutor {
 
     companion object {
+        // One place, because a sender and a receiver written out separately drift apart
+        // silently: nothing fails to compile, the broadcast simply stops arriving.
+        const val STATUS_CHANGED_ACTION = "io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED"
+
         private const val TAG = "privacyFlip-DhizukuExecutor"
     }
 
@@ -62,7 +66,7 @@ class DhizukuExecutor : PrivilegeExecutor {
 
             // Broadcast to UI to refresh when permission status changes
             context?.let { ctx ->
-                val intent = android.content.Intent("io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED")
+                val intent = android.content.Intent(STATUS_CHANGED_ACTION)
                 ctx.sendBroadcast(intent)
                 logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
             }

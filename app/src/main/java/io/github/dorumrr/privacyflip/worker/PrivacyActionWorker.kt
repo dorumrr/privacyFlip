@@ -124,6 +124,26 @@ class PrivacyActionWorker(
         internal fun allSucceeded(results: List<PrivacyResult>): Boolean =
             results.isNotEmpty() && results.all { it.success }
 
+        /**
+         * What observing a protection mode's state means for "this app turned it on".
+         *
+         * The app cannot tell, from a mode that is ON, whether the user set it or whether its own
+         * disable failed at the last unlock and left it on. Assuming the user always did is what
+         * made a failed disable permanent: the mode stayed on, the app disowned it, and every
+         * later unlock skipped it as "manually set".
+         *
+         * A mode that is OFF settles it in the other direction: nothing this app turned on is
+         * still on, so ownership cannot outlive it. An unreadable state settles nothing.
+         */
+        internal fun ownershipAfterObserving(
+            state: FeatureState?,
+            currentlyOwned: Boolean
+        ): Boolean = when (state) {
+            FeatureState.DISABLED -> false
+            FeatureState.ENABLED -> currentlyOwned
+            else -> currentlyOwned
+        }
+
         private const val PRIVILEGE_CHECK_ATTEMPTS = 3
         private const val PRIVILEGE_CHECK_GAP_MS = 400L
 
@@ -564,13 +584,23 @@ class PrivacyActionWorker(
                                     continue
                                 }
 
-                                val wasAlreadyEnabled = currentStatus[mode] == FeatureState.ENABLED
+                                val observedState = currentStatus[mode]
+                                val ownedBefore = preferenceManager.getFeatureEnabledByApp(mode)
+                                val ownedNow = ownershipAfterObserving(observedState, ownedBefore)
+                                if (ownedNow != ownedBefore) {
+                                    preferenceManager.setFeatureEnabledByApp(mode, ownedNow)
+                                }
 
-                                if (wasAlreadyEnabled) {
-                                    // Already enabled (manually by user) - don't enable, mark as not enabled by app
-                                    logDebug("🛡️ ${mode.displayName} already enabled (manually set) - skipping")
-                                    preferenceManager.setFeatureEnabledByApp(mode, false)
-                                    debugNotifier.notifyFeatureSkipped(mode.displayName, "already enabled")
+                                if (observedState == FeatureState.ENABLED) {
+                                    // Already on. Who turned it on is NOT knowable from here, so
+                                    // ownership is left exactly as it was: disowning it here is
+                                    // what used to make a failed unlock-disable permanent.
+                                    if (ownedNow) {
+                                        logDebug("🛡️ ${mode.displayName} already enabled and still owned by this app - keeping it owned")
+                                    } else {
+                                        logDebug("🛡️ ${mode.displayName} already enabled, and not by this app - skipping")
+                                        debugNotifier.notifyFeatureSkipped(mode.displayName, "already enabled")
+                                    }
                                 } else {
                                     // Not enabled - enable it and mark as enabled by app
                                     val results = privacyManager.enableFeatures(setOf(mode))
@@ -739,6 +769,16 @@ class PrivacyActionWorker(
                         // Check "only if not manually set" preference before disabling
                         if (protectionModes.isNotEmpty()) {
                             logDebug("🛡️ Disabling protection modes on unlock: ${protectionModes.map { it.displayName }}")
+
+                            // The mirror of the lock-side guard. Read fresh, immediately before
+                            // switching a radio kill-switch OFF: the enable step above makes real
+                            // shell calls, and a re-lock during it would otherwise let this stale
+                            // unlock undo protection on a phone that is locked right now.
+                            if (isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
+                                logWarning("🛡️ Locked again while this unlock was still running - leaving protection modes alone")
+                                debugNotifier.notifyActionCancelled("Locked during the unlock action - protection modes left on")
+                                return Result.success()
+                            }
 
                             for (mode in protectionModes) {
                                 val onlyIfNotManual = preferenceManager.getFeatureOnlyIfNotManual(mode)

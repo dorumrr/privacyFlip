@@ -81,7 +81,7 @@ class ShizukuExecutor : PrivilegeExecutor {
 
         // Broadcast to UI to refresh when permission status changes
         context?.let { ctx ->
-            val intent = android.content.Intent("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
+            val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
             ctx.sendBroadcast(intent)
             logManager?.i(TAG, "Broadcast sent to notify UI of permission change")
         }
@@ -90,6 +90,11 @@ class ShizukuExecutor : PrivilegeExecutor {
     override suspend fun initialize(context: Context) {
         this.context = context
         logManager = LogManager.getInstance(context)
+
+        // Armed here because this is the one place that knows Shizuku is worth watching at all.
+        // It outlives this executor on purpose: detection discards executors, and the listeners
+        // below go with them, which would otherwise leave nothing to notice Shizuku returning.
+        ShizukuRecoveryWatcher.ensureWatching(context)
 
         try {
             Shizuku.addBinderReceivedListener(binderReceivedListener)
@@ -210,7 +215,7 @@ class ShizukuExecutor : PrivilegeExecutor {
                     }
 
                     // Broadcast to UI to refresh (permission status may have changed)
-                    val intent = android.content.Intent("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
+                    val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
                     ctx.sendBroadcast(intent)
                     logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku restart")
                 } catch (e: Exception) {
@@ -232,7 +237,7 @@ class ShizukuExecutor : PrivilegeExecutor {
                     PrivacyMonitorService.stop(ctx)
 
                     // Broadcast intent to notify UI to refresh
-                    val intent = android.content.Intent("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
+                    val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
                     ctx.sendBroadcast(intent)
                     logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku death")
                 } catch (e: Exception) {

@@ -9,6 +9,7 @@ import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -36,6 +37,14 @@ class NFCToggleDisableTest {
         ShadowLog.clear()
         // A stored preference outlives a test, so the auto-retry switch is put back to its default
         // or one test silently changes what another is exercising.
+        PreferenceManager.getInstance(context).samsungNfcAutoRetry = false
+    }
+
+    @After
+    fun tearDown() {
+        // PreferenceManager is a process singleton and Robolectric does not reset it, so without
+        // this the switch set below leaks into every LATER TEST CLASS: anything that reads it
+        // would then be exercising a path nobody chose, and its green would mean nothing.
         PreferenceManager.getInstance(context).samsungNfcAutoRetry = false
     }
 

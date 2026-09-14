@@ -156,8 +156,8 @@ class MainFragment : Fragment() {
 
         // Register broadcast receiver for Shizuku/Dhizuku status changes
         val filter = IntentFilter().apply {
-            addAction("io.github.dorumrr.privacyflip.SHIZUKU_STATUS_CHANGED")
-            addAction("io.github.dorumrr.privacyflip.DHIZUKU_STATUS_CHANGED")
+            addAction(io.github.dorumrr.privacyflip.privilege.ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
+            addAction(io.github.dorumrr.privacyflip.privilege.DhizukuExecutor.STATUS_CHANGED_ACTION)
         }
         requireContext().registerReceiver(privilegeStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         Log.d(TAG, "Registered privilege status receiver (Shizuku/Dhizuku)")

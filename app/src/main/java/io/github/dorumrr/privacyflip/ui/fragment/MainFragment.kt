@@ -796,10 +796,9 @@ class MainFragment : Fragment() {
                         "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
                 }
 
-                // Every method gets a control. ROOT used to get none, on the grounds that Magisk
-                // cannot be re-prompted, which left a phone that misread its own root state with
-                // no way back inside the app. Its button re-runs the check instead of re-asking:
-                // Shell.getShell() is cached, so it cannot pester Magisk.
+                // Every method gets a control. ROOT used to get none, which left a phone that
+                // misread its own root state with no way back inside the app. Its button drops the
+                // cached non-root shell so su runs again; a working root shell is never dropped.
                 rootActionsContainer.visibility = View.VISIBLE
 
                 grantRootButton.text = when (privilegeMethod) {

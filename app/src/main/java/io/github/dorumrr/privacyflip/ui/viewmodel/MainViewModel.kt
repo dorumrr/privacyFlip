@@ -321,6 +321,12 @@ class MainViewModel : ViewModel() {
         logManager.d(TAG, "refresh() called - reloading status WITHOUT auto-requesting permission")
         viewModelScope.launch {
             try {
+                // Re-detect before reading. A backend the user started AFTER this app did was
+                // otherwise never picked up while the screen stayed open: nothing else re-detects
+                // within one Activity, since initialize() above is latched. Cheap now, because
+                // detection returns immediately while the executor already held still works.
+                context?.let { rootManager.initialize(it) }
+
                 val privilegeMethod = rootManager.getPrivilegeMethod()
                 val isPrivilegeAvailable = rootManager.isRootAvailable()
                 val isPrivilegeGranted = if (isPrivilegeAvailable) {

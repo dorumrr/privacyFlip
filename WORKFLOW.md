@@ -11,9 +11,8 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ### Behavior:
 - App starts and displays UI
-- **Red alert card shown:** "Root or Shizuku Required"
-  - Message: "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
-- **System Requirements card shown** (reddish background):
+- **System Requirements card shown** (reddish background). This is the only alert surface; the app has no separate alert card:
+  - **Message:** "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
   - **Privileged Access:** "Not Available"
   - Action button: "INSTALL SHIZUKU OR ROOT DEVICE"
   - **Battery Optimization:** Shows current status
@@ -37,9 +36,8 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 #### Behavior:
 - App starts and immediately requests Shizuku permission via system dialog
 - **If user denies:**
-  - **Red alert card shown:** "Shizuku Permission Denied"
-    - Message: "Click 'Grant Shizuku Permission' button to try again or uninstall and reinstall the app, then grant permission at first start."
   - **System Requirements card shown** (reddish background):
+    - **Message:** "Click 'Grant Shizuku Permission' button to try again or uninstall and reinstall the app, then grant permission at first start."
     - **Privileged Access:** "Shizuku Available"
     - Action button: "GRANT SHIZUKU PERMISSION"
     - **Battery Optimization:** Shows current status
@@ -56,7 +54,6 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 #### Behavior:
 - User clicks "GRANT SHIZUKU PERMISSION" and grants permission
-- **Red alert card hidden**
 - **System Requirements card shown** (reddish background):
   - **Privileged Access:** "Shizuku Granted" (no action button)
   - **Battery Optimization:** "Optimization enabled"
@@ -74,7 +71,6 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 #### Behavior:
 - User disables battery optimization
-- **Red alert card hidden**
 - **System Requirements card hidden** (all requirements met)
 - **Privacy Flip status card:** "Protection Inactive" (toggle enabled)
 - **All feature switches enabled**
@@ -117,11 +113,10 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 #### Behavior:
 - App starts and requests root permission via Magisk/SuperSU dialog
 - **If user denies:**
-  - **Red alert card shown:** "Root Permission Denied"
-    - Message: "Privacy Flip could not confirm root access. Open Magisk, allow Privacy Flip, then tap 'Check Again'."
   - **System Requirements card shown** (reddish background):
+    - **Message:** "Privacy Flip could not confirm root access. Open Magisk, allow Privacy Flip, then tap 'Check Again'."
     - **Privileged Access:** "Root Available"
-    - Action button: "CHECK AGAIN" (re-runs the root check; Magisk cannot be re-prompted, and the shell is cached, so this re-reads rather than re-asks)
+    - Action button: "CHECK AGAIN" (drops the cached non-root shell and re-runs `su`, so a grant made in Magisk since the app started is actually picked up; a working root shell is never dropped)
     - **Battery Optimization:** Shows current status
     - Action button: "OPEN BATTERY SETTINGS" (if optimization enabled)
   - **Privacy Flip status card:** "Protection Inactive" (toggle disabled)
@@ -168,17 +163,19 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ## Summary Matrix
 
-| Scenario | Red Alert | System Req Card | Privileged Access Status | Battery Opt Status | Toggles Enabled |
-|----------|-----------|-----------------|-------------------------|-------------------|-----------------|
-| No privilege | ✅ Shown | ✅ Shown | "Not Available" + Install button | Shown + button if needed | ❌ Disabled |
-| Shizuku denied | ✅ Shown | ✅ Shown | "Shizuku Available" + Grant button | Shown + button if needed | ❌ Disabled |
-| Shizuku granted, battery not disabled | ❌ Hidden | ✅ Shown | "Shizuku Granted" (no button) | "Enabled" + button | ✅ Enabled |
-| Shizuku granted, battery disabled | ❌ Hidden | ❌ Hidden | N/A | N/A | ✅ Enabled |
-| Root denied | ✅ Shown | ✅ Shown | "Root Available" + "CHECK AGAIN" button | Shown + button if needed | ❌ Disabled |
-| Root granted, battery not disabled | ❌ Hidden | ✅ Shown | "Root Granted" (no button) | "Enabled" + button | ✅ Enabled |
-| Root granted, battery disabled | ❌ Hidden | ❌ Hidden | N/A | N/A | ✅ Enabled |
-| Sui granted, battery not disabled | ❌ Hidden | ✅ Shown | "Sui Granted" (no button) | "Enabled" + button | ✅ Enabled |
-| Sui granted, battery disabled | ❌ Hidden | ❌ Hidden | N/A | N/A | ✅ Enabled |
+There is one card, not two. It always carries the red background, so "shown" is the only alarm the app has.
+
+| Scenario | System Req Card | Privileged Access Status | Battery Opt Status | Toggles Enabled |
+|----------|-----------------|-------------------------|-------------------|-----------------|
+| No privilege | ✅ Shown | "Not Available" + Install button | Shown + button if needed | ❌ Disabled |
+| Shizuku denied | ✅ Shown | "Shizuku Available" + Grant button | Shown + button if needed | ❌ Disabled |
+| Shizuku granted, battery not disabled | ✅ Shown | "Shizuku Granted" (no button) | "Enabled" + button | ✅ Enabled |
+| Shizuku granted, battery disabled | ❌ Hidden | N/A | N/A | ✅ Enabled |
+| Root denied | ✅ Shown | "Root Available" + "CHECK AGAIN" button | Shown + button if needed | ❌ Disabled |
+| Root granted, battery not disabled | ✅ Shown | "Root Granted" (no button) | "Enabled" + button | ✅ Enabled |
+| Root granted, battery disabled | ❌ Hidden | N/A | N/A | ✅ Enabled |
+| Sui granted, battery not disabled | ✅ Shown | "Sui Granted" (no button) | "Enabled" + button | ✅ Enabled |
+| Sui granted, battery disabled | ❌ Hidden | N/A | N/A | ✅ Enabled |
 
 ---
 
@@ -196,7 +193,7 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ### 3. UI State Consistency
 - System Requirements card visibility depends on BOTH privilege status AND battery optimization
-- Red alert only shown when privilege is denied/unavailable
+- The System Requirements card is the only alert surface. It carries the explanatory message itself, and appears whenever privilege is denied or unavailable
 - All toggles disabled when `isRootGranted = false`
 
 ### 4. Battery Optimization
@@ -210,16 +207,16 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ### Shizuku App Uninstalled
 - Treat as "No privilege available"
-- Show red alert: "Root or Shizuku Required"
+- System Requirements card shows "Not Available" with the install message
 
 ### Root Access Revoked
 - Treat as "No privilege available"
-- Show red alert: "Root or Shizuku Required"
+- System Requirements card shows "Not Available" with the install message
 
 ### User Denies with "Don't Ask Again"
-- Show red alert with reinstall instructions
+- The System Requirements card carries the instructions for whichever method is in use
 - Shizuku/Dhizuku/Sui: the Grant button still attempts the request and fails gracefully
-- Root: Magisk cannot be re-prompted, so the button re-runs the check instead. The user allows Privacy Flip in Magisk, then taps "CHECK AGAIN"
+- Root: the user allows Privacy Flip in Magisk, then taps "CHECK AGAIN", which drops the cached non-root shell so `su` runs again and the new grant is seen
 
 ### Device Reboot
 - Shizuku: May need to restart Shizuku service, then app auto-restores

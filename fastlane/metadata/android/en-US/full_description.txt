@@ -51,7 +51,9 @@ Note: Camera and microphone ignore custom delays and trigger immediately, due to
 • Device set as Device Owner
 • No root required, no ADB after setup
 • Persistent privileges across reboots
-• Works for: Camera, Microphone, Location, Bluetooth, NFC (NFC needs Android 14+)
+• Works for, each needing its own Android version: Camera and Microphone (Android 12+),
+Bluetooth (Android 9+), Location (Android 11+), NFC (Android 15+). Below Android 9 a Dhizuku
+setup can switch nothing at all.
 • Cannot do WiFi, Mobile Data, Airplane Mode or Battery Saver - Android gives a Device Owner no
 way to switch those. Use Root or Shizuku for them.
 

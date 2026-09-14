@@ -44,8 +44,8 @@ abstract class BasePrivacyToggle(
                 Log.d(TAG, "  Command ${index + 1}: ${cmd.primary}")
             }
 
-            val result = runFeatureAction(intended == FeatureState.ENABLED)
-                ?: runCommands(commands.map { it.primary })
+            val viaApi = runFeatureAction(intended == FeatureState.ENABLED)
+            val result = viaApi ?: runCommands(commands.map { it.primary })
 
             Log.d(TAG, "📊 Command execution result: success=${result.success}, exitCode=${result.exitCode}")
             if (result.output.isNotEmpty()) {
@@ -57,7 +57,9 @@ abstract class BasePrivacyToggle(
 
             // Every command that could have run, not one guessed winner: executeWithFallbacks does
             // not report which of them succeeded.
-            val commandUsed = commands.joinToString(" | ") { it.primary }
+            // null when the backend's own API did it: naming shell commands that never ran put
+            // them in the user-facing log as "Commands attempted".
+            val commandUsed = if (viaApi != null) null else commands.joinToString(" | ") { it.primary }
 
             if (!result.success) {
                 return PrivacyResult(
@@ -89,6 +91,12 @@ abstract class BasePrivacyToggle(
                     message = "$featureName ${action}d, but the state could not be read back",
                     commandUsed = commandUsed
                 )
+                Confirmation.ABSENT -> PrivacyResult(
+                    feature = feature,
+                    success = false,
+                    message = "$featureName is not available on this device",
+                    commandUsed = commandUsed
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ EXCEPTION ${action}ing $featureName", e)
@@ -111,7 +119,10 @@ abstract class BasePrivacyToggle(
         repeat(READ_BACK_ATTEMPTS) { attempt ->
             when (val actual = getCurrentState()) {
                 intended -> return Confirmation.CONFIRMED
-                FeatureState.UNKNOWN, FeatureState.ERROR, FeatureState.UNAVAILABLE -> {
+                // UNAVAILABLE is a definite "not present here", not an unreadable one, so it is
+                // never reported as an unconfirmed success.
+                FeatureState.UNAVAILABLE -> return Confirmation.ABSENT
+                FeatureState.UNKNOWN, FeatureState.ERROR -> {
                     Log.w(TAG, "⚠️ $featureName reads as $actual - cannot confirm, reporting unconfirmed")
                     return Confirmation.UNREADABLE
                 }
@@ -122,7 +133,7 @@ abstract class BasePrivacyToggle(
         return Confirmation.CONTRADICTED
     }
 
-    private enum class Confirmation { CONFIRMED, CONTRADICTED, UNREADABLE }
+    private enum class Confirmation { CONFIRMED, CONTRADICTED, UNREADABLE, ABSENT }
 
     // The API route's twin for reads. Without it a backend whose WRITE worked would still read
     // back through a shell it cannot use, and report its own successful change as a failure.
@@ -131,7 +142,12 @@ abstract class BasePrivacyToggle(
 
     override suspend fun getCurrentState(): FeatureState {
         return try {
-            readFeatureState()?.let { return it }
+            // ENABLED or DISABLED only. Letting UNKNOWN/ERROR/UNAVAILABLE stand in for a status
+            // read skips the commands below, and confirmReachedState then maps it to UNREADABLE,
+            // which reports success for a change nothing observed.
+            readFeatureState()
+                ?.takeIf { it == FeatureState.ENABLED || it == FeatureState.DISABLED }
+                ?.let { return it }
 
             val result = runCommands(statusCommands.map { it.primary })
 

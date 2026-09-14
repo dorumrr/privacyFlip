@@ -13,6 +13,7 @@ import android.util.Log
 import com.rosan.dhizuku.api.Dhizuku
 import io.github.dorumrr.privacyflip.data.FeatureState
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
+import io.github.dorumrr.privacyflip.util.isScreenCurrentlyLocked
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 /**
@@ -37,13 +38,17 @@ internal object DhizukuFeaturePolicy {
         PrivacyFeature.NFC to UserManager.DISALLOW_NEAR_FIELD_COMMUNICATION_RADIO
     )
 
-    /** Real on/off switches, with none of the restriction lock-out problem. */
+    // Real on/off switches rather than restrictions. The camera still needs releasing: a camera
+    // policy outlives the process exactly as a restriction does.
     private val DIRECT = setOf(PrivacyFeature.LOCATION, PrivacyFeature.CAMERA)
 
     private fun minSdkFor(feature: PrivacyFeature): Int = when (feature) {
         PrivacyFeature.LOCATION -> Build.VERSION_CODES.R
         PrivacyFeature.BLUETOOTH -> Build.VERSION_CODES.P
-        PrivacyFeature.NFC -> Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        PrivacyFeature.NFC -> Build.VERSION_CODES.VANILLA_ICE_CREAM
+        // The app drops camera and microphone below S anyway (DeviceDetector), so claiming them
+        // earlier would advertise a capability no configuration can reach.
+        PrivacyFeature.CAMERA, PrivacyFeature.MICROPHONE -> Build.VERSION_CODES.S
         else -> Build.VERSION_CODES.O
     }
 
@@ -154,10 +159,10 @@ internal object DhizukuFeaturePolicy {
                     val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                     if (dpm.getCameraDisabled(null)) FeatureState.DISABLED else FeatureState.ENABLED
                 }
-                PrivacyFeature.NFC -> when (val nfc = NfcAdapter.getDefaultAdapter(context)) {
-                    null -> FeatureState.UNAVAILABLE
-                    else -> if (nfc.isEnabled) FeatureState.ENABLED else FeatureState.DISABLED
-                }
+                // null, not UNAVAILABLE: a non-answer returned from here would be taken as the
+                // state and skip the caller's own status read.
+                PrivacyFeature.NFC -> NfcAdapter.getDefaultAdapter(context)
+                    ?.let { if (it.isEnabled) FeatureState.ENABLED else FeatureState.DISABLED }
                 PrivacyFeature.MICROPHONE -> {
                     val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     if (audio.isMicrophoneMute) FeatureState.DISABLED else FeatureState.ENABLED
@@ -173,13 +178,24 @@ internal object DhizukuFeaturePolicy {
     }
 
     /**
-     * Lifts every restriction this app can set.
+     * Frees anything this backend left behind that the user cannot free themselves.
      *
-     * A restriction outlives the process, so a crash, a force-stop or an uninstall between lock and
-     * unlock would otherwise leave the user unable to turn Bluetooth, NFC or the microphone back on
-     * from Settings at all. Called at startup, so the worst case is one lock cycle, not forever.
+     * A restriction and a camera policy both outlive the process, and neither can be lifted from
+     * Settings, so a crash between lock and unlock would otherwise block a radio for good.
+     *
+     * Only runs while the screen is UNLOCKED. A block that is in force during a real lock is doing
+     * its job, and sweeping unconditionally would undo every lock the moment anything re-ran this.
      */
-    fun releaseAll(context: Context) {
+    /**
+     * A screen-state check alone is not enough: the accessibility producer starts a lock while the
+     * screen is still on and the keyguard is not yet up, and sweeping there would lift the blocks
+     * that same lock is about to rely on. A lock newer than the last unlock means one is in flight.
+     */
+    internal fun shouldSweep(screenLocked: Boolean, lockIsInFlight: Boolean): Boolean =
+        !screenLocked && !lockIsInFlight
+
+    fun releaseStaleBlocks(context: Context, lockIsInFlight: Boolean) {
+        if (!shouldSweep(isScreenCurrentlyLocked(context, TAG), lockIsInFlight)) return
         val dpm = ownerDpm(context) ?: return
         val admin = Dhizuku.getOwnerComponent() ?: return
         RESTRICTIONS.forEach { (feature, restriction) ->
@@ -189,6 +205,11 @@ internal object DhizukuFeaturePolicy {
             } catch (e: Exception) {
                 Log.w(TAG, "Could not lift $restriction: ${e.message}")
             }
+        }
+        try {
+            dpm.setCameraDisabled(admin, false)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not re-allow the camera: ${e.message}")
         }
     }
 }

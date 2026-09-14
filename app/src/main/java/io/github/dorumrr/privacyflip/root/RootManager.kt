@@ -79,8 +79,10 @@ class RootManager private constructor() {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            // null, not a failure: a non-null result stops the caller falling back to its shell
+            // commands, so a throw here would report a failure without ever trying them.
             Log.e(TAG, "Error setting ${feature.displayName} through the backend API", e)
-            CommandResult.failure(e.message ?: "Unknown error")
+            null
         }
     }
 

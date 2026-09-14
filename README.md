@@ -71,11 +71,13 @@
 - **Best performance** with UID 0 privileges
 
 ### **Option 3: Dhizuku** (Device Owner method, 5 of 9 features)
-- **Device Owner** or **Profile Owner** status. Android refuses to set a Device Owner on a device
-  that already has a second user, such as a work profile
+- **Device Owner** status. Android refuses to set a Device Owner on a device that already has a
+  second user, such as a work profile
 - **No root required**, no ADB needed after initial setup
 - **Persistent privileges** - survives reboots
-- **Works for**: Camera, Microphone, Location, Bluetooth, NFC (NFC needs Android 14+)
+- **Works for**, and each needs its own Android version:
+  Camera and Microphone (Android 12+), Bluetooth (Android 9+), Location (Android 11+),
+  NFC (Android 15+). Below Android 9 a Dhizuku setup can switch nothing at all.
 - **Cannot do**: WiFi, Mobile Data, Airplane Mode, Battery Saver. Dhizuku shares Device Owner
   rights, and Android gives a Device Owner no way to switch those. Use Root or Shizuku for them.
 

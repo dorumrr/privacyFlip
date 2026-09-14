@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
  * fault as telling them it worked.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [35])
 class DhizukuFeaturePolicyTest {
 
     @Test
@@ -38,7 +38,7 @@ class DhizukuFeaturePolicyTest {
             PrivacyFeature.MICROPHONE,
             PrivacyFeature.NFC
         ).forEach {
-            assertTrue("${it.displayName} has a Device Owner API on API 34", DhizukuFeaturePolicy.supports(it))
+            assertTrue("${it.displayName} has a Device Owner API on API 35", DhizukuFeaturePolicy.supports(it))
         }
     }
 
@@ -53,20 +53,39 @@ class DhizukuFeaturePolicyTest {
     }
 
     @Test
-    fun `a feature whose restriction is too new for this device is not claimed`() {
-        // NFC's restriction arrived in API 34. Claiming it on an older phone would mean the app
-        // silently did nothing while reporting success.
-        assertTrue("API 34 has it", DhizukuFeaturePolicy.supports(PrivacyFeature.NFC))
+    @Config(sdk = [34])
+    fun `NFC is refused on Android 14, whose UserManager has no such restriction`() {
+        // DISALLOW_NEAR_FIELD_COMMUNICATION_RADIO is absent from android-34.jar and present in
+        // android-35.jar. Claiming it on Android 14 would write a restriction key the platform
+        // does not know, and then read it back as if NFC were off.
+        assertFalse("Android 14 does not have it", DhizukuFeaturePolicy.supports(PrivacyFeature.NFC))
+        val reason = DhizukuFeaturePolicy.unsupportedReason(PrivacyFeature.NFC)
+        assertTrue("and it must name the version needed, was: $reason", reason.contains("API 35"))
     }
 
     @Test
     @Config(sdk = [30])
     fun `on Android 11 the newer restrictions are refused, and the older ones still work`() {
-        assertFalse("NFC's restriction needs API 34", DhizukuFeaturePolicy.supports(PrivacyFeature.NFC))
+        assertFalse("NFC's restriction needs API 35", DhizukuFeaturePolicy.supports(PrivacyFeature.NFC))
         assertTrue("Location's setter is API 30", DhizukuFeaturePolicy.supports(PrivacyFeature.LOCATION))
         assertTrue("Bluetooth's restriction is API 28", DhizukuFeaturePolicy.supports(PrivacyFeature.BLUETOOTH))
         val reason = DhizukuFeaturePolicy.unsupportedReason(PrivacyFeature.NFC)
-        assertTrue("and it must say which API is missing, was: $reason", reason.contains("API 34"))
+        assertTrue("and it must say which API is missing, was: $reason", reason.contains("API 35"))
+    }
+
+    @Test
+    fun `the stale-block sweep runs only while the screen is unlocked`() {
+        // A restriction and a camera policy both outlive the process and cannot be lifted from
+        // Settings, so they must be swept. But sweeping during a real lock would undo the block
+        // the user asked for, every time anything re-ran detection.
+        assertTrue("an unlocked phone with no lock in flight may be swept",
+            DhizukuFeaturePolicy.shouldSweep(screenLocked = false, lockIsInFlight = false))
+        assertFalse("a locked phone's blocks are doing their job",
+            DhizukuFeaturePolicy.shouldSweep(screenLocked = true, lockIsInFlight = false))
+        // The accessibility producer starts a lock while the screen is STILL ON, so screen state
+        // alone would sweep away the blocks that same lock is about to rely on.
+        assertFalse("a lock in flight wins even with the screen still on",
+            DhizukuFeaturePolicy.shouldSweep(screenLocked = false, lockIsInFlight = true))
     }
 
     @Test
@@ -74,7 +93,9 @@ class DhizukuFeaturePolicyTest {
     fun `on Android 8 only the oldest routes are claimed`() {
         assertFalse("Location's setter needs API 30", DhizukuFeaturePolicy.supports(PrivacyFeature.LOCATION))
         assertFalse("Bluetooth's restriction needs API 28", DhizukuFeaturePolicy.supports(PrivacyFeature.BLUETOOTH))
-        assertTrue("setCameraDisabled is ancient", DhizukuFeaturePolicy.supports(PrivacyFeature.CAMERA))
-        assertTrue("so is the microphone restriction", DhizukuFeaturePolicy.supports(PrivacyFeature.MICROPHONE))
+        // The app drops both below Android 12, so claiming them here would advertise something
+        // no configuration can reach. Every doc states the same floor.
+        assertFalse("camera is dropped below Android 12", DhizukuFeaturePolicy.supports(PrivacyFeature.CAMERA))
+        assertFalse("and so is the microphone", DhizukuFeaturePolicy.supports(PrivacyFeature.MICROPHONE))
     }
 }

@@ -81,12 +81,6 @@ class DhizukuExecutor : PrivilegeExecutor {
         try {
             val initialized = Dhizuku.init(context)
             logManager?.d(TAG, "Dhizuku.init() returned: $initialized")
-            // A restriction outlives the process. Lifting any left over from a crash or a
-            // force-stop here means the user is never locked out of their own Bluetooth, NFC or
-            // microphone for longer than one lock cycle.
-            if (initialized && Dhizuku.isPermissionGranted()) {
-                DhizukuFeaturePolicy.releaseAll(context)
-            }
         } catch (e: Exception) {
             logManager?.e(TAG, "Error initializing Dhizuku: ${e.message}")
         }

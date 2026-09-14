@@ -3,6 +3,7 @@ package io.github.dorumrr.privacyflip.privilege
 import android.content.Context
 import android.os.Build
 import io.github.dorumrr.privacyflip.util.LogManager
+import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import io.github.dorumrr.privacyflip.util.SingletonHolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,11 @@ class PrivilegeManager private constructor(private val context: Context) {
             val existing = currentExecutor
             val stillAvailable = existing != null && isStillAvailable(existing)
 
+            // Outside the early return below, and before it: Dhizuku's blocks outlive the process
+            // and cannot be lifted from Settings, so the sweep has to run on every initialize,
+            // not only on the ones that re-detect.
+            releaseStaleDhizukuBlocks()
+
             if (!shouldRedetect(existing != null, stillAvailable)) {
                 return@withLock currentMethod
             }
@@ -62,6 +68,16 @@ class PrivilegeManager private constructor(private val context: Context) {
             logManager.d(TAG, "Availability check failed: ${e.message}")
             false
         }
+
+    private fun releaseStaleDhizukuBlocks() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        try {
+            val lockIsInFlight = PrivacyActionWorker.lastLockAtMillis > PrivacyActionWorker.lastUnlockAtMillis
+            DhizukuFeaturePolicy.releaseStaleBlocks(context, lockIsInFlight)
+        } catch (e: Exception) {
+            logManager.d(TAG, "Dhizuku stale-block sweep skipped: ${e.message}")
+        }
+    }
 
     /**
      * Takes ownership of [next] and tears down whatever it replaces.

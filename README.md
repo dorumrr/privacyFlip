@@ -70,11 +70,14 @@
 - **Root access** via Magisk, SuperSU, or similar
 - **Best performance** with UID 0 privileges
 
-### **Option 3: Dhizuku** (Device Owner method)
-- **Device Owner** or **Profile Owner** status
+### **Option 3: Dhizuku** (Device Owner method, 5 of 9 features)
+- **Device Owner** or **Profile Owner** status. Android refuses to set a Device Owner on a device
+  that already has a second user, such as a work profile
 - **No root required**, no ADB needed after initial setup
 - **Persistent privileges** - survives reboots
-- **Best for**: Enterprise devices, work profiles, privacy-focused setups
+- **Works for**: Camera, Microphone, Location, Bluetooth, NFC (NFC needs Android 14+)
+- **Cannot do**: WiFi, Mobile Data, Airplane Mode, Battery Saver. Dhizuku shares Device Owner
+  rights, and Android gives a Device Owner no way to switch those. Use Root or Shizuku for them.
 
 ### **Option 4: Sui** (Best of both worlds)
 - **Rooted device** with Magisk installed

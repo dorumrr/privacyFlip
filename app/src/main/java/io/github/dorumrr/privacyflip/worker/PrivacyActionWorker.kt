@@ -26,7 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
-class PrivacyActionWorker(
+open class PrivacyActionWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
@@ -65,51 +65,26 @@ class PrivacyActionWorker(
         var sensorEnableInProgress: Boolean = false
             private set
 
-        // Makes a lock cycle's sensor disable and a later unlock cycle's sensor enable (2
-        // separate WorkManager jobs, so ExistingWorkPolicy never serialises them against each
-        // other) mutually exclusive, so their privileged calls can never interleave. Mutual
-        // exclusion alone says nothing about ORDER, which lastLockAtMillis/lastUnlockAtMillis
-        // below close - see isSupersededByFresherOppositeAction. internal, not private, so
-        // PrivacyActionWorkerSensorMutexTest can hold it directly: "sensorMutex serialises two
-        // concurrent holders..." proves the exclusion, "a stale lock-side disable is skipped...
-        // even if it wins the mutex race last" proves the order guarantee. doWork() as a whole
-        // needs a real root/Shizuku shell and isn't otherwise unit-testable.
+        // Makes a lock cycle's sensor disable and an unlock cycle's sensor enable mutually
+        // exclusive: they are 2 separate WorkManager jobs, so nothing else serialises them.
+        // Exclusion says nothing about ORDER, which isSupersededByFresherOppositeAction closes.
         internal val sensorMutex = Mutex()
 
-        // The lock-side twin of lastUnlockAtMillis below. Written by util/PendingLockWork.kt's
-        // recordLock(), at every real lock-trigger call site, before the job is even enqueued -
-        // not inside doWork() itself, because doWork() starting at all is gated on real
-        // WorkManager dispatch latency (Doze, scheduler load) outside its own control, which
-        // could otherwise make a genuinely LATER unlock look earlier than this cycle's own
-        // "start". Read fresh at each supersede checkpoint, never frozen into a local - proven
-        // necessary by PrivacyActionWorkerSensorMutexTest's "a re-lock during a slow sensor
-        // step..." test.
+        // Written by PendingLockWork.recordLock() at the trigger, before the job is enqueued:
+        // doWork() starting at all waits on WorkManager dispatch latency (Doze, scheduler load),
+        // which could make a genuinely LATER unlock look earlier than this cycle's own start.
         @Volatile
         var lastLockAtMillis: Long = 0L
 
-        // When an unlock is confirmed while sensorDisableInProgress is true, the in-flight
-        // sensor disable is deliberately NOT cancelled (would leave sensors on mid-command) - so
-        // this cycle's own later regular-features/protection-modes stage needs another way to
-        // learn the unlock happened. Every unlock-detector writes this UNCONDITIONALLY (a plain
-        // timestamp write can't interrupt anything mid-flight, so it needs no guard). Read fresh
-        // at each supersede checkpoint, never frozen, mirroring lastLockAtMillis above, whose own
-        // frozen-vs-fresh behavior is what PrivacyActionWorkerSensorMutexTest's "a re-lock during
-        // a slow sensor step..." test actually exercises. SystemClock.elapsedRealtime(), not
-        // System.currentTimeMillis(): immune to the wall clock moving (NTP sync, DST), which a
-        // plain timestamp comparison would otherwise be exposed to.
+        // An unlock during an in-flight sensor disable deliberately does not cancel it, so this
+        // is how the rest of that cycle learns the unlock happened. Written unconditionally, from
+        // SystemClock.elapsedRealtime(): a wall clock can move backwards (NTP sync, DST).
         @Volatile
         var lastUnlockAtMillis: Long = 0L
 
-        // Shared by all 4 of doWork()'s supersede checks (sensor and regularFeatures/
-        // protectionModes stage, for both lock and unlock) rather than each writing its own
-        // inline comparison, so a regression in the logic fails every call site the same way.
-        // internal, not private, so PrivacyActionWorkerSensorMutexTest can call the real
-        // function: its truth table ("isSupersededByFresherOppositeAction is the exact
-        // boolean...") proves the comparison itself; "a re-lock during a slow sensor step..."
-        // proves callers must pass a value read fresh at each checkpoint, never one frozen at
-        // job start - a frozen snapshot misses a same-direction re-trigger that arrives while
-        // this job's own sensor step is still running and gets folded into it instead of
-        // starting a new job.
+        // Shared by all 6 of doWork()'s supersede checks, 3 per direction, so a regression in the
+        // comparison fails every one the same way. Callers must read the timestamp FRESH at each
+        // checkpoint: one frozen at job start misses a re-trigger folded into this same job.
         internal fun isSupersededByFresherOppositeAction(
             oppositeActionAtMillis: Long,
             ownLastKnownAtMillis: Long
@@ -173,6 +148,45 @@ class PrivacyActionWorker(
 
     private val dualLog: DualLogger by lazy { DualLogger(applicationContext, TAG) }
 
+    private val rootManager: RootManager by lazy { RootManager.getInstance(Unit) }
+
+    private val privacyManager: PrivacyManager by lazy {
+        PrivacyManager.getInstance(applicationContext)
+    }
+
+    private val connectionChecker: ConnectionStateChecker by lazy {
+        ConnectionStateChecker(applicationContext, rootManager)
+    }
+
+    private val foregroundAppDetector: ForegroundAppDetector by lazy {
+        ForegroundAppDetector(applicationContext)
+    }
+
+    // What doWork() cannot reach without a privileged shell arrives through an open member: the 7
+    // here plus isScreenCurrentlyLocked below. Stored preferences stay direct, being themselves
+    // in a test. Built lazily above, so a stand-in never constructs the real one.
+    protected open suspend fun confirmPrivilege(): Boolean {
+        rootManager.initialize(applicationContext)
+        return privilegeIsGranted { rootManager.isRootGranted() }
+    }
+
+    protected open suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> =
+        privacyManager.getCurrentStatus()
+
+    protected open suspend fun enableFeatures(features: Set<PrivacyFeature>): List<PrivacyResult> =
+        privacyManager.enableFeatures(features)
+
+    protected open suspend fun disableFeatures(features: Set<PrivacyFeature>): List<PrivacyResult> =
+        privacyManager.disableFeatures(features)
+
+    protected open suspend fun isFeatureInUse(feature: PrivacyFeature): Boolean =
+        connectionChecker.isFeatureInUse(feature)
+
+    protected open suspend fun isHotspotActive(): Boolean = connectionChecker.isHotspotActive()
+
+    protected open fun getFirstForegroundApp(exemptApps: Set<String>): String? =
+        foregroundAppDetector.getFirstForegroundApp(exemptApps)
+
     private fun logDebug(message: String) = dualLog.i(message)
 
     private fun logWarning(message: String) = dualLog.w(message)
@@ -199,7 +213,7 @@ class PrivacyActionWorker(
      *
      * @return true if screen is locked, false if unlocked
      */
-    private fun isScreenCurrentlyLocked(): Boolean =
+    protected open fun isScreenCurrentlyLocked(): Boolean =
         io.github.dorumrr.privacyflip.util.isScreenCurrentlyLocked(applicationContext, TAG)
 
     /**
@@ -211,7 +225,6 @@ class PrivacyActionWorker(
      */
     private suspend fun filterByOnlyIfUnused(
         features: List<PrivacyFeature>,
-        connectionChecker: ConnectionStateChecker,
         hotspotActiveNow: Boolean
     ): List<PrivacyFeature> {
         return features.filter { feature ->
@@ -220,7 +233,7 @@ class PrivacyActionWorker(
             } else if (!preferenceManager.getFeatureOnlyIfUnused(feature)) {
                 true // Always disable if "only if unused" is not enabled
             } else {
-                val inUse = connectionChecker.isFeatureInUse(feature)
+                val inUse = isFeatureInUse(feature)
                 if (inUse) {
                     logDebug("⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
                     debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
@@ -255,11 +268,8 @@ class PrivacyActionWorker(
 
             logDebug("🔒 Executing privacy actions: locking=$isLocking, deviceLocked=$isDeviceLocked, trigger=$trigger, reason=$reason")
 
-            val rootManager = RootManager.getInstance(Unit)
-            rootManager.initialize(applicationContext)
-
-            // Check if privilege is granted (works for Root, Dhizuku, Shizuku, and Sui)
-            val hasPrivilege = privilegeIsGranted { rootManager.isRootGranted() }
+            // Works for Root, Dhizuku, Shizuku and Sui.
+            val hasPrivilege = confirmPrivilege()
 
             if (!hasPrivilege) {
                 logWarning("Could not confirm privileged access after $PRIVILEGE_CHECK_ATTEMPTS checks - skipping this action")
@@ -268,10 +278,7 @@ class PrivacyActionWorker(
                 return Result.failure()
             }
 
-            val privacyManager = PrivacyManager.getInstance(applicationContext)
             val configManager = FeatureConfigurationManager(preferenceManager)
-            val connectionChecker = ConnectionStateChecker(applicationContext, rootManager)
-            val foregroundAppDetector = ForegroundAppDetector(applicationContext)
 
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
             if (!isGlobalPrivacyEnabled) {
@@ -283,7 +290,7 @@ class PrivacyActionWorker(
             // Check if any exempt app is in foreground
             val exemptApps = preferenceManager.getExemptApps()
             val foregroundExemptApp = if (exemptApps.isNotEmpty()) {
-                foregroundAppDetector.getFirstForegroundApp(exemptApps)
+                getFirstForegroundApp(exemptApps)
             } else {
                 null
             }
@@ -342,7 +349,7 @@ class PrivacyActionWorker(
                     // the race before the attempt is even made, without changing what the command
                     // itself can prove. Instead, the real outcome of the command is trusted
                     // directly: attempt the disable right away, and let
-                    // privacyManager.disableFeatures()'s own success/failure (already captured and
+                    // disableFeatures()'s own success/failure (already captured and
                     // logged below via processResults, same as every other feature) be the source
                     // of truth. If the keyguard genuinely wins the race, the command fails and
                     // that's reported honestly.
@@ -356,7 +363,7 @@ class PrivacyActionWorker(
                     // when the keyguard is up, and flips it the moment the same command runs
                     // unlocked. Attempting it would cost a shell round trip to change nothing.
                     if (sensorFeatures.isNotEmpty()) {
-                      val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, connectionChecker, hotspotActiveNow = false)
+                      val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, hotspotActiveNow = false)
                       if (filteredSensorFeatures.isNotEmpty()) {
                         // Waits its turn if an unlock cycle's own sensor enable (below) is
                         // currently running - see sensorMutex's own comment above. Uncontended in
@@ -376,7 +383,7 @@ class PrivacyActionWorker(
                               )
                           } else if (!isDeviceLocked) {
                               logDebug("🔒 Attempting to disable sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
-                              val sensorResults = privacyManager.disableFeatures(filteredSensorFeatures.toSet())
+                              val sensorResults = disableFeatures(filteredSensorFeatures.toSet())
                               processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                               val stillFailed = sensorResults.filter { !it.success }
                               if (stillFailed.isNotEmpty()) {
@@ -490,7 +497,7 @@ class PrivacyActionWorker(
                         val needsHotspotCheck = PrivacyFeature.WIFI in regularFeatures ||
                             PrivacyFeature.MOBILE_DATA in regularFeatures ||
                             PrivacyFeature.AIRPLANE_MODE in protectionModes
-                        val hotspotActiveNow = needsHotspotCheck && connectionChecker.isHotspotActive()
+                        val hotspotActiveNow = needsHotspotCheck && isHotspotActive()
                         if (hotspotActiveNow) {
                             // Airplane Mode is deliberately NOT named here. This notification
                             // fires before the regularFeatures round-trip below, but Airplane
@@ -516,15 +523,15 @@ class PrivacyActionWorker(
                         // navigation started during the wait. An unconditionally included
                         // feature's presence here never depended on any snapshot to begin with.
                         if (regularFeatures.isNotEmpty()) {
-                            val filteredRegularFeatures = filterByOnlyIfUnused(regularFeatures, connectionChecker, hotspotActiveNow)
+                            val filteredRegularFeatures = filterByOnlyIfUnused(regularFeatures, hotspotActiveNow)
 
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔒 Disabling regular features (count=${filteredRegularFeatures.size}): ${filteredRegularFeatures.map { it.displayName }}")
-                                logDebug("🔒 About to call privacyManager.disableFeatures()...")
+                                logDebug("🔒 About to call disableFeatures()...")
 
-                                val regularResults = privacyManager.disableFeatures(filteredRegularFeatures.toSet())
+                                val regularResults = disableFeatures(filteredRegularFeatures.toSet())
 
-                                logDebug("🔒 privacyManager.disableFeatures() returned ${regularResults.size} results")
+                                logDebug("🔒 disableFeatures() returned ${regularResults.size} results")
 
                                 processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                             } else {
@@ -540,7 +547,7 @@ class PrivacyActionWorker(
                             logDebug("🛡️ Enabling protection modes on lock: ${protectionModes.map { it.displayName }}")
 
                             // Get current status to check if already enabled
-                            val currentStatus = privacyManager.getCurrentStatus()
+                            val currentStatus = getCurrentStatus()
 
                             // hotspotActiveNow was computed once, above, before the
                             // regularFeatures block's own disableFeatures() root/Shizuku
@@ -551,7 +558,7 @@ class PrivacyActionWorker(
                             // actually configured, so this never costs an extra shell call for
                             // the common case where it isn't.
                             val hotspotActiveForAirplaneMode = PrivacyFeature.AIRPLANE_MODE in protectionModes &&
-                                connectionChecker.isHotspotActive()
+                                isHotspotActive()
 
                             // Read fresh, immediately before switching a radio kill-switch ON. The
                             // regular-features step above can take real time, and an unlock during
@@ -603,7 +610,7 @@ class PrivacyActionWorker(
                                     }
                                 } else {
                                     // Not enabled - enable it and mark as enabled by app
-                                    val results = privacyManager.enableFeatures(setOf(mode))
+                                    val results = enableFeatures(setOf(mode))
                                     val success = results.firstOrNull()?.success == true
                                     if (success) {
                                         preferenceManager.setFeatureEnabledByApp(mode, true)
@@ -661,7 +668,7 @@ class PrivacyActionWorker(
                         // still-running disable could finish after it, leaving camera/mic off
                         // despite a real, confirmed unlock.
                         sensorMutex.withLock {
-                          val currentSensorStatus = privacyManager.getCurrentStatus()
+                          val currentSensorStatus = getCurrentStatus()
                           val filteredSensorFeatures = sensorFeatures.filter { feature ->
                               val onlyIfNotEnabled = preferenceManager.getFeatureOnlyIfNotEnabled(feature)
                               if (!onlyIfNotEnabled) {
@@ -687,7 +694,7 @@ class PrivacyActionWorker(
                               )
                           } else if (filteredSensorFeatures.isNotEmpty()) {
                               logDebug("⚡ Enabling sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
-                              val sensorResults = privacyManager.enableFeatures(filteredSensorFeatures.toSet())
+                              val sensorResults = enableFeatures(filteredSensorFeatures.toSet())
                               processResults(sensorResults, filteredSensorFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                           }
                         }
@@ -740,7 +747,7 @@ class PrivacyActionWorker(
                         if (regularFeatures.isNotEmpty()) {
                             // Filter features based on "only if not already enabled" setting
                             // This prevents connection resets (e.g., WiFi/VPN disconnections)
-                            val currentStatus = privacyManager.getCurrentStatus()
+                            val currentStatus = getCurrentStatus()
                             val filteredRegularFeatures = regularFeatures.filter { feature ->
                                 val onlyIfNotEnabled = preferenceManager.getFeatureOnlyIfNotEnabled(feature)
                                 if (!onlyIfNotEnabled) {
@@ -760,7 +767,7 @@ class PrivacyActionWorker(
 
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔓 Enabling regular features: ${filteredRegularFeatures.map { it.displayName }}")
-                                val regularResults = privacyManager.enableFeatures(filteredRegularFeatures.toSet())
+                                val regularResults = enableFeatures(filteredRegularFeatures.toSet())
                                 processResults(regularResults, filteredRegularFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                             }
                         }
@@ -792,7 +799,7 @@ class PrivacyActionWorker(
                                 } else {
                                     // Either "only if not manually set" is disabled, or we enabled it
                                     // Disable it and clear the flag
-                                    val results = privacyManager.disableFeatures(setOf(mode))
+                                    val results = disableFeatures(setOf(mode))
                                     // Cleared only when the disable actually worked, mirroring the
                                     // enable side. Clearing it after a FAILED disable told the app
                                     // the user had set this themselves, so every later unlock

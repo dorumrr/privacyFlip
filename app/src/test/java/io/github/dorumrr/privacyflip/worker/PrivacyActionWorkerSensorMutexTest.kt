@@ -16,11 +16,10 @@ import org.junit.Test
  * configuration can run concurrently, with nothing else serialising them - whichever finished
  * last used to win, regardless of which action the user actually took last.
  *
- * doWork() as a whole needs a real root/Shizuku shell and cannot be unit-tested without deeper
- * dependency injection this codebase does not have. What CAN be proven directly is the actual
- * mechanism that closes the race: PrivacyActionWorker.sensorMutex. This test runs 2 real,
- * concurrent coroutines against it and checks the actual order events happened in, not just
- * that both eventually completed.
+ * This test covers the mechanism that closes the race, PrivacyActionWorker.sensorMutex, by
+ * running 2 real concurrent coroutines against it and checking the order events happened in,
+ * not just that both completed. doWork()'s own call sites are covered separately, against
+ * fakes, by PrivacyActionWorkerDoWorkTest.
  */
 class PrivacyActionWorkerSensorMutexTest {
 
@@ -139,13 +138,10 @@ class PrivacyActionWorkerSensorMutexTest {
         // against the actual code doWork() calls, not a copy of it: a regression in the shared
         // function itself would fail here regardless of which call site exercises it.
         //
-        // This does NOT prove each of the 4 call sites passes the CORRECT arguments (the right
+        // This does NOT prove each of the 6 call sites passes the CORRECT arguments (the right
         // timestamp, in the right order) - only that the function they all call is itself
-        // correct. Wiring is separately proven for the 2 sensor-stage call sites by the "stale
-        // lock-side disable" test above, which exercises real call-site-shaped code; the 2
-        // regularFeatures/protectionModes call sites have no equivalent wiring test - doWork()
-        // cannot run end to end without a real root/Shizuku shell this test environment does not
-        // have. Verified in code only for those 2 sites' own argument order.
+        // correct. PrivacyActionWorkerDoWorkTest proves the wiring, by running the real doWork()
+        // at all 6.
         assertTrue(
             "a real later opposite action (bigger timestamp) must supersede this cycle",
             PrivacyActionWorker.isSupersededByFresherOppositeAction(200L, 100L)

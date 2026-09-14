@@ -74,7 +74,11 @@ class PrivilegeManager private constructor(private val context: Context) {
         try {
             val lockIsInFlight = PrivacyActionWorker.lastLockAtMillis > PrivacyActionWorker.lastUnlockAtMillis
             DhizukuFeaturePolicy.releaseStaleBlocks(context, lockIsInFlight)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Throwable, not Exception: a third-party API that asserts throws an Error, and a
+            // sweep that is only a safety net must never take the whole app down with it.
             logManager.d(TAG, "Dhizuku stale-block sweep skipped: ${e.message}")
         }
     }

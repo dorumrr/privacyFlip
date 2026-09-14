@@ -196,6 +196,10 @@ internal object DhizukuFeaturePolicy {
 
     fun releaseStaleBlocks(context: Context, lockIsInFlight: Boolean) {
         if (!shouldSweep(isScreenCurrentlyLocked(context, TAG), lockIsInFlight)) return
+        // Dhizuku.getOwnerComponent() ASSERTS rather than returning null when Dhizuku was never
+        // initialised, and this runs before any executor has done that. An AssertionError is an
+        // Error, not an Exception, so it has to be prevented here rather than caught downstream.
+        if (!Dhizuku.init(context) || !Dhizuku.isPermissionGranted()) return
         val dpm = ownerDpm(context) ?: return
         val admin = Dhizuku.getOwnerComponent() ?: return
         RESTRICTIONS.forEach { (feature, restriction) ->

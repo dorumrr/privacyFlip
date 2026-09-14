@@ -176,11 +176,9 @@ class PrivilegePermissionGateTest {
 
         assertEquals("the later answer still updates what we know", false, gate.cachedAnswer)
 
-        // NOT proven here: that the waiting slot is cleared BEFORE it is resumed. That ordering
-        // only matters when two answers land at once from different threads, which no
-        // deterministic test in this suite can stage - deliberately breaking the order leaves
-        // every test in this file green. The ordering is kept by construction and by comment in
-        // deliverResult(); treat it as read, not as tested.
+        // NOT proven here: two answers landing at once from genuinely different threads. No
+        // deterministic test in this suite can stage that. The slot is an AtomicReference taken
+        // with getAndSet, so only one caller can ever win it; treat the thread race as read.
     }
 
     @Test
@@ -203,6 +201,50 @@ class PrivilegePermissionGateTest {
 
         assertFalse("a withdrawn grant must not keep being reported as granted", gate.isGranted())
         assertEquals("the backend must have been asked again", 2, backend.reads)
+    }
+
+    @Test
+    fun `a backend that dies while the user is deciding fails the request at once`() = runBlocking {
+        // The fake never answers on its own, so the request is genuinely parked when the binder
+        // dies, which is the only moment forget() can strand it.
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 3_000L)
+
+        val request = async { gate.request() }
+        yield()
+        assertEquals("the request must be parked before the backend dies", 1, backend.requestsStarted)
+
+        val started = System.currentTimeMillis()
+        gate.forget()
+        val granted = request.await()
+        val waited = System.currentTimeMillis() - started
+
+        assertFalse("a backend that died cannot have granted anything", granted)
+        assertTrue(
+            "it must answer the moment the backend dies, not sit out the timeout (waited ${waited}ms)",
+            waited < 1_000
+        )
+    }
+
+    @Test
+    fun `an answer arriving after the backend died does not resume the request twice`() = runBlocking {
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 3_000L)
+
+        val request = async { gate.request() }
+        yield()
+
+        val started = System.currentTimeMillis()
+        gate.forget()
+        // Shizuku's listener is permanent, so the user's answer can still land after the binder
+        // died. Resuming the same continuation a second time throws, which would surface here.
+        gate.deliverResult(true)
+
+        val granted = request.await()
+        val waited = System.currentTimeMillis() - started
+
+        assertFalse("the death already answered this request, and that answer stands", granted)
+        assertTrue("and it must not have waited out the timeout (waited ${waited}ms)", waited < 1_000)
     }
 
     @Test

@@ -6,6 +6,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 
@@ -28,10 +29,10 @@ sealed interface PermissionPreCheck {
  * waiting for the user with a timeout, and handing the result back to whoever was waiting.
  *
  * Shizuku and Dhizuku each wrote this out in full, about 110 lines apiece, including two rules
- * that are easy to get subtly wrong and were maintained twice: clear the waiting slot BEFORE
- * resuming it (so a duplicate answer cannot resume a continuation twice), and throw away a
- * cached "no" whenever the backend is available again (so a helper that was restarted is not
- * remembered as refused forever).
+ * that are easy to get subtly wrong and were maintained twice: take the waiting slot atomically,
+ * so a duplicate answer cannot resume a continuation twice, and throw away a cached "no"
+ * whenever the backend is available again (so a helper that was restarted is not remembered as
+ * refused forever).
  *
  * Everything that differs between the backends stays with the backend, as hooks: which SDK call
  * reads the permission, what pre-checks that SDK has, and how the request is started. How each
@@ -71,13 +72,9 @@ class PrivilegePermissionGate(
     // Serialises request() so two callers cannot both own the single continuation slot below.
     private val requestMutex = Mutex()
 
-    // Volatile because the two ends are on different threads: request() writes this from the
-    // caller's dispatcher, while deliverResult() reads and clears it on whichever thread the
-    // backend delivers its answer on (the main thread, for both Shizuku's listener and
-    // Dhizuku's callback). Without it, deliverResult can read a stale null, decide nothing is
-    // waiting, and leave the request to time out and report refused after the user allowed it.
-    @Volatile
-    private var continuation: Continuation<Boolean>? = null
+    // Atomic, not volatile: deliverResult() and forget() both take this slot from threads the
+    // caller does not control, and a continuation resumed twice throws.
+    private val continuation = AtomicReference<Continuation<Boolean>?>(null)
 
     /** The last known answer, without asking the backend. Null means "not known". */
     val cachedAnswer: Boolean?
@@ -145,21 +142,22 @@ class PrivilegePermissionGate(
 
             val granted = withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    continuation = cont
+                    continuation.set(cont)
 
                     try {
                         startRequest()
                         log?.d(tag, "requestPermission() - request started, waiting for the user...")
                     } catch (e: Exception) {
                         log?.e(tag, "requestPermission() - exception starting the request: ${e.message}")
-                        continuation = null
-                        cont.resume(false)
+                        // Taken rather than cleared: a backend can answer synchronously inside
+                        // startRequest() and then throw, and that answer already resumed this.
+                        continuation.getAndSet(null)?.resume(false)
                         return@suspendCancellableCoroutine
                     }
 
                     cont.invokeOnCancellation {
                         log?.d(tag, "requestPermission() - permission request cancelled")
-                        continuation = null
+                        continuation.compareAndSet(cont, null)
                     }
                 }
             } ?: false
@@ -171,7 +169,7 @@ class PrivilegePermissionGate(
 
         } catch (e: Exception) {
             log?.e(tag, "requestPermission() - ERROR: ${e.message}")
-            continuation = null
+            continuation.set(null)
             rememberAnswer(false)
             false
         }
@@ -190,22 +188,21 @@ class PrivilegePermissionGate(
         val log = logger()
         rememberAnswer(granted)
 
-        // Cleared BEFORE resuming: a duplicate answer must not resume the same continuation
-        // twice, which throws.
-        val waiting = continuation
+        val waiting = continuation.getAndSet(null)
         if (waiting == null) {
             log?.w(tag, "permission result arrived with nothing waiting - cache updated only")
             return
         }
-        continuation = null
         waiting.resume(granted)
         log?.d(tag, "permission result delivered to the waiting request: $granted")
     }
 
-    /** Forgets the remembered answer, for teardown. */
+    /** Forgets the remembered answer, and fails any request the dead backend left waiting. */
     fun forget() {
         cached = null
         cachedAtMillis = 0L
-        continuation = null
+        // Nothing can answer a parked request now, so fail it here rather than leave it to sit
+        // out the whole timeout and report the same refusal 30 seconds later.
+        continuation.getAndSet(null)?.resume(false)
     }
 }

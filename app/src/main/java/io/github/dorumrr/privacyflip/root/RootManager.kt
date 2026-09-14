@@ -66,6 +66,37 @@ class RootManager private constructor() {
         }
     }
 
+    /**
+     * @return null when the current backend has no API route for this feature, so the caller
+     *         should fall back to its shell commands.
+     */
+    suspend fun setFeatureState(
+        feature: io.github.dorumrr.privacyflip.data.PrivacyFeature,
+        enable: Boolean
+    ): CommandResult? = withContext(Dispatchers.IO) {
+        try {
+            privilegeManager?.setFeatureState(feature, enable)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting ${feature.displayName} through the backend API", e)
+            CommandResult.failure(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun readFeatureState(
+        feature: io.github.dorumrr.privacyflip.data.PrivacyFeature
+    ): io.github.dorumrr.privacyflip.data.FeatureState? = withContext(Dispatchers.IO) {
+        try {
+            privilegeManager?.readFeatureState(feature)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading ${feature.displayName} through the backend API", e)
+            null
+        }
+    }
+
     suspend fun forceRootPermissionRequest(): Boolean = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "forceRootPermissionRequest() - calling privilegeManager.requestPermission()...")

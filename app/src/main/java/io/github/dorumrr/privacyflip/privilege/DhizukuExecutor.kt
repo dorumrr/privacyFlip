@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import com.rosan.dhizuku.api.Dhizuku
 import com.rosan.dhizuku.api.DhizukuRequestPermissionListener
+import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
@@ -80,6 +81,12 @@ class DhizukuExecutor : PrivilegeExecutor {
         try {
             val initialized = Dhizuku.init(context)
             logManager?.d(TAG, "Dhizuku.init() returned: $initialized")
+            // A restriction outlives the process. Lifting any left over from a crash or a
+            // force-stop here means the user is never locked out of their own Bluetooth, NFC or
+            // microphone for longer than one lock cycle.
+            if (initialized && Dhizuku.isPermissionGranted()) {
+                DhizukuFeaturePolicy.releaseAll(context)
+            }
         } catch (e: Exception) {
             logManager?.e(TAG, "Error initializing Dhizuku: ${e.message}")
         }
@@ -159,6 +166,30 @@ class DhizukuExecutor : PrivilegeExecutor {
             logManager?.e(TAG, "executeCommand() failed: ${e.message}")
             return@withContext CommandResult.failure("Exception: ${e.message}")
         }
+    }
+
+    /**
+     * Dhizuku runs commands as an ordinary app that happens to be Device Owner, so every shell
+     * command the toggles build is denied. What a Device Owner may actually do goes through here.
+     */
+    override suspend fun setFeatureState(
+        feature: PrivacyFeature,
+        enable: Boolean
+    ): CommandResult? = withContext(Dispatchers.IO) {
+        val ctx = context ?: return@withContext CommandResult.failure("Dhizuku executor has no context")
+        if (!isPermissionGranted()) {
+            return@withContext CommandResult.failure("Dhizuku permission not granted")
+        }
+        return@withContext DhizukuFeaturePolicy.apply(ctx, feature, enable)
+    }
+
+    override fun supportsFeature(feature: PrivacyFeature): Boolean =
+        DhizukuFeaturePolicy.supports(feature)
+
+    override suspend fun readFeatureState(feature: PrivacyFeature) = withContext(Dispatchers.IO) {
+        val ctx = context
+        if (ctx == null || !isPermissionGranted()) null
+        else DhizukuFeaturePolicy.readState(ctx, feature)
     }
 
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.DHIZUKU

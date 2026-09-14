@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.privilege
 
 import android.content.Context
+import io.github.dorumrr.privacyflip.data.FeatureState
+import io.github.dorumrr.privacyflip.data.PrivacyFeature
 
 /**
  * Interface for executing privileged commands through different backends
@@ -69,6 +71,30 @@ interface PrivilegeExecutor {
         return lastResult ?: CommandResult.failure("All commands failed")
     }
     
+    /**
+     * Switch a feature through this backend's own API rather than a shell command.
+     *
+     * Dhizuku holds Device Owner rights, not shell rights, so the commands the toggles build are
+     * denied there and a real API call is the only route.
+     *
+     * @return null when this backend has no such route, meaning the caller should run the commands
+     */
+    suspend fun setFeatureState(feature: PrivacyFeature, enable: Boolean): CommandResult? = null
+
+    /**
+     * Whether this backend can act on a feature at all. A backend that cannot should say so, so
+     * the user is told the thing is impossible here rather than shown a bare failure.
+     */
+    fun supportsFeature(feature: PrivacyFeature): Boolean = true
+
+    /**
+     * Read a feature's state through this backend's own API.
+     *
+     * @return null when this backend has no such route, meaning the caller should run its
+     *         status commands
+     */
+    suspend fun readFeatureState(feature: PrivacyFeature): FeatureState? = null
+
     /**
      * Get the privilege method this executor provides
      */

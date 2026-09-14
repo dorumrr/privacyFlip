@@ -28,6 +28,11 @@ abstract class BasePrivacyToggle(
     protected open suspend fun runCommands(commands: List<String>): CommandResult =
         rootManager.executeWithFallbacks(commands)
 
+    // Backends that are not a shell can switch some features through a real API instead. null
+    // means this backend has no such route, so the commands below are used as before.
+    protected open suspend fun runFeatureAction(enable: Boolean): CommandResult? =
+        rootManager.setFeatureState(feature, enable)
+
     private suspend fun executeCommand(
         commands: List<CommandSet>,
         action: String,
@@ -39,7 +44,8 @@ abstract class BasePrivacyToggle(
                 Log.d(TAG, "  Command ${index + 1}: ${cmd.primary}")
             }
 
-            val result = runCommands(commands.map { it.primary })
+            val result = runFeatureAction(intended == FeatureState.ENABLED)
+                ?: runCommands(commands.map { it.primary })
 
             Log.d(TAG, "📊 Command execution result: success=${result.success}, exitCode=${result.exitCode}")
             if (result.output.isNotEmpty()) {
@@ -118,8 +124,15 @@ abstract class BasePrivacyToggle(
 
     private enum class Confirmation { CONFIRMED, CONTRADICTED, UNREADABLE }
 
+    // The API route's twin for reads. Without it a backend whose WRITE worked would still read
+    // back through a shell it cannot use, and report its own successful change as a failure.
+    protected open suspend fun readFeatureState(): FeatureState? =
+        rootManager.readFeatureState(feature)
+
     override suspend fun getCurrentState(): FeatureState {
         return try {
+            readFeatureState()?.let { return it }
+
             val result = runCommands(statusCommands.map { it.primary })
 
             if (!result.success) {

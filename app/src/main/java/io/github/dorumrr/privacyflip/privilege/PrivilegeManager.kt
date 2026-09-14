@@ -231,5 +231,17 @@ class PrivilegeManager private constructor(private val context: Context) {
         return executor.executeWithFallbacks(commands)
     }
 
+    suspend fun setFeatureState(
+        feature: io.github.dorumrr.privacyflip.data.PrivacyFeature,
+        enable: Boolean
+    ): CommandResult? = currentExecutor?.setFeatureState(feature, enable)
+
+    fun supportsFeature(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): Boolean =
+        currentExecutor?.supportsFeature(feature) ?: true
+
+    suspend fun readFeatureState(
+        feature: io.github.dorumrr.privacyflip.data.PrivacyFeature
+    ): io.github.dorumrr.privacyflip.data.FeatureState? = currentExecutor?.readFeatureState(feature)
+
 }
 

@@ -151,6 +151,11 @@ dependencies {
     // Dhizuku API
     implementation("io.github.iamr0s:Dhizuku-API:2.5.4")
 
+    // Dhizuku shares Device Owner rights, and reaching DevicePolicyManager's binder to route calls
+    // through it needs a field the hidden-API blocklist reports as absent. Apache-2.0, no
+    // transitive dependencies, and nothing in the standard library can lift that block.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+
     // Unit tests - JUnit 4, the standard for local Android unit tests, no Android
     // framework dependency needed for the pure string-parsing logic these tests target.
     // Eclipse Public License 1.0. One transitive dependency (hamcrest-core), already the

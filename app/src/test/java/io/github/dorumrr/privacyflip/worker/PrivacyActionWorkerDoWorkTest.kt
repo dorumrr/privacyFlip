@@ -386,6 +386,58 @@ class PrivacyActionWorkerDoWorkTest {
     }
 
     @Test
+    fun `an exempt app must not stop an unlock switching things back on`() {
+        // The settings screen promises only that an exempt app stops PrivacyFlip DISABLING. The
+        // app a user unlocks into is usually the exempt one, so blocking here left the radios and
+        // the sensors off with nothing saying why.
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.BLUETOOTH, true)
+        prefs.setExemptApps(setOf("com.example.maps"))
+        recordUnlock()
+
+        val worker = worker(isLocking = false)
+        worker.exemptApp = "com.example.maps"
+
+        runBlocking { worker.doWork() }
+
+        assertTrue("WiFi must come back", worker.enabled.contains(PrivacyFeature.WIFI))
+        assertTrue("and Bluetooth with it", worker.enabled.contains(PrivacyFeature.BLUETOOTH))
+    }
+
+    @Test
+    fun `a mode whose state could not be read is never claimed, so a later unlock leaves it alone`() {
+        // An enable reports success when its own read-back is unreadable. Claiming on that would
+        // hand the app a mode the USER had already switched on, and switch it off at unlock.
+        val mode = PrivacyFeature.AIRPLANE_MODE
+        prefs.setFeatureDisableOnLock(mode, true)
+        prefs.setFeatureEnableOnUnlock(mode, true)
+        prefs.setFeatureOnlyIfNotManual(mode, true)
+
+        recordLock()
+        val lock = worker(isLocking = true)
+        lock.states[mode] = FeatureState.ERROR
+        runBlocking { lock.doWork() }
+
+        assertTrue("it must still try, since nothing said the mode was on", lock.enabled.contains(mode))
+        assertFalse(
+            "but an unreadable state is not evidence this app turned it on",
+            prefs.getFeatureEnabledByApp(mode)
+        )
+
+        // The half that matters to the user: their own Airplane Mode survives the next unlock.
+        ShadowLog.clear()
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        runBlocking { unlock.doWork() }
+
+        assertTrue("a setting this app never claimed is not its to undo", unlock.disabled.isEmpty())
+        assertTrue(
+            "and it must say so, was: ${notifications()}",
+            notificationsSeen().any { it.contains("manually set") }
+        )
+    }
+
+    @Test
     fun `Only if unused keeps a feature that is in use, and the switch off ignores it`() {
         // The user-facing "Only if unused" switch. With it OFF the feature goes down regardless,
         // which is what proves the ON case is the switch working and not the fake refusing.

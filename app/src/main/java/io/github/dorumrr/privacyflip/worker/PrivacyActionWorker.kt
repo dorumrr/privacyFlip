@@ -119,6 +119,19 @@ open class PrivacyActionWorker(
             else -> currentlyOwned
         }
 
+        /**
+         * Whether an enable this app just ran makes the mode its own.
+         *
+         * Only a mode seen OFF and then switched on was turned on BY this app. A mode whose state
+         * could not be read may already have been on by the user's hand, and an enable reports
+         * success when its own read-back is unreadable, so claiming there would hand the app the
+         * user's own setting and switch it off at the next unlock.
+         */
+        internal fun ownershipAfterEnabling(
+            stateBefore: FeatureState?,
+            enableSucceeded: Boolean
+        ): Boolean = stateBefore == FeatureState.DISABLED && enableSucceeded
+
         private const val PRIVILEGE_CHECK_ATTEMPTS = 3
         private const val PRIVILEGE_CHECK_GAP_MS = 400L
 
@@ -287,18 +300,22 @@ open class PrivacyActionWorker(
                 return Result.success()
             }
 
-            // Check if any exempt app is in foreground
-            val exemptApps = preferenceManager.getExemptApps()
-            val foregroundExemptApp = if (exemptApps.isNotEmpty()) {
-                getFirstForegroundApp(exemptApps)
-            } else {
-                null
-            }
+            // An exempt app stops this app DISABLING things, which is all the settings screen
+            // promises. Blocking the unlock side too left the radios and sensors off, because the
+            // app a user unlocks into is usually the exempt one that asked to be left alone.
+            if (isLocking) {
+                val exemptApps = preferenceManager.getExemptApps()
+                val foregroundExemptApp = if (exemptApps.isNotEmpty()) {
+                    getFirstForegroundApp(exemptApps)
+                } else {
+                    null
+                }
 
-            if (foregroundExemptApp != null) {
-                logDebug("🛡️ Exempt app '$foregroundExemptApp' is in foreground - skipping ALL privacy actions")
-                debugNotifier.notifyFeatureSkipped("All features", "exempt app in foreground: $foregroundExemptApp")
-                return Result.success()
+                if (foregroundExemptApp != null) {
+                    logDebug("🛡️ Exempt app '$foregroundExemptApp' is in foreground - not disabling anything")
+                    debugNotifier.notifyFeatureSkipped("All features", "exempt app in foreground: $foregroundExemptApp")
+                    return Result.success()
+                }
             }
 
             if (isLocking) {
@@ -609,12 +626,13 @@ open class PrivacyActionWorker(
                                         debugNotifier.notifyFeatureSkipped(mode.displayName, "already enabled")
                                     }
                                 } else {
-                                    // Not enabled - enable it and mark as enabled by app
                                     val results = enableFeatures(setOf(mode))
                                     val success = results.firstOrNull()?.success == true
-                                    if (success) {
+                                    if (ownershipAfterEnabling(observedState, success)) {
                                         preferenceManager.setFeatureEnabledByApp(mode, true)
                                         logDebug("🛡️ ${mode.displayName} enabled by app")
+                                    } else if (success) {
+                                        logWarning("🛡️ ${mode.displayName} was switched on, but its state could not be read first - leaving it unclaimed so the next unlock cannot undo a setting of yours")
                                     }
                                     processResults(results, listOf(mode), "🛡️", "enabled", "Enabled", isLockCycle = true, didEnable = true)
                                 }

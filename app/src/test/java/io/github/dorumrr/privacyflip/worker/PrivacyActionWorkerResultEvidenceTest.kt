@@ -93,6 +93,35 @@ class PrivacyActionWorkerResultEvidenceTest {
     }
 
     @Test
+    fun `only a mode seen OFF and then switched on belongs to this app`() {
+        assertTrue(
+            "this app saw it off and turned it on, so it is this app's",
+            PrivacyActionWorker.ownershipAfterEnabling(FeatureState.DISABLED, enableSucceeded = true)
+        )
+        assertFalse(
+            "a failed enable turned nothing on",
+            PrivacyActionWorker.ownershipAfterEnabling(FeatureState.DISABLED, enableSucceeded = false)
+        )
+    }
+
+    @Test
+    fun `a mode whose state could not be read is never claimed by an enable`() {
+        // An enable reports success when its own read-back is unreadable, so "it worked" here is
+        // not evidence the mode was off first. Claiming would take a setting of the user's and
+        // switch it off at the next unlock, past "Only if not manually set".
+        listOf(FeatureState.UNKNOWN, FeatureState.ERROR, FeatureState.UNAVAILABLE, null).forEach { state ->
+            assertFalse(
+                "$state must not be claimed",
+                PrivacyActionWorker.ownershipAfterEnabling(state, enableSucceeded = true)
+            )
+        }
+        assertFalse(
+            "and a mode already ON was not turned on by this enable either",
+            PrivacyActionWorker.ownershipAfterEnabling(FeatureState.ENABLED, enableSucceeded = true)
+        )
+    }
+
+    @Test
     fun `one failure among successes still does not count`() {
         assertFalse(
             PrivacyActionWorker.allSucceeded(

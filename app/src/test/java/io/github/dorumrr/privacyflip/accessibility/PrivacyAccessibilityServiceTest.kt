@@ -10,7 +10,9 @@ import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.PreferenceManager
+import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,6 +42,9 @@ class PrivacyAccessibilityServiceTest {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         PreferenceManager.getInstance(context).accessibilityServiceEnabled = true
+        // A static, so without this the previous test's lock cycle is still armed and the arming
+        // step below quietly does nothing.
+        PrivacyAccessibilityService.wasShowingKeyguard = false
     }
 
     private fun windowEvent(className: String): AccessibilityEvent {
@@ -71,6 +76,40 @@ class PrivacyAccessibilityServiceTest {
             .getWorkInfosForUniqueWork(Constants.Work.NAME_UNLOCK)
             .get()
             .size
+
+    @Test
+    fun `repeat keyguard windows within one lock do not re-arm it and restart the lock delay`() {
+        // A lock screen emits several keyguard-classed windows: the bouncer, the PIN pad, the
+        // shade pulled down on it. Each one used to REPLACE-cancel the job that was waiting out
+        // the user's configured lock delay and start that delay again from zero, so a lock screen
+        // that kept producing windows postponed the WiFi/Bluetooth/Location disable indefinitely.
+        val service = connectedService()
+
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        shadowOf(keyguardManager).setKeyguardLocked(true)
+
+        // Robolectric's elapsedRealtime starts at zero, so move it off zero first or "armed" and
+        // "never armed" read the same.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_000))
+
+        service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardViewMediator"))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val armedAt = PrivacyActionWorker.lastLockAtMillis
+        assertTrue("the first keyguard window must arm the lock", armedAt > 0L)
+
+        // Time passes, as it would while the delay runs, then more keyguard windows arrive.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2_000))
+        service.onAccessibilityEvent(windowEvent("com.android.systemui.keyguard.KeyguardBouncer"))
+        service.onAccessibilityEvent(windowEvent("com.android.systemui.statusbar.phone.KeyguardPINView"))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            "a repeat window must not re-arm the same lock - re-arming is what restarts the delay",
+            armedAt,
+            PrivacyActionWorker.lastLockAtMillis
+        )
+    }
 
     @Test
     fun `window changes away from lock screen while keyguard still reports locked does not trigger unlock actions`() {

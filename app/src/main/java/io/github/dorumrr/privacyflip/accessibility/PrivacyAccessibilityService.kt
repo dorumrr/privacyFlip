@@ -41,8 +41,10 @@ class PrivacyAccessibilityService : AccessibilityService() {
         // is NOT a lock screen class, while this is still true, is the same "the lock screen
         // just went away" signal ACTION_USER_PRESENT represents, just observed through this
         // service's own event stream instead of a broadcast.
+        // Internal, not private: it survives between tests as a static, so a test must be able to
+        // clear it or the arming step of the next test silently becomes a no-op.
         @Volatile
-        private var wasShowingKeyguard = false
+        internal var wasShowingKeyguard = false
 
         // Without this, a missed unlock (KeyguardManager's own state lagging the event that
         // triggered the check - a dismiss animation, an OEM quirk) can persist forever if no
@@ -97,8 +99,17 @@ class PrivacyAccessibilityService : AccessibilityService() {
                 // actually identify it - without this, a false-positive report would be very
                 // hard to track down to its cause.
                 Log.d(TAG, "🔒 Lock screen detected via Accessibility (class: $className, package: ${event.packageName}, isKeyguardLocked=${keyguardManager?.isKeyguardLocked})")
+                // Only the FIRST keyguard window of a lock cycle arms it. A lock screen emits
+                // several (bouncer, PIN pad, shade pulled down on it), and each re-trigger
+                // REPLACE-cancelled the job waiting out the user's lock delay and restarted that
+                // delay from zero, so a busy lock screen postponed the disable indefinitely.
+                val alreadyArmed = wasShowingKeyguard
                 wasShowingKeyguard = true
-                triggerEarlyPrivacyActions()
+                if (alreadyArmed) {
+                    Log.d(TAG, "🔒 Already armed for this lock - not restarting the lock delay")
+                } else {
+                    triggerEarlyPrivacyActions()
+                }
             } else if (wasShowingKeyguard) {
                 // A non-keyguard window can appear while the device is genuinely still locked -
                 // an incoming call, the lock screen's own camera shortcut, an alarm, the

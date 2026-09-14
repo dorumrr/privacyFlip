@@ -13,6 +13,29 @@ import android.util.Log
  * exception, the other failed closed), so a fix to one silently left the other wrong. One shared
  * function means only one place is left to get this right.
  */
+/**
+ * Whether the keyguard is already enforcing.
+ *
+ * This is a different question from [isScreenCurrentlyLocked] and must not be answered with it.
+ * Android refuses a sensor privacy change once the KEYGUARD is up, and does not care whether the
+ * screen is merely off, so treating screen-off as locked skips the camera and microphone on a
+ * phone that has no secure lock screen at all, and during the grace period before the keyguard
+ * engages.
+ *
+ * Fails OPEN, unlike [isScreenCurrentlyLocked]: an unreadable keyguard means "try anyway", since
+ * a refused attempt is now read back and reported honestly, while a skipped one leaves the
+ * sensor on.
+ */
+fun isKeyguardEngaged(context: Context, tag: String): Boolean {
+    return try {
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        keyguardManager.isKeyguardLocked
+    } catch (e: Exception) {
+        Log.e(tag, "Error reading keyguard state", e)
+        false
+    }
+}
+
 fun isScreenCurrentlyLocked(context: Context, tag: String): Boolean {
     return try {
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager

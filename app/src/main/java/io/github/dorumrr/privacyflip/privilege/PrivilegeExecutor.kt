@@ -50,7 +50,16 @@ interface PrivilegeExecutor {
         var lastResult: CommandResult? = null
 
         for (command in commands) {
-            val result = executeCommand(command)
+            // A command that THROWS must not abort the chain. A dead binder, or a command this
+            // Android version does not know, is exactly when the next fallback is the one that
+            // would have worked.
+            val result = try {
+                executeCommand(command)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CommandResult.failure(e.message ?: "${e::class.simpleName} while running: $command")
+            }
             if (result.success) {
                 return result
             }

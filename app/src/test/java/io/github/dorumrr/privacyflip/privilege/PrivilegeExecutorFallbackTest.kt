@@ -21,7 +21,11 @@ import org.junit.Test
  */
 class PrivilegeExecutorFallbackTest {
 
-    private class FakeExecutor(private val succeedOn: String? = null) : PrivilegeExecutor {
+    private class FakeExecutor(
+        private val succeedOn: String? = null,
+        /** A real backend THROWS on a dead binder; it does not return a tidy failure. */
+        private val throwOn: String? = null
+    ) : PrivilegeExecutor {
         val attempted = mutableListOf<String>()
 
         override suspend fun initialize(context: Context) = Unit
@@ -33,6 +37,7 @@ class PrivilegeExecutorFallbackTest {
 
         override suspend fun executeCommand(command: String): CommandResult {
             attempted.add(command)
+            if (command == throwOn) throw IllegalStateException("binder died on: $command")
             return if (command == succeedOn) {
                 CommandResult.success(listOf("ok: $command"))
             } else {
@@ -65,6 +70,30 @@ class PrivilegeExecutorFallbackTest {
         assertFalse(result.success)
         assertEquals("the caller sees why the last attempt failed", "failed: third", result.error)
         assertEquals(listOf("first", "second", "third"), executor.attempted)
+    }
+
+    @Test
+    fun `a command that throws does not abort the chain - the next fallback still gets its turn`() = runBlocking {
+        val executor = FakeExecutor(succeedOn = "second", throwOn = "first")
+
+        val result = executor.executeWithFallbacks(listOf("first", "second"))
+
+        assertTrue("the fallback would have worked and must be tried", result.success)
+        assertEquals(listOf("ok: second"), result.output)
+        assertEquals(listOf("first", "second"), executor.attempted)
+    }
+
+    @Test
+    fun `a thrown command with no fallback left is reported, not allowed to escape`() = runBlocking {
+        val executor = FakeExecutor(succeedOn = null, throwOn = "only")
+
+        val result = executor.executeWithFallbacks(listOf("only"))
+
+        assertFalse(result.success)
+        assertTrue(
+            "the reason must survive into the result, was: ${result.error}",
+            result.error?.contains("binder died") == true
+        )
     }
 
     @Test

@@ -2,7 +2,9 @@ package io.github.dorumrr.privacyflip.privacy
 
 import android.util.Log
 import io.github.dorumrr.privacyflip.data.*
+import io.github.dorumrr.privacyflip.privilege.CommandResult
 import io.github.dorumrr.privacyflip.root.RootManager
+import kotlinx.coroutines.delay
 
 abstract class BasePrivacyToggle(
     protected val rootManager: RootManager
@@ -14,23 +16,30 @@ abstract class BasePrivacyToggle(
     protected abstract val disableCommands: List<CommandSet>
     protected abstract val statusCommands: List<CommandSet>
     protected abstract val featureName: String
-    
-    override suspend fun enable(): PrivacyResult {
-        return executeCommand(enableCommands, "enable")
-    }
-    
-    override suspend fun disable(): PrivacyResult {
-        return executeCommand(disableCommands, "disable")
-    }
-    
-    private suspend fun executeCommand(commands: List<CommandSet>, action: String): PrivacyResult {
+
+    override suspend fun enable(): PrivacyResult =
+        executeCommand(enableCommands, "enable", FeatureState.ENABLED)
+
+    override suspend fun disable(): PrivacyResult =
+        executeCommand(disableCommands, "disable", FeatureState.DISABLED)
+
+    // The single point where this class reaches the privileged shell, so a test can stand in for
+    // the shell without a mocking framework.
+    protected open suspend fun runCommands(commands: List<String>): CommandResult =
+        rootManager.executeWithFallbacks(commands)
+
+    private suspend fun executeCommand(
+        commands: List<CommandSet>,
+        action: String,
+        intended: FeatureState
+    ): PrivacyResult {
         return try {
             Log.d(TAG, "📍 ${action.replaceFirstChar { it.uppercase() }} $featureName - attempting ${commands.size} command(s)")
             commands.forEachIndexed { index, cmd ->
                 Log.d(TAG, "  Command ${index + 1}: ${cmd.primary}")
             }
 
-            val result = rootManager.executeWithFallbacks(commands.map { it.primary })
+            val result = runCommands(commands.map { it.primary })
 
             Log.d(TAG, "📊 Command execution result: success=${result.success}, exitCode=${result.exitCode}")
             if (result.output.isNotEmpty()) {
@@ -40,20 +49,39 @@ abstract class BasePrivacyToggle(
                 Log.w(TAG, "⚠️ Command error: ${result.error}")
             }
 
-            PrivacyResult(
-                feature = feature,
-                success = result.success,
-                message = if (result.success) {
-                    "$featureName ${action}d"
-                } else {
-                    "Failed to $action $featureName: ${result.error}"
-                },
-                // Every command that could have run, not one guessed winner. executeWithFallbacks
-                // does not report which of them succeeded, and this used to be null on exactly
-                // the failure path that is the only thing reading it - so the diagnostic said
-                // "Command used: null" every single time it mattered.
-                commandUsed = commands.joinToString(" | ") { it.primary }
-            )
+            // Every command that could have run, not one guessed winner: executeWithFallbacks does
+            // not report which of them succeeded.
+            val commandUsed = commands.joinToString(" | ") { it.primary }
+
+            if (!result.success) {
+                return PrivacyResult(
+                    feature = feature,
+                    success = false,
+                    message = "Failed to $action $featureName: ${result.error}",
+                    commandUsed = commandUsed
+                )
+            }
+
+            when (confirmReachedState(intended)) {
+                Confirmation.CONFIRMED -> PrivacyResult(
+                    feature = feature,
+                    success = true,
+                    message = "$featureName ${action}d",
+                    commandUsed = commandUsed
+                )
+                Confirmation.CONTRADICTED -> PrivacyResult(
+                    feature = feature,
+                    success = false,
+                    message = "$featureName was not ${action}d: the system accepted the command and left the state unchanged",
+                    commandUsed = commandUsed
+                )
+                Confirmation.UNREADABLE -> PrivacyResult(
+                    feature = feature,
+                    success = true,
+                    message = "$featureName ${action}d, but the state could not be read back",
+                    commandUsed = commandUsed
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "❌ EXCEPTION ${action}ing $featureName", e)
             PrivacyResult(
@@ -63,15 +91,39 @@ abstract class BasePrivacyToggle(
             )
         }
     }
-    
+
+    /**
+     * A privileged command can exit 0 and change nothing: Android accepts a sensor privacy change
+     * while the keyguard is up and then ignores it. Only the state itself is proof.
+     *
+     * A state that cannot be READ is reported as unconfirmed rather than as a failure, so an
+     * unreadable status command never turns a real success into a false "it did not work".
+     */
+    private suspend fun confirmReachedState(intended: FeatureState): Confirmation {
+        repeat(READ_BACK_ATTEMPTS) { attempt ->
+            when (val actual = getCurrentState()) {
+                intended -> return Confirmation.CONFIRMED
+                FeatureState.UNKNOWN, FeatureState.ERROR, FeatureState.UNAVAILABLE -> {
+                    Log.w(TAG, "⚠️ $featureName reads as $actual - cannot confirm, reporting unconfirmed")
+                    return Confirmation.UNREADABLE
+                }
+                else -> if (attempt < READ_BACK_ATTEMPTS - 1) delay(READ_BACK_GAP_MS)
+            }
+        }
+        Log.w(TAG, "⚠️ $featureName never reached $intended - command was accepted but ignored")
+        return Confirmation.CONTRADICTED
+    }
+
+    private enum class Confirmation { CONFIRMED, CONTRADICTED, UNREADABLE }
+
     override suspend fun getCurrentState(): FeatureState {
         return try {
-            val result = rootManager.executeWithFallbacks(statusCommands.map { it.primary })
-            
+            val result = runCommands(statusCommands.map { it.primary })
+
             if (!result.success) {
                 return FeatureState.UNKNOWN
             }
-            
+
             val output = result.output.joinToString(" ").lowercase()
 
             parseStatusOutput(output)
@@ -80,13 +132,18 @@ abstract class BasePrivacyToggle(
             FeatureState.ERROR
         }
     }
-    
+
     // Abstract, not a default body: every subclass reads a different command's output, and the
     // generic fallback that used to live here duplicated StatusParsingUtils.parseStandardOutput()
     // while never running in production (all subclasses override). A new subclass that forgets to
     // parse its own output now fails to compile, instead of silently getting a parser nothing
     // tested against its command.
     protected abstract fun parseStatusOutput(output: String): FeatureState
+
+    private companion object {
+        // Measured on the device: WiFi, Bluetooth and both sensors all reported their new state on
+        // the FIRST read, so the second try is headroom for a slower phone, not the expected path.
+        const val READ_BACK_ATTEMPTS = 2
+        const val READ_BACK_GAP_MS = 150L
+    }
 }
-
-

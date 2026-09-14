@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.privilege
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
@@ -105,9 +107,15 @@ class PrivilegePermissionGateTest {
         val backend = FakeBackend(answerImmediatelyWith = true)
         val gate = backend.buildGate()
 
+        val started = System.currentTimeMillis()
         assertTrue("the granted answer must come back to the caller", gate.request())
+        val waited = System.currentTimeMillis() - started
+
         assertEquals(1, backend.requestsStarted)
         assertEquals("and be remembered", true, gate.cachedAnswer)
+        // Without this bound, a gate that ignored the answer, timed out, and then re-read the
+        // backend would pass: the answer must arrive through deliverResult, not the timeout.
+        assertTrue("the answer must come from the listener, waited ${waited}ms", waited < 150)
     }
 
     @Test
@@ -129,7 +137,9 @@ class PrivilegePermissionGateTest {
         val waited = System.currentTimeMillis() - started
 
         assertTrue("it must actually have waited", waited >= 100)
-        assertTrue("but not forever", waited < 5_000)
+        // Tight on purpose: a loose bound here passes even for a gate that ignores the injected
+        // timeout and uses its own multi-second one, which is the thing this test exists to pin.
+        assertTrue("and it must be the INJECTED timeout that fired, waited ${waited}ms", waited < 1_000)
     }
 
     @Test
@@ -150,6 +160,25 @@ class PrivilegePermissionGateTest {
         assertFalse(gate.request())
         assertEquals("no dialog should have been shown", 0, backend.requestsStarted)
         assertNull("and nothing should be remembered from a question never asked", gate.cachedAnswer)
+    }
+
+    @Test
+    fun `a backend that cannot ask forgets a grant it can no longer confirm`() = runBlocking {
+        val backend = FakeBackend(permission = true)
+        val gate = backend.buildGate()
+
+        assertTrue(gate.isGranted())
+        assertEquals("the grant is remembered to begin with", true, gate.cachedAnswer)
+
+        // The user revoked it in the helper's own app and ticked don't-ask-again.
+        backend.permission = false
+        backend.preCheckWhenNotGranted = PermissionPreCheck.CannotAsk
+
+        assertFalse(gate.request())
+        assertNull(
+            "a remembered yes must not outlive a refusal to even ask",
+            gate.cachedAnswer
+        )
     }
 
     @Test
@@ -245,6 +274,25 @@ class PrivilegePermissionGateTest {
 
         assertFalse("the death already answered this request, and that answer stands", granted)
         assertTrue("and it must not have waited out the timeout (waited ${waited}ms)", waited < 1_000)
+    }
+
+    @Test
+    fun `a caller that was cancelled is not recorded as a refusal`() = runBlocking {
+        // CancellationException IS an Exception, so a blanket catch turns "the screen went away"
+        // into "the user said no", and remembers it.
+        val backend = FakeBackend(answerImmediatelyWith = null)
+        val gate = backend.buildGate(timeoutMs = 3_000L)
+
+        val job = launch { gate.request() }
+        yield()
+        assertEquals("the request must be parked before it is cancelled", 1, backend.requestsStarted)
+
+        job.cancelAndJoin()
+
+        assertNull(
+            "a caller that went away refused nothing, so nothing may be remembered",
+            gate.cachedAnswer
+        )
     }
 
     @Test

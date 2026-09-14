@@ -2,6 +2,7 @@ package io.github.dorumrr.privacyflip.privilege
 
 import android.os.SystemClock
 import io.github.dorumrr.privacyflip.util.LogManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -133,6 +134,10 @@ class PrivilegePermissionGate(
                 }
                 PermissionPreCheck.CannotAsk -> {
                     log?.w(tag, "requestPermission() - backend cannot ask for permission right now")
+                    // A remembered "yes" must not outlive a refusal to even ask: the grant it came
+                    // from is the most likely thing to have just been revoked.
+                    cached = null
+                    cachedAtMillis = 0L
                     return@withLock false
                 }
                 PermissionPreCheck.AskTheUser -> Unit
@@ -167,6 +172,11 @@ class PrivilegePermissionGate(
             log?.d(tag, "========== requestPermission() END - returning $granted ==========")
             granted
 
+        } catch (e: CancellationException) {
+            // The caller's scope went away; nobody was refused. Recording a "no" here reports a
+            // refusal the user never gave, and swallowing it keeps a dead scope alive.
+            continuation.set(null)
+            throw e
         } catch (e: Exception) {
             log?.e(tag, "requestPermission() - ERROR: ${e.message}")
             continuation.set(null)

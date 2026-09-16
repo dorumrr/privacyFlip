@@ -1,0 +1,5 @@
+- Airplane Mode and Battery Saver no longer stay stuck on after a failed unlock
+- Exempt apps no longer stop features coming back on when you unlock
+- Dhizuku now works for Camera, Microphone, Location, Bluetooth and NFC. It still cannot switch WiFi, Mobile Data, Airplane Mode or Battery Saver, and each feature needs its own Android version
+- Fixed a startup crash when Dhizuku is set as Device Owner
+- Every privacy change is now checked afterwards. If a command is accepted but nothing actually changes, the app tells you instead of reporting success

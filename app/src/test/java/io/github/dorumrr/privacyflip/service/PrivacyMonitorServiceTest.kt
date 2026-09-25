@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
-import androidx.work.testing.WorkManagerTestInitHelper
+import io.github.dorumrr.privacyflip.initWorkManagerWithoutRealWork
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import org.junit.Assert.assertEquals
@@ -38,7 +38,7 @@ class PrivacyMonitorServiceTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        initWorkManagerWithoutRealWork(context)
         // Shared companion state - reset so an earlier test in this JVM can never leak a stale
         // timestamp into this one.
         PrivacyActionWorker.lastUnlockAtMillis = 0L

@@ -7,7 +7,7 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
-import androidx.work.testing.WorkManagerTestInitHelper
+import io.github.dorumrr.privacyflip.initWorkManagerWithoutRealWork
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
@@ -40,11 +40,9 @@ class PrivacyAccessibilityServiceTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        initWorkManagerWithoutRealWork(context)
         PreferenceManager.getInstance(context).accessibilityServiceEnabled = true
-        // Both are statics that outlive a test. Without clearing them, the previous test's lock
-        // cycle is still armed and its timestamp still set, so "it armed" reads true for a
-        // service that armed nothing.
+        // Statics outlive a test: otherwise the previous lock stays armed and "it armed" reads true.
         PrivacyAccessibilityService.wasShowingKeyguard = false
         PrivacyActionWorker.lastLockAtMillis = 0L
     }
@@ -67,12 +65,10 @@ class PrivacyAccessibilityServiceTest {
         return service
     }
 
-    // Existence, not "not finished": the enqueued CoroutineWorker can genuinely still be RUNNING
-    // at one check and SUCCEEDED microseconds later at the next, making a finished-state filter
-    // race the worker's own completion. What
-    // this test actually needs to know is simpler and race-free: was NAME_UNLOCK ever enqueued
-    // at all. shadowOf(Looper.getMainLooper()).idle() after every event lets any queued
-    // WorkManager callback settle first, so this reads a stable, already-final answer.
+    private fun lockWorkIds() =
+        WorkManager.getInstance(context).getWorkInfosForUniqueWork(Constants.Work.NAME_LOCK).get().map { it.id }
+
+    // Counts NAME_UNLOCK records in any state: the question is whether it was ever enqueued.
     private fun unlockWorkEnqueuedCount(): Int =
         WorkManager.getInstance(context)
             .getWorkInfosForUniqueWork(Constants.Work.NAME_UNLOCK)
@@ -90,8 +86,7 @@ class PrivacyAccessibilityServiceTest {
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         shadowOf(keyguardManager).setKeyguardLocked(true)
 
-        // Robolectric's elapsedRealtime starts at zero, so move it off zero first or "armed" and
-        // "never armed" read the same.
+        // Move the clock forward first, so an armed stamp can never equal the reset value 0.
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_000))
 
         assertEquals("nothing may be armed before the first window", 0L, PrivacyActionWorker.lastLockAtMillis)
@@ -101,6 +96,7 @@ class PrivacyAccessibilityServiceTest {
 
         val armedAt = PrivacyActionWorker.lastLockAtMillis
         assertTrue("the first keyguard window must arm the lock", armedAt > 0L)
+        val lockJob = lockWorkIds()
 
         // Time passes, as it would while the delay runs, then more keyguard windows arrive.
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2_000))
@@ -113,6 +109,7 @@ class PrivacyAccessibilityServiceTest {
             armedAt,
             PrivacyActionWorker.lastLockAtMillis
         )
+        assertEquals("a repeat window must not REPLACE the waiting lock job", lockJob, lockWorkIds())
     }
 
     @Test

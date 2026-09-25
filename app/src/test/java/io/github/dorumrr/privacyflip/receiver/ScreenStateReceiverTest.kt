@@ -7,7 +7,7 @@ import android.content.Intent
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
-import androidx.work.testing.WorkManagerTestInitHelper
+import io.github.dorumrr.privacyflip.initWorkManagerWithoutRealWork
 import io.github.dorumrr.privacyflip.util.Constants
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -31,12 +31,10 @@ class ScreenStateReceiverTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        initWorkManagerWithoutRealWork(context)
     }
 
-    // Existence, not "not finished" - see PrivacyAccessibilityServiceTest's own comment on this
-    // same choice: a finished-state filter can race the enqueued CoroutineWorker's own
-    // completion.
+    // Counts records in any state: the question is whether it was ever enqueued.
     private fun enqueuedCount(name: String): Int =
         WorkManager.getInstance(context).getWorkInfosForUniqueWork(name).get().size
 

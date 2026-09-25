@@ -168,3 +168,4 @@ artifacts/
 # development, never needed to build or ship the app, never wired into CI. Kept out of the
 # public repo on purpose - see dev-local/README.md.
 dev-local/
+SYSTEM_CONTEXT.md

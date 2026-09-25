@@ -86,6 +86,15 @@
             android:textAllCaps="false"
             style="?android:attr/borderlessButtonStyle" />
 
+        <TextView
+            android:id="@+id/exemptAppsUsageAccessNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠️ Exempt apps need Usage Access to work. Open Manage App Exemptions to grant it."
+            android:textSize="12sp"
+            android:textColor="@color/warning_text"
+            android:visibility="gone" />
+
     </LinearLayout>
 
 </androidx.cardview.widget.CardView>

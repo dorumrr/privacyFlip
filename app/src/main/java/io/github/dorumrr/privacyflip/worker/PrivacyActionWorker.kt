@@ -197,8 +197,12 @@ open class PrivacyActionWorker(
 
     protected open suspend fun isHotspotActive(): Boolean = connectionChecker.isHotspotActive()
 
-    protected open fun getFirstForegroundApp(exemptApps: Set<String>): String? =
-        foregroundAppDetector.getFirstForegroundApp(exemptApps)
+    protected open fun getFirstForegroundApp(exemptApps: Set<String>): String? {
+        if (foregroundAppDetector.exemptAppsNeedUsageAccess(exemptApps)) {
+            logWarning("⚠️ Usage Access is not granted - exempt apps cannot be detected")
+        }
+        return foregroundAppDetector.getFirstForegroundApp(exemptApps)
+    }
 
     private fun logDebug(message: String) = dualLog.i(message)
 
@@ -312,8 +316,8 @@ open class PrivacyActionWorker(
                 }
 
                 if (foregroundExemptApp != null) {
-                    logDebug("🛡️ Exempt app '$foregroundExemptApp' is in foreground - not disabling anything")
-                    debugNotifier.notifyFeatureSkipped("All features", "exempt app in foreground: $foregroundExemptApp")
+                    logDebug("🛡️ Exempt app '$foregroundExemptApp' was in front at lock - not disabling anything")
+                    debugNotifier.notifyFeatureSkipped("All features", "exempt app was in front at lock: $foregroundExemptApp")
                     return Result.success()
                 }
             }

@@ -1,127 +1,99 @@
 package io.github.dorumrr.privacyflip.util
 
-import android.app.ActivityManager
+import android.Manifest
+import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Process
 import android.util.Log
 
-/**
- * Utility class to detect which app is currently in the foreground.
- * Used for app exemption feature to prevent disabling features when exempt apps are active.
- */
 class ForegroundAppDetector(private val context: Context) {
-    
+
     companion object {
         private const val TAG = "privacyFlip-ForegroundAppDetector"
+
+        // The lock job asks before the camera/mic race, so the short query runs first.
+        private const val RECENT_WINDOW_MS = 10 * 60 * 1000L
+        // An app kept on screen for hours, such as navigation, logged one resume when it opened.
+        private const val LONG_WINDOW_MS = 24 * 60 * 60 * 1000L
     }
-    
-    /**
-     * Get the package name of the currently foreground app.
-     * Requires PACKAGE_USAGE_STATS permission.
-     * 
-     * @return Package name of foreground app, or null if unable to detect
-     */
+
+    fun hasUsageAccess(): Boolean {
+        val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        }
+        // MODE_DEFAULT hands the decision to the permission itself.
+        return if (mode == AppOpsManager.MODE_DEFAULT) {
+            context.checkSelfPermission(Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            mode == AppOpsManager.MODE_ALLOWED
+        }
+    }
+
+    // Runs inside the lock job, so it must never throw; a stored app that was uninstalled cannot be in front.
+    fun exemptAppsNeedUsageAccess(exemptApps: Set<String>): Boolean = try {
+        exemptApps.any { isInstalled(it) } && !hasUsageAccess()
+    } catch (e: Exception) {
+        Log.e(TAG, "Error checking usage access", e)
+        false
+    }
+
+    private fun isInstalled(packageName: String): Boolean = try {
+        @Suppress("DEPRECATION")
+        context.packageManager.getApplicationInfo(packageName, 0)
+        true
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
+
     fun getForegroundApp(): String? {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                getForegroundAppUsingUsageStats()
-            } else {
-                getForegroundAppUsingActivityManager()
-            }
+            lastOpenedWhileScreenOn(RECENT_WINDOW_MS) ?: lastOpenedWhileScreenOn(LONG_WINDOW_MS)
         } catch (e: Exception) {
             Log.e(TAG, "Error detecting foreground app", e)
             null
         }
     }
-    
-    /**
-     * Get foreground app using UsageStatsManager (Android 5.1+).
-     * This is the recommended method for modern Android versions.
-     */
-    private fun getForegroundAppUsingUsageStats(): String? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
-            return null
-        }
-        
-        try {
-            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-                ?: return null
-            
-            val currentTime = System.currentTimeMillis()
-            // Query events from last 10 seconds
-            val events = usageStatsManager.queryEvents(currentTime - 10000, currentTime)
-            
-            var lastForegroundApp: String? = null
-            val event = UsageEvents.Event()
-            
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event)
 
-                // Look for foreground events
-                // Use ACTIVITY_RESUMED on Android 10+ (API 29+), MOVE_TO_FOREGROUND on older versions
-                val isForegroundEvent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
-                } else {
-                    @Suppress("DEPRECATION")
-                    event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
-                }
+    private fun lastOpenedWhileScreenOn(windowMs: Long): String? {
+        val usageStatsManager = context.getSystemService(UsageStatsManager::class.java) ?: return null
+        val end = System.currentTimeMillis()
+        val events = usageStatsManager.queryEvents(end - windowMs, end) ?: return null
+        val event = UsageEvents.Event()
+        var screenOn = true
+        var lastOpened: String? = null
 
-                if (isForegroundEvent) {
-                    lastForegroundApp = event.packageName
-                }
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            when (event.eventType) {
+                // Screen events exist from Android 9; older versions never send them.
+                UsageEvents.Event.SCREEN_INTERACTIVE -> screenOn = true
+                UsageEvents.Event.SCREEN_NON_INTERACTIVE -> screenOn = false
+                UsageEvents.Event.DEVICE_STARTUP -> lastOpened = null
+                // Same value as MOVE_TO_FOREGROUND, which Android 9 and older report.
+                UsageEvents.Event.ACTIVITY_RESUMED -> if (screenOn) lastOpened = event.packageName
             }
-            
-            Log.d(TAG, "Foreground app detected: $lastForegroundApp")
-            return lastForegroundApp
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error using UsageStatsManager", e)
-            return null
         }
+
+        Log.d(TAG, "Foreground app detected: $lastOpened (window ${windowMs / 1000}s)")
+        return lastOpened
     }
-    
-    /**
-     * Get foreground app using ActivityManager (deprecated, for older Android versions).
-     * This method is deprecated but works on Android < 5.1.
-     */
-    @Suppress("DEPRECATION")
-    private fun getForegroundAppUsingActivityManager(): String? {
-        try {
-            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-                ?: return null
-            
-            val runningTasks = activityManager.getRunningTasks(1)
-            if (runningTasks.isNotEmpty()) {
-                val topActivity = runningTasks[0].topActivity
-                val packageName = topActivity?.packageName
-                Log.d(TAG, "Foreground app detected (ActivityManager): $packageName")
-                return packageName
-            }
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error using ActivityManager", e)
-        }
-        
-        return null
-    }
-    
-    /**
-     * Check if any of the given apps is currently in the foreground.
-     * 
-     * @param packageNames List of package names to check
-     * @return Package name of the foreground app if it's in the list, null otherwise
-     */
+
     fun getFirstForegroundApp(packageNames: Set<String>): String? {
         val foregroundApp = getForegroundApp() ?: return null
-        
+
         return if (packageNames.contains(foregroundApp)) {
-            Log.i(TAG, "Exempt app $foregroundApp is in foreground")
+            Log.i(TAG, "Exempt app $foregroundApp was the last app opened while the screen was on")
             foregroundApp
         } else {
             null
         }
     }
 }
-

@@ -1,7 +1,13 @@
 package io.github.dorumrr.privacyflip.worker
 
+import android.app.AppOpsManager
 import android.app.Application
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.os.Process
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
@@ -22,6 +28,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 
@@ -149,6 +156,7 @@ class PrivacyActionWorkerDoWorkTest {
         var hotspot = false
         var featureInUse = false
         var exemptApp: String? = null
+        var realForegroundDetector = false
         var enableSucceeds = true
         var disableSucceeds = true
         var beforeEnable: (Set<PrivacyFeature>) -> Unit = {}
@@ -174,7 +182,8 @@ class PrivacyActionWorkerDoWorkTest {
 
         override suspend fun isHotspotActive(): Boolean = hotspot
 
-        override fun getFirstForegroundApp(exemptApps: Set<String>): String? = exemptApp
+        override fun getFirstForegroundApp(exemptApps: Set<String>): String? =
+            if (realForegroundDetector) super.getFirstForegroundApp(exemptApps) else exemptApp
 
         override fun isScreenCurrentlyLocked(): Boolean = screenLocked
     }
@@ -444,6 +453,59 @@ class PrivacyActionWorkerDoWorkTest {
         assertTrue(
             "and the user must be told which app, was: ${notifications()}",
             notificationsSeen().any { it.contains("com.example.maps") }
+        )
+        assertTrue(
+            "without claiming it is still on screen, which a later lock job cannot know, was: ${notifications()}",
+            notificationsSeen().any { it.contains("was in front at lock") }
+        )
+    }
+
+    @Test
+    fun `with usage access the real detector finds the exempt app and the lock touches nothing`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setExemptApps(setOf("com.example.maps"))
+        val appOps = context.getSystemService(AppOpsManager::class.java)
+        shadowOf(appOps).setMode(
+            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName, AppOpsManager.MODE_ALLOWED
+        )
+        shadowOf(context.getSystemService(UsageStatsManager::class.java)).addEvent(
+            "com.example.maps", System.currentTimeMillis() - 60_000, UsageEvents.Event.ACTIVITY_RESUMED
+        )
+        recordLock()
+
+        val worker = worker(isLocking = true)
+        worker.realForegroundDetector = true
+
+        runBlocking { worker.doWork() }
+
+        assertTrue("nothing may be switched off", worker.disabled.isEmpty())
+    }
+
+    @Test
+    fun `exempt apps without usage access leave the reason in the log and the lock still runs`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setExemptApps(setOf("com.example.maps"))
+        shadowOf(context.packageManager).installPackage(
+            PackageInfo().apply {
+                packageName = "com.example.maps"
+                applicationInfo = ApplicationInfo().apply { packageName = "com.example.maps" }
+            }
+        )
+        val appOps = context.getSystemService(AppOpsManager::class.java)
+        shadowOf(appOps).setMode(
+            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName, AppOpsManager.MODE_IGNORED
+        )
+        recordLock()
+
+        val worker = worker(isLocking = true)
+        worker.realForegroundDetector = true
+
+        runBlocking { worker.doWork() }
+
+        assertTrue("the lock must go ahead", worker.disabled.contains(PrivacyFeature.WIFI))
+        assertTrue(
+            "and the log must say why no app could be exempt",
+            ShadowLog.getLogs().any { it.msg?.contains("Usage Access is not granted") == true }
         )
     }
 

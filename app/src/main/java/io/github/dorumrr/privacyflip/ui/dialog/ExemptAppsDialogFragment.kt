@@ -1,6 +1,7 @@
 package io.github.dorumrr.privacyflip.ui.dialog
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -16,9 +17,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
 import io.github.dorumrr.privacyflip.R
+import io.github.dorumrr.privacyflip.util.ForegroundAppDetector
 import io.github.dorumrr.privacyflip.util.PreferenceManager
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,6 +32,7 @@ import kotlinx.coroutines.withContext
 class ExemptAppsDialogFragment : DialogFragment() {
 
     private lateinit var preferenceManager: PreferenceManager
+    private lateinit var foregroundAppDetector: ForegroundAppDetector
     private lateinit var appListContainer: LinearLayout
     private lateinit var appListScroll: View
     private lateinit var loadingView: View
@@ -44,20 +47,19 @@ class ExemptAppsDialogFragment : DialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         preferenceManager = PreferenceManager.getInstance(requireContext())
+        foregroundAppDetector = ForegroundAppDetector(requireContext())
 
-        val view = LayoutInflater.from(context).inflate(R.layout.dialog_exempt_apps, null)
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_exempt_apps, null)
         appListContainer = view.findViewById(R.id.app_list_container)
         appListScroll = view.findViewById(R.id.app_list_scroll)
         loadingView = view.findViewById(R.id.loading_view)
         permissionWarning = view.findViewById(R.id.permission_warning)
         emptyState = view.findViewById(R.id.empty_state)
 
-        // Setup permission warning button
         view.findViewById<View>(R.id.grant_permission_button).setOnClickListener {
             openUsageAccessSettings()
         }
 
-        // Load apps in background
         loadApps()
 
         return AlertDialog.Builder(requireContext())
@@ -67,14 +69,27 @@ class ExemptAppsDialogFragment : DialogFragment() {
             .create()
     }
 
+    // Checked on every resume: the grant happens in Android's own Settings screen.
+    override fun onResume() {
+        super.onResume()
+        permissionWarning.visibility = if (foregroundAppDetector.hasUsageAccess()) View.GONE else View.VISIBLE
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        if (isAdded) parentFragmentManager.setFragmentResult(RESULT_CLOSED, Bundle.EMPTY)
+    }
+
     private fun loadApps() {
-        CoroutineScope(Dispatchers.Main).launch {
+        val packageManager = requireContext().packageManager
+        val ownPackageName = requireContext().packageName
+        lifecycleScope.launch {
             loadingView.visibility = View.VISIBLE
             appListScroll.visibility = View.GONE
             emptyState.visibility = View.GONE
 
             val apps = withContext(Dispatchers.IO) {
-                getInstalledApps()
+                getInstalledApps(packageManager, ownPackageName)
             }
 
             android.util.Log.d(TAG, "Loaded ${apps.size} apps")
@@ -93,20 +108,14 @@ class ExemptAppsDialogFragment : DialogFragment() {
         }
     }
 
-    private fun getInstalledApps(): List<AppInfo> {
-        val pm = requireContext().packageManager
-        val ourPackageName = requireContext().packageName
-
-        // Get all installed packages (including work profile apps)
+    private fun getInstalledApps(pm: PackageManager, ourPackageName: String): List<AppInfo> {
         val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
 
         android.util.Log.d(TAG, "Total installed packages: ${packages.size}")
 
-        // Show ALL apps except PrivacyFlip itself
         // This allows users to exempt system apps (Phone, Messaging, etc.) if needed
         val apps = packages
             .filter { appInfo ->
-                // Only exclude PrivacyFlip itself
                 appInfo.packageName != ourPackageName
             }
             .mapNotNull { appInfo ->
@@ -130,12 +139,13 @@ class ExemptAppsDialogFragment : DialogFragment() {
 
     private fun displayApps(apps: List<AppInfo>) {
         appListContainer.removeAllViews()
+        val inflater = LayoutInflater.from(appListContainer.context)
         val exemptApps = preferenceManager.getExemptApps()
 
         android.util.Log.d(TAG, "Displaying ${apps.size} apps, exempt apps: ${exemptApps.size}")
 
         apps.forEach { app ->
-            val itemView = LayoutInflater.from(context).inflate(
+            val itemView = inflater.inflate(
                 R.layout.item_exempt_app,
                 appListContainer,
                 false
@@ -180,5 +190,6 @@ class ExemptAppsDialogFragment : DialogFragment() {
 
     companion object {
         const val TAG = "ExemptAppsDialog"
+        const val RESULT_CLOSED = "exempt_apps_dialog_closed"
     }
 }

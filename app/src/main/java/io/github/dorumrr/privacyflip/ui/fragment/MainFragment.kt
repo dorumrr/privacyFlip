@@ -34,6 +34,7 @@ import io.github.dorumrr.privacyflip.ui.viewmodel.MainViewModel
 import io.github.dorumrr.privacyflip.ui.viewmodel.UiState
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.DeviceDetector
+import io.github.dorumrr.privacyflip.util.ForegroundAppDetector
 
 class MainFragment : Fragment() {
 
@@ -150,6 +151,8 @@ class MainFragment : Fragment() {
         // directly, bypassing the ViewModel, so without this the screen can show a
         // stale state after either of them is used while the app was in the background.
         viewModel.reloadGlobalPrivacyStatus()
+
+        updateExemptAppsUsageAccessNote()
 
         // Refresh privilege status to detect if Shizuku/Dhizuku/Root status changed while app was in background
         viewModel.refresh()
@@ -309,6 +312,16 @@ class MainFragment : Fragment() {
                 showExemptAppsDialog()
             }
         }
+
+        parentFragmentManager.setFragmentResultListener(ExemptAppsDialogFragment.RESULT_CLOSED, viewLifecycleOwner) { _, _ ->
+            updateExemptAppsUsageAccessNote()
+        }
+    }
+
+    private fun updateExemptAppsUsageAccessNote() {
+        val exemptApps = io.github.dorumrr.privacyflip.util.PreferenceManager.getInstance(requireContext()).getExemptApps()
+        val needsAccess = ForegroundAppDetector(requireContext()).exemptAppsNeedUsageAccess(exemptApps)
+        binding.extrasCard.exemptAppsUsageAccessNote.visibility = if (needsAccess) View.VISIBLE else View.GONE
     }
 
     private fun setupGlobalPrivacyCard() {

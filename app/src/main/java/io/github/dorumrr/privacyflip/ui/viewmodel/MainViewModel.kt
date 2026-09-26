@@ -442,7 +442,7 @@ class MainViewModel : ViewModel() {
                 batterySaverOnlyIfNotManual = prefs.getBoolean(Constants.Preferences.getFeatureOnlyIfNotManualKey("BATTERY_SAVER"), Constants.Defaults.BATTERY_SAVER_ONLY_IF_NOT_MANUAL)
             )
 
-            updateUiState { it.copy(screenLockConfig = config) }
+            updateUiState { it.copy(screenLockConfig = config, sensorsLeftOnAtLastLock = preferenceManager.sensorsLeftOnAtLastLock) }
         } catch (e: Exception) {
             logManager.e(TAG, "Failed to load screen lock config: ${e.message}")
         }
@@ -1033,6 +1033,7 @@ data class UiState(
     val isGlobalPrivacyEnabled: Boolean = true,
     val hasTriedAutoRootRequest: Boolean = false,
     val screenLockConfig: ScreenLockConfig = ScreenLockConfig(),
+    val sensorsLeftOnAtLastLock: Set<PrivacyFeature> = emptySet(),
     val backgroundServiceEnabled: Boolean = Constants.Defaults.BACKGROUND_SERVICE_ENABLED,
     val backgroundServicePermissionGranted: Boolean = false,
     // Timer settings for UI binding

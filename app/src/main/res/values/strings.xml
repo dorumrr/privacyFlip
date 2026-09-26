@@ -42,6 +42,8 @@
     <string name="open_source_message">Free, open source, no ads, for your privacy.\nConsider donating to support ongoing development.</string>
 
     <!-- Camera/microphone availability -->
+    <!-- %1$s is "camera" or "microphone". -->
+    <string name="sensor_left_on_at_last_lock">⚠️ At the last lock your phone was already locked, so the %1$s could not be switched off. Tap the info icon above for how to fix this.</string>
     <string name="sensor_needs_android_12">Needs Android 12 or newer. Your Android version has no way to switch the camera or microphone.</string>
 
     <!-- Accessibility Service -->

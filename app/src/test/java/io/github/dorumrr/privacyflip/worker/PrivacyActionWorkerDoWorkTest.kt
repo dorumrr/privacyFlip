@@ -17,8 +17,10 @@ import androidx.work.workDataOf
 import io.github.dorumrr.privacyflip.data.FeatureState
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.data.PrivacyResult
+import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -83,6 +85,9 @@ class PrivacyActionWorkerDoWorkTest {
     private class Snapshot(
         val globalPrivacy: Boolean,
         val debugNotifications: Boolean,
+        val debugLogs: Boolean,
+        val sensorsLeftOn: Set<PrivacyFeature>,
+        val offSinceUnlock: Set<PrivacyFeature>,
         val lockDelay: Int,
         val unlockDelay: Int,
         val exemptApps: Set<String>,
@@ -91,6 +96,10 @@ class PrivacyActionWorkerDoWorkTest {
         fun restoreInto(prefs: PreferenceManager) {
             prefs.isGlobalPrivacyEnabled = globalPrivacy
             prefs.debugNotificationsEnabled = debugNotifications
+            prefs.debugLogsEnabled = debugLogs
+            prefs.sensorsLeftOnAtLastLock = sensorsLeftOn
+            prefs.removeFeaturesOffSinceUnlock(prefs.featuresOffSinceUnlock)
+            prefs.addFeaturesOffSinceUnlock(offSinceUnlock)
             prefs.lockDelaySeconds = lockDelay
             prefs.unlockDelaySeconds = unlockDelay
             prefs.setExemptApps(exemptApps)
@@ -108,6 +117,9 @@ class PrivacyActionWorkerDoWorkTest {
             fun of(prefs: PreferenceManager) = Snapshot(
                 globalPrivacy = prefs.isGlobalPrivacyEnabled,
                 debugNotifications = prefs.debugNotificationsEnabled,
+                debugLogs = prefs.debugLogsEnabled,
+                sensorsLeftOn = prefs.sensorsLeftOnAtLastLock,
+                offSinceUnlock = prefs.featuresOffSinceUnlock,
                 lockDelay = prefs.lockDelaySeconds,
                 unlockDelay = prefs.unlockDelaySeconds,
                 exemptApps = prefs.getExemptApps(),
@@ -129,6 +141,9 @@ class PrivacyActionWorkerDoWorkTest {
     private fun applyBaseline() {
         prefs.isGlobalPrivacyEnabled = true
         prefs.debugNotificationsEnabled = true
+        prefs.debugLogsEnabled = false
+        prefs.sensorsLeftOnAtLastLock = emptySet()
+        prefs.removeFeaturesOffSinceUnlock(prefs.featuresOffSinceUnlock)
         prefs.lockDelaySeconds = 0
         prefs.unlockDelaySeconds = 0
         prefs.setExemptApps(emptySet())
@@ -161,10 +176,15 @@ class PrivacyActionWorkerDoWorkTest {
         var disableSucceeds = true
         var beforeEnable: (Set<PrivacyFeature>) -> Unit = {}
         var beforeDisable: (Set<PrivacyFeature>) -> Unit = {}
+        var statusReads = 0
+        var method = PrivilegeMethod.ROOT
 
         override suspend fun confirmPrivilege(): Boolean = privileged
 
-        override suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> = states.toMap()
+        override suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> {
+            statusReads++
+            return states.toMap()
+        }
 
         override suspend fun enableFeatures(features: Set<PrivacyFeature>): List<PrivacyResult> {
             beforeEnable(features)
@@ -180,6 +200,8 @@ class PrivacyActionWorkerDoWorkTest {
 
         override suspend fun isFeatureInUse(feature: PrivacyFeature): Boolean = featureInUse
 
+        override fun privilegeMethod(): PrivilegeMethod = method
+
         override suspend fun isHotspotActive(): Boolean = hotspot
 
         override fun getFirstForegroundApp(exemptApps: Set<String>): String? =
@@ -188,13 +210,13 @@ class PrivacyActionWorkerDoWorkTest {
         override fun isScreenCurrentlyLocked(): Boolean = screenLocked
     }
 
-    private fun worker(isLocking: Boolean, isDeviceLocked: Boolean = false): FakeWorker =
+    private fun worker(isLocking: Boolean, isDeviceLocked: Boolean = false, trigger: String = "test"): FakeWorker =
         TestListenableWorkerBuilder<PrivacyActionWorker>(context)
             .setInputData(
                 workDataOf(
                     PrivacyActionWork.KEY_IS_LOCKING to isLocking,
                     PrivacyActionWork.KEY_IS_DEVICE_LOCKED to isDeviceLocked,
-                    PrivacyActionWork.KEY_TRIGGER to "test",
+                    PrivacyActionWork.KEY_TRIGGER to trigger,
                     PrivacyActionWork.KEY_REASON to "test"
                 )
             )
@@ -434,6 +456,7 @@ class PrivacyActionWorkerDoWorkTest {
             "nothing observed the camera to be off, so it must not be passed over in silence",
             notificationsSeen().any { it.contains("device already locked") }
         )
+        assertEquals("and the main screen says so too", setOf(PrivacyFeature.CAMERA), prefs.sensorsLeftOnAtLastLock)
     }
 
     @Test
@@ -748,5 +771,370 @@ class PrivacyActionWorkerDoWorkTest {
             "and the user must be told, was: ${notifications()}",
             notifications().any { it.contains("permission not granted") }
         )
+    }
+
+    // The debug-log writer echoes each line only after writing it to the file, so these are file lines.
+    private fun backOnLines(): List<String> =
+        ShadowLog.getLogs()
+            .filter { it.tag == "privacyFlip-DebugLogHelper" }
+            .mapNotNull { it.msg }
+            .filter { it.startsWith("Logged: ") && it.contains("is on at unlock") }
+
+    /** One lock that switches [feature] off with success, as the phone would run it. */
+    private fun lockTurningOff(feature: PrivacyFeature) {
+        prefs.setFeatureDisableOnLock(feature, true)
+        recordLock()
+        val lock = worker(isLocking = true)
+        lock.states[feature] = FeatureState.ENABLED
+        runBlocking { lock.doWork() }
+        assertTrue("the lock must have switched ${feature.displayName} off", lock.disabled.contains(feature))
+    }
+
+    @Test
+    fun `a feature the lock switched off that is on at unlock is named in the debug log`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+
+        ShadowLog.clear()
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { unlock.doWork() }
+
+        val lines = backOnLines()
+        assertEquals("one line for NFC, was: $lines", 1, lines.size)
+        assertTrue("it must name NFC, was: $lines", lines.single().contains("NFC"))
+        assertTrue("and say this app did not switch it back on, was: $lines", lines.single().contains("did not switch it back on"))
+    }
+
+    @Test
+    fun `no line for a feature that is still off, or that the unlock turns back on itself`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+        lockTurningOff(PrivacyFeature.BLUETOOTH)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.BLUETOOTH, true)
+
+        ShadowLog.clear()
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.NFC] = FeatureState.DISABLED
+        unlock.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        runBlocking { unlock.doWork() }
+
+        assertTrue("the unlock ran, it switched Bluetooth on", unlock.enabled.contains(PrivacyFeature.BLUETOOTH))
+        assertTrue("nothing is on that this app left off, was: ${backOnLines()}", backOnLines().isEmpty())
+    }
+
+    @Test
+    fun `an unlock clears the record, so the next unlock says nothing`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+
+        recordUnlock()
+        val first = worker(isLocking = false)
+        first.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { first.doWork() }
+        assertEquals("the first unlock names it", 1, backOnLines().size)
+
+        ShadowLog.clear()
+        recordUnlock()
+        val second = worker(isLocking = false)
+        second.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { second.doWork() }
+        assertTrue("no lock since, so nothing to say, was: ${backOnLines()}", backOnLines().isEmpty())
+    }
+
+    @Test
+    fun `a failed disable and a lock overtaken by an unlock are not recorded`() {
+        prefs.debugLogsEnabled = true
+        prefs.setFeatureDisableOnLock(PrivacyFeature.NFC, true)
+
+        recordLock()
+        val failed = worker(isLocking = true)
+        failed.disableSucceeds = false
+        runBlocking { failed.doWork() }
+
+        recordLock()
+        val overtaken = worker(isLocking = true)
+        overtaken.beforeDisable = { recordUnlock() }
+        runBlocking { overtaken.doWork() }
+        assertTrue("the overtaken lock did run its disable", overtaken.disabled.contains(PrivacyFeature.NFC))
+
+        ShadowLog.clear()
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { unlock.doWork() }
+        assertTrue("neither lock may count as turning NFC off, was: ${backOnLines()}", backOnLines().isEmpty())
+    }
+
+    @Test
+    fun `with the debug log off the unlock reads no extra state`() {
+        lockTurningOff(PrivacyFeature.NFC)
+        recordUnlock()
+        val quiet = worker(isLocking = false)
+        quiet.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { quiet.doWork() }
+        assertEquals("the line is for the debug log only, so no shell read", 0, quiet.statusReads)
+
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+        recordUnlock()
+        val logging = worker(isLocking = false)
+        logging.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { logging.doWork() }
+        assertEquals("with the log on it reads once", 1, logging.statusReads)
+    }
+
+    @Test
+    fun `the check runs after everything the unlock switches on`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        unlock.states[PrivacyFeature.CAMERA] = FeatureState.DISABLED
+        unlock.states[PrivacyFeature.WIFI] = FeatureState.DISABLED
+        val readsAtEachEnable = mutableListOf<Int>()
+        unlock.beforeEnable = { readsAtEachEnable += unlock.statusReads }
+        runBlocking { unlock.doWork() }
+
+        assertEquals("camera, then WiFi, were switched on", listOf(PrivacyFeature.CAMERA, PrivacyFeature.WIFI), unlock.enabled)
+        assertEquals(
+            "exactly one read, the check's own, comes after the last enable",
+            readsAtEachEnable.last() + 1,
+            unlock.statusReads
+        )
+        assertEquals("and the check wrote its line", 1, backOnLines().size)
+    }
+
+    @Test
+    fun `a cancelled unlock leaves the record for the unlock that replaces it`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+
+        recordUnlock()
+        val replaced = worker(isLocking = false)
+        replaced.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        replaced.beforeEnable = { throw CancellationException("replaced by a newer unlock") }
+        val thrown = runCatching { runBlocking { replaced.doWork() } }.exceptionOrNull()
+        assertTrue("the first unlock was cancelled, was: $thrown", thrown is CancellationException)
+        assertTrue("it wrote nothing", backOnLines().isEmpty())
+        assertEquals("and left the record", setOf(PrivacyFeature.NFC), prefs.featuresOffSinceUnlock)
+
+        recordUnlock()
+        val replacement = worker(isLocking = false)
+        replacement.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { replacement.doWork() }
+        assertEquals("the replacement names NFC", 1, backOnLines().size)
+        assertTrue("and clears the record", prefs.featuresOffSinceUnlock.isEmpty())
+    }
+
+    @Test
+    fun `a lock recorded while an unlock runs is kept for the next unlock`() {
+        lockTurningOff(PrivacyFeature.NFC)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.beforeEnable = { prefs.addFeaturesOffSinceUnlock(setOf(PrivacyFeature.BLUETOOTH)) }
+        runBlocking { unlock.doWork() }
+
+        assertEquals(
+            "this unlock clears only what it read",
+            setOf(PrivacyFeature.BLUETOOTH),
+            prefs.featuresOffSinceUnlock
+        )
+    }
+
+    @Test
+    fun `one line per feature that reads on, none for a state that cannot be read`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+        lockTurningOff(PrivacyFeature.BLUETOOTH)
+        lockTurningOff(PrivacyFeature.LOCATION)
+        lockTurningOff(PrivacyFeature.WIFI)
+
+        ShadowLog.clear()
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        unlock.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        unlock.states[PrivacyFeature.LOCATION] = FeatureState.ERROR
+        unlock.states[PrivacyFeature.WIFI] = FeatureState.UNKNOWN
+        runBlocking { unlock.doWork() }
+
+        val lines = backOnLines()
+        assertEquals("NFC and Bluetooth, each on its own line, was: $lines", 2, lines.size)
+        assertTrue("NFC named, was: $lines", lines.any { it.contains("NFC") })
+        assertTrue("Bluetooth named, was: $lines", lines.any { it.contains("Bluetooth") })
+    }
+
+    @Test
+    fun `camera is on the record, and the unlock's own camera enable is not counted`() {
+        prefs.debugLogsEnabled = true
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        recordLock()
+        val lock = worker(isLocking = true, isDeviceLocked = false)
+        lock.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { lock.doWork() }
+        assertEquals("the sensor step records the camera", setOf(PrivacyFeature.CAMERA), prefs.featuresOffSinceUnlock)
+
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.CAMERA, true)
+        ShadowLog.clear()
+        recordUnlock()
+        val reEnables = worker(isLocking = false)
+        reEnables.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { reEnables.doWork() }
+        assertTrue("this unlock switches the camera on itself, was: ${backOnLines()}", backOnLines().isEmpty())
+
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.CAMERA, false)
+        recordLock()
+        val lockAgain = worker(isLocking = true, isDeviceLocked = false)
+        lockAgain.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { lockAgain.doWork() }
+        ShadowLog.clear()
+        recordUnlock()
+        val leavesIt = worker(isLocking = false)
+        leavesIt.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { leavesIt.doWork() }
+        assertEquals("with Enable on unlock off, a camera that is on is named", 1, backOnLines().size)
+    }
+
+    @Test
+    fun `with Dhizuku the check stays silent, since its start-up lifts every block`() {
+        prefs.debugLogsEnabled = true
+        lockTurningOff(PrivacyFeature.NFC)
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.method = PrivilegeMethod.DHIZUKU
+        unlock.states[PrivacyFeature.NFC] = FeatureState.ENABLED
+        runBlocking { unlock.doWork() }
+
+        assertTrue("this app did switch it back on there, was: ${backOnLines()}", backOnLines().isEmpty())
+        assertEquals("so no read either", 0, unlock.statusReads)
+    }
+
+    @Test
+    fun `a lock that finds the phone already locked records the sensors it could not switch off`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = true)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        worker.states[PrivacyFeature.MICROPHONE] = FeatureState.DISABLED
+        runBlocking { worker.doWork() }
+
+        assertEquals(
+            "the main screen names only the sensor that stayed on",
+            setOf(PrivacyFeature.CAMERA),
+            prefs.sensorsLeftOnAtLastLock
+        )
+    }
+
+    @Test
+    fun `a later lock that reaches the sensors clears the note`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        val both = setOf(PrivacyFeature.CAMERA, PrivacyFeature.MICROPHONE)
+
+        prefs.sensorsLeftOnAtLastLock = both
+        recordLock()
+        val inTime = worker(isLocking = true, isDeviceLocked = false)
+        inTime.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        inTime.states[PrivacyFeature.MICROPHONE] = FeatureState.ENABLED
+        runBlocking { inTime.doWork() }
+        assertTrue("switched off in time", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.sensorsLeftOnAtLastLock = both
+        recordLock()
+        val secondTrigger = worker(isLocking = true, isDeviceLocked = true)
+        secondTrigger.states[PrivacyFeature.CAMERA] = FeatureState.DISABLED
+        secondTrigger.states[PrivacyFeature.MICROPHONE] = FeatureState.DISABLED
+        runBlocking { secondTrigger.doWork() }
+        assertTrue("already off, so nothing stayed on", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.sensorsLeftOnAtLastLock = both
+        recordLock()
+        val failed = worker(isLocking = true, isDeviceLocked = false)
+        failed.disableSucceeds = false
+        failed.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        failed.states[PrivacyFeature.MICROPHONE] = FeatureState.ENABLED
+        runBlocking { failed.doWork() }
+        assertTrue(
+            "a failed attempt was not the phone being already locked, so the note must not claim it",
+            prefs.sensorsLeftOnAtLastLock.isEmpty()
+        )
+
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, false)
+        prefs.setFeatureOnlyIfUnused(PrivacyFeature.MICROPHONE, true)
+        prefs.sensorsLeftOnAtLastLock = both
+        recordLock()
+        val micInUse = worker(isLocking = true, isDeviceLocked = true)
+        micInUse.featureInUse = true
+        micInUse.states[PrivacyFeature.MICROPHONE] = FeatureState.ENABLED
+        runBlocking { micInUse.doWork() }
+        assertTrue("left on for being in use, not for the lock screen", prefs.sensorsLeftOnAtLastLock.isEmpty())
+    }
+
+    @Test
+    fun `a lock that ends before the sensors still clears the note`() {
+        // The note says "at the last lock", so a lock that decided nothing must not keep an older one.
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+        prefs.setExemptApps(setOf("com.example.maps"))
+        recordLock()
+        val exempt = worker(isLocking = true, isDeviceLocked = true)
+        exempt.exemptApp = "com.example.maps"
+        exempt.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { exempt.doWork() }
+        assertTrue("an exempt app stopped this lock", exempt.disabled.isEmpty())
+        assertTrue("so it left nothing on for the lock screen", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.setExemptApps(emptySet())
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+        recordLock()
+        recordUnlock()
+        runBlocking { worker(isLocking = true, isDeviceLocked = false).doWork() }
+        assertTrue("an overtaken lock clears it too", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+        recordLock()
+        val unprivileged = worker(isLocking = true, isDeviceLocked = true)
+        unprivileged.privileged = false
+        runBlocking { unprivileged.doWork() }
+        assertTrue("so does a lock without privilege", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+        prefs.isGlobalPrivacyEnabled = false
+        recordLock()
+        runBlocking { worker(isLocking = true, isDeviceLocked = true).doWork() }
+        assertTrue("and one with protection off", prefs.sensorsLeftOnAtLastLock.isEmpty())
+    }
+
+    @Test
+    fun `the start-up catch-up never touches the note`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        val catchUp = PrivacyActionWork.TRIGGER_SERVICE_INIT
+
+        recordLock()
+        val sets = worker(isLocking = true, isDeviceLocked = true, trigger = catchUp)
+        sets.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { sets.doWork() }
+        assertTrue("no lock the user made, so no note", prefs.sensorsLeftOnAtLastLock.isEmpty())
+
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+        recordLock()
+        val keeps = worker(isLocking = true, isDeviceLocked = false, trigger = catchUp)
+        runBlocking { keeps.doWork() }
+        assertTrue("the catch-up did switch the camera off", keeps.disabled.contains(PrivacyFeature.CAMERA))
+        assertEquals("but the note from the real lock stays", setOf(PrivacyFeature.CAMERA), prefs.sensorsLeftOnAtLastLock)
     }
 }

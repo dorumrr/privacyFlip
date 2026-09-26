@@ -23,6 +23,8 @@ object PrivacyActionWork {
     const val KEY_TRIGGER = "trigger"
     const val KEY_REASON = "reason"
 
+    const val TRIGGER_SERVICE_INIT = "service_init"
+
     /**
      * Lock work and unlock work each have one unique name, so a newer action of the same
      * direction REPLACEs the older one rather than running alongside it.

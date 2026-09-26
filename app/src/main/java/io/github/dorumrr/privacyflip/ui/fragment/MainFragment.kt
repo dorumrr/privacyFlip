@@ -271,6 +271,8 @@ class MainFragment : Fragment() {
             cameraInfoIcon.setOnClickListener {
                 showCameraMicInfoDialog()
             }
+            cameraLeftOnNote.text = getString(R.string.sensor_left_on_at_last_lock, PrivacyFeature.CAMERA.displayName.lowercase())
+            microphoneLeftOnNote.text = getString(R.string.sensor_left_on_at_last_lock, PrivacyFeature.MICROPHONE.displayName.lowercase())
             microphoneInfoIcon.setOnClickListener {
                 showCameraMicInfoDialog()
             }
@@ -566,6 +568,12 @@ class MainFragment : Fragment() {
         binding.screenLockCard.microphoneOnlyIfUnusedCheckbox.isChecked = uiState.screenLockConfig.microphoneOnlyIfUnused
         binding.screenLockCard.microphoneOnlyIfUnusedContainer.visibility =
             if (uiState.screenLockConfig.microphoneDisableOnLock) View.VISIBLE else View.GONE
+
+        val leftOn = uiState.sensorsLeftOnAtLastLock
+        binding.screenLockCard.cameraLeftOnNote.visibility =
+            if (uiState.screenLockConfig.cameraDisableOnLock && PrivacyFeature.CAMERA in leftOn) View.VISIBLE else View.GONE
+        binding.screenLockCard.microphoneLeftOnNote.visibility =
+            if (uiState.screenLockConfig.microphoneDisableOnLock && PrivacyFeature.MICROPHONE in leftOn) View.VISIBLE else View.GONE
 
         isUpdatingUI = false
     }

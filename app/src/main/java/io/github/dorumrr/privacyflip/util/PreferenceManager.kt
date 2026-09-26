@@ -188,6 +188,38 @@ class PreferenceManager private constructor(private val context: Context) {
         prefs.edit().putBoolean(key, value).apply()
     }
 
+    /** Runtime state: the sensors the last lock could not switch off because the phone was already locked. */
+    var sensorsLeftOnAtLastLock: Set<PrivacyFeature>
+        get() = getFeatureSet(Constants.Preferences.KEY_SENSORS_LEFT_ON_AT_LAST_LOCK)
+        set(value) = putFeatureSet(Constants.Preferences.KEY_SENSORS_LEFT_ON_AT_LAST_LOCK, value)
+
+    // A lock job and an unlock job can run at the same time, so the read and the write stay together.
+    @Synchronized
+    fun addFeaturesOffSinceUnlock(features: Collection<PrivacyFeature>) {
+        if (features.isEmpty()) return
+        val key = Constants.Preferences.KEY_FEATURES_OFF_SINCE_UNLOCK
+        putFeatureSet(key, getFeatureSet(key) + features)
+    }
+
+    val featuresOffSinceUnlock: Set<PrivacyFeature>
+        get() = getFeatureSet(Constants.Preferences.KEY_FEATURES_OFF_SINCE_UNLOCK)
+
+    @Synchronized
+    fun removeFeaturesOffSinceUnlock(features: Collection<PrivacyFeature>) {
+        if (features.isEmpty()) return
+        val key = Constants.Preferences.KEY_FEATURES_OFF_SINCE_UNLOCK
+        putFeatureSet(key, getFeatureSet(key) - features.toSet())
+    }
+
+    private fun getFeatureSet(key: String): Set<PrivacyFeature> =
+        (prefs.getString(key, "") ?: "").split(",")
+            .mapNotNull { name -> PrivacyFeature.values().firstOrNull { it.name == name } }
+            .toSet()
+
+    private fun putFeatureSet(key: String, features: Set<PrivacyFeature>) {
+        prefs.edit().putString(key, features.joinToString(",") { it.name }).apply()
+    }
+
     fun updateTimerSettings(settings: TimerSettings) {
         prefs.edit().apply {
             putInt(Constants.Preferences.KEY_LOCK_DELAY, settings.lockDelaySeconds)

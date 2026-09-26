@@ -14,6 +14,7 @@ import io.github.dorumrr.privacyflip.data.FeatureState
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.data.PrivacyResult
 import io.github.dorumrr.privacyflip.privacy.PrivacyManager
+import io.github.dorumrr.privacyflip.privilege.PrivilegeMethod
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.util.ConnectionStateChecker
 import io.github.dorumrr.privacyflip.util.DualLogger
@@ -175,7 +176,7 @@ open class PrivacyActionWorker(
         ForegroundAppDetector(applicationContext)
     }
 
-    // What doWork() cannot reach without a privileged shell arrives through an open member: the 7
+    // What doWork() cannot reach without a privileged shell arrives through an open member: the 8
     // here plus isScreenCurrentlyLocked below. Stored preferences stay direct, being themselves
     // in a test. Built lazily above, so a stand-in never constructs the real one.
     protected open suspend fun confirmPrivilege(): Boolean {
@@ -196,6 +197,8 @@ open class PrivacyActionWorker(
         connectionChecker.isFeatureInUse(feature)
 
     protected open suspend fun isHotspotActive(): Boolean = connectionChecker.isHotspotActive()
+
+    protected open fun privilegeMethod(): PrivilegeMethod = rootManager.getPrivilegeMethod()
 
     protected open fun getFirstForegroundApp(exemptApps: Set<String>): String? {
         if (foregroundAppDetector.exemptAppsNeedUsageAccess(exemptApps)) {
@@ -278,10 +281,16 @@ open class PrivacyActionWorker(
         // the normal path) has already run - see that finally's own comment for why this is
         // needed even when the clear happens on the normal path.
         var ownSensorGuardCleared = false
+        // Cleared in finally, not here: a cancelled unlock leaves it to the unlock that replaced it.
+        val offSinceLastUnlock = if (isLocking) emptySet() else preferenceManager.featuresOffSinceUnlock
+        var cancelled = false
         try {
             val isDeviceLocked = inputData.getBoolean(PrivacyActionWork.KEY_IS_DEVICE_LOCKED, false)
             val trigger = inputData.getString(PrivacyActionWork.KEY_TRIGGER) ?: "unknown"
             val reason = inputData.getString(PrivacyActionWork.KEY_REASON) ?: "Unknown"
+            // The start-up catch-up is not a lock the user made, so it never touches the note.
+            val isUserLock = isLocking && trigger != PrivacyActionWork.TRIGGER_SERVICE_INIT
+            if (isUserLock) preferenceManager.sensorsLeftOnAtLastLock = emptySet()
 
             logDebug("🔒 Executing privacy actions: locking=$isLocking, deviceLocked=$isDeviceLocked, trigger=$trigger, reason=$reason")
 
@@ -406,6 +415,7 @@ open class PrivacyActionWorker(
                               logDebug("🔒 Attempting to disable sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
                               val sensorResults = disableFeatures(filteredSensorFeatures.toSet())
                               processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
+                              recordTurnedOff(sensorResults)
                               val stillFailed = sensorResults.filter { !it.success }
                               if (stillFailed.isNotEmpty()) {
                                   // processResults above has already reported this failure. A second
@@ -425,6 +435,7 @@ open class PrivacyActionWorker(
                               val stillOn = filteredSensorFeatures.filter {
                                   status[it] != FeatureState.DISABLED
                               }
+                              if (isUserLock) preferenceManager.sensorsLeftOnAtLastLock = stillOn.toSet()
                               if (stillOn.isEmpty()) {
                                   logDebug("🔒 Sensors were already off when this trigger arrived - nothing to disable")
                               } else {
@@ -568,6 +579,7 @@ open class PrivacyActionWorker(
                                 logDebug("🔒 disableFeatures() returned ${regularResults.size} results")
 
                                 processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
+                                recordTurnedOff(regularResults)
                             } else {
                                 logDebug("ℹ️ No regular features left to disable after the in-use/hotspot check")
                             }
@@ -850,11 +862,14 @@ open class PrivacyActionWorker(
                         }
                     }
                 }
+                // Last, so nothing the user waits for waits on its status read.
+                logFeaturesBackOnSinceLock(offSinceLastUnlock, featuresToEnable)
             }
 
             return Result.success()
 
         } catch (e: kotlinx.coroutines.CancellationException) {
+            cancelled = true
             // Work was cancelled (e.g., screen state changed during delay)
             // This is expected behavior, not an error
             logDebug("⚠️ Privacy action cancelled (screen state changed)")
@@ -899,6 +914,29 @@ open class PrivacyActionWorker(
                     sensorEnableInProgress = false
                 }
             }
+            // Only what this unlock read, so a feature first recorded after that read waits for the next unlock.
+            if (!isLocking && !cancelled) preferenceManager.removeFeaturesOffSinceUnlock(offSinceLastUnlock)
+        }
+    }
+
+    // An unlock recorded since this lock may already have read the record, so an addition now would outlive it.
+    private fun recordTurnedOff(results: List<PrivacyResult>) {
+        if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) return
+        preferenceManager.addFeaturesOffSinceUnlock(results.filter { it.success }.map { it.feature })
+    }
+
+    // The line exists for the debug log file, so without that log the extra shell read is skipped.
+    private suspend fun logFeaturesBackOnSinceLock(
+        offSinceLastUnlock: Set<PrivacyFeature>,
+        featuresToEnable: List<PrivacyFeature>
+    ) {
+        val notTurnedBackOn = offSinceLastUnlock - featuresToEnable.toSet()
+        if (notTurnedBackOn.isEmpty() || !preferenceManager.debugLogsEnabled) return
+        // Dhizuku's privilege start lifts every block this app set, so there this app did turn them back on.
+        if (privilegeMethod() == PrivilegeMethod.DHIZUKU) return
+        val status = getCurrentStatus()
+        notTurnedBackOn.filter { status[it] == FeatureState.ENABLED }.forEach { feature ->
+            logWarning("⚠️ ${feature.displayName} is on at unlock: a lock since the last finished unlock switched it off (its disable reported success), and this app did not switch it back on (Enable on unlock is off)")
         }
     }
 

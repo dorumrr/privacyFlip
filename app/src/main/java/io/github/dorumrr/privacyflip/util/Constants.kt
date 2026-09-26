@@ -48,6 +48,9 @@ object Constants {
         // Accessibility service preference
         const val KEY_ACCESSIBILITY_SERVICE_ENABLED = "accessibility_service_enabled"
 
+        const val KEY_SENSORS_LEFT_ON_AT_LAST_LOCK = "sensors_left_on_at_last_lock"
+        const val KEY_FEATURES_OFF_SINCE_UNLOCK = "features_off_since_unlock"
+
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"
         fun getFeatureUnlockKey(featureName: String): String = "${featureName.lowercase()}_enable_on_unlock"
         fun getFeatureOnlyIfUnusedKey(featureName: String): String = "${featureName.lowercase()}_only_if_unused"

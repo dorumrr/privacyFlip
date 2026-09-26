@@ -239,7 +239,7 @@ class PrivacyMonitorService : Service() {
                 context = this,
                 isLocking = isLocking,
                 isDeviceLocked = isDeviceLocked,
-                trigger = "service_init",
+                trigger = PrivacyActionWork.TRIGGER_SERVICE_INIT,
                 reason = reason
             )
             Log.i(TAG, "🔄 Initial privacy action enqueued (unique: $workName): ${if (isUnlocking) "unlock" else "lock"} actions (deviceLocked=$isDeviceLocked)")

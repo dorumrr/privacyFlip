@@ -175,6 +175,91 @@ check_release_tree_is_published() {
     echo ""
 }
 
+# Release signing reads keystore.properties and the keystore it names from the project root, both
+# gitignored, so the same checkout builds on every machine. Reports what is wrong, never a value.
+check_release_keys() {
+    local root props key filled store="" problems=""
+    root=$(pwd -P)
+    props="$root/keystore.properties"
+
+    if [ ! -f "$props" ]; then
+        problems="  - keystore.properties is not in the project root
+"
+    else
+        # Passwords are only counted, never held in a variable, so "bash -x" cannot print them.
+        for key in storePassword keyAlias keyPassword; do
+            filled=$(keystore_property "$props" "$key" | grep -c '[^[:space:]]' || true)
+            if [ "$filled" = "0" ]; then
+                problems="${problems}  - keystore.properties has no value for ${key}
+"
+            fi
+        done
+        store=$(keystore_property "$props" storeFile)
+        if [ -z "$store" ]; then
+            problems="${problems}  - keystore.properties has no value for storeFile
+"
+        else
+            case "$store" in
+                /*) ;;
+                *) store="$root/$store" ;;
+            esac
+            if [ ! -f "$store" ]; then
+                problems="${problems}  - the keystore that storeFile names is missing
+"
+            elif [ "$(cd "$(dirname "$store")" && pwd -P)" != "$root" ]; then
+                problems="${problems}  - the keystore must sit directly in the project root, not elsewhere or in a subfolder
+"
+            elif git -C "$root" ls-files --error-unmatch -- "$store" >/dev/null 2>&1; then
+                problems="${problems}  - the keystore is committed to git: treat that key as leaked
+"
+            elif git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+                ! git -C "$root" check-ignore -q "$store"; then
+                problems="${problems}  - the keystore is not gitignored: give it a name ending in .keystore or .jks
+"
+            fi
+        fi
+        if git -C "$root" ls-files --error-unmatch -- "$props" >/dev/null 2>&1; then
+            problems="${problems}  - keystore.properties is committed to git: treat its passwords as leaked
+"
+        elif git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
+            ! git -C "$root" check-ignore -q "$props"; then
+            problems="${problems}  - keystore.properties is not gitignored
+"
+        fi
+    fi
+
+    if [ -z "$problems" ]; then
+        echo "✅ Release keys found in the project root"
+        return 0
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🚫 RELEASE BLOCKED - release signing keys are not ready"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    printf '%s' "$problems"
+    echo ""
+    echo "  Both files go directly in the project root: $root"
+    echo "  1. The release keystore the published app is signed with, e.g. privacyflip-release.keystore."
+    echo "     Copy it from where you keep it. Never make a new one: users could not install the update."
+    echo "  2. keystore.properties, with:"
+    echo "     storeFile=privacyflip-release.keystore"
+    echo "     storePassword=YOUR_PASSWORD"
+    echo "     keyAlias=privacyflip"
+    echo "     keyPassword=YOUR_PASSWORD"
+    echo ""
+    echo "❌ Release build cancelled - nothing was built."
+    exit 1
+}
+
+# Prints the last value of a key in a Java .properties file ("key=value", "key: value" or
+# "key value"), trimmed, with CR removed. Backslash escapes and continued lines are not supported.
+keystore_property() {
+    sed -n "s/^[[:space:]]*$2\([[:space:]=:]\)/\1/p" "$1" | sed -n '$p' | tr -d '\r' |
+        sed 's/^[[:space:]]*//; s/^[=:]//; s/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
 # Main menu
 case "${1:-menu}" in
     "emulator")
@@ -396,26 +481,10 @@ case "${1:-menu}" in
         echo "============================="
         echo ""
 
+        check_release_keys
+
         # Refuse to build something nobody else could reproduce (see the function above).
         check_release_tree_is_published
-
-        # Check if keystore.properties exists
-        if [ ! -f "keystore.properties" ]; then
-            echo "❌ ERROR: keystore.properties not found!"
-            echo ""
-            echo "You need to create a release keystore first:"
-            echo "1. Generate keystore:"
-            echo "   keytool -genkey -v -keystore ~/privacyflip-release.keystore \\"
-            echo "     -alias privacyflip -keyalg RSA -keysize 2048 -validity 10000"
-            echo ""
-            echo "2. Create keystore.properties file with:"
-            echo "   storeFile=/path/to/privacyflip-release.keystore"
-            echo "   storePassword=YOUR_PASSWORD"
-            echo "   keyAlias=privacyflip"
-            echo "   keyPassword=YOUR_PASSWORD"
-            echo ""
-            exit 1
-        fi
 
         # Get version info from build.gradle.kts
         VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -1 | sed 's/.*versionName = "\(.*\)".*/\1/')

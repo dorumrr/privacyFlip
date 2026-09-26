@@ -35,7 +35,6 @@ android {
         includeInBundle = false
     }
 
-    // Load keystore properties for release signing
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keystoreProperties = Properties()
     if (keystorePropertiesFile.exists()) {
@@ -45,7 +44,8 @@ android {
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
-                storeFile = file((keystoreProperties["storeFile"] as String).trim())
+                // Relative to the project root, so one keystore.properties works on every machine.
+                storeFile = rootProject.file((keystoreProperties["storeFile"] as String).trim())
                 storePassword = (keystoreProperties["storePassword"] as String).trim()
                 keyAlias = (keystoreProperties["keyAlias"] as String).trim()
                 keyPassword = (keystoreProperties["keyPassword"] as String).trim()

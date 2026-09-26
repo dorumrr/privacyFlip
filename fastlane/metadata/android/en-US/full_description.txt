@@ -9,7 +9,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Automatic privilege detection (Sui > Root > Dhizuku > Shizuku)
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone, Airplane Mode, Battery Saver)
 • Customizable timing delays (0-60 seconds granular, 2 minutes, or 5 minutes)
-• Smart "only if unused/not connected" modes for WiFi, Bluetooth, Location
+• Smart "only if unused/not connected" modes for WiFi, Bluetooth, Location, and Mobile Data while media plays
 • App exemption system (skip privacy for specific foreground apps)
 • Detects NFC being turned back on by a payment or wallet app, with opt-in auto-retry
 • Optional Accessibility Service for side button instant-lock support (Android 12+ for camera/microphone)

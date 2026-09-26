@@ -39,7 +39,7 @@
 
 ### **Advanced Features**
 - **Smart Disable Options**:
-  - **"Only if unused/not connected"** - Don't disable WiFi, Bluetooth, or Location if actively in use
+  - **"Only if unused/not connected"** - Don't disable WiFi, Bluetooth, or Location if actively in use, or Mobile Data while media is playing
   - **"Only if not already enabled"** - Prevent connection resets by not re-enabling features that are already on
   - **"Only if not manually set"** - Respect manually enabled protection modes on unlock
 

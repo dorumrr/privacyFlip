@@ -23,6 +23,7 @@ import io.github.dorumrr.privacyflip.root.RootManager
  * - Hotspot: Uses dumpsys tethering to check for an active tethered interface
  * - Location: Uses dumpsys appops to check for active location requests (e.g., navigation apps)
  * - Microphone: Uses AudioManager to check call/communication mode
+ * - Mobile Data: Uses AudioManager to check whether any app is playing media
  */
 class ConnectionStateChecker(
     private val context: Context,
@@ -50,9 +51,9 @@ class ConnectionStateChecker(
             PrivacyFeature.BLUETOOTH -> isBluetoothConnected()
             PrivacyFeature.MICROPHONE -> isMicrophoneInUse()
             PrivacyFeature.LOCATION -> isLocationInUse()
+            PrivacyFeature.MOBILE_DATA -> isMediaPlaying()
             // For features where we can't reliably detect usage, return false
             // (they will be disabled normally)
-            PrivacyFeature.MOBILE_DATA,
             PrivacyFeature.NFC,
             PrivacyFeature.CAMERA,
             PrivacyFeature.AIRPLANE_MODE,
@@ -291,6 +292,22 @@ class ConnectionStateChecker(
             isInUse
         } catch (e: Exception) {
             Log.e(TAG, "📍 Error checking location usage state", e)
+            false
+        }
+    }
+
+    /**
+     * Any app's media stream (STREAM_MUSIC) playing right now. Needs no permission, so it works on
+     * every privilege method, and it keeps a lock from cutting a stream mid-song.
+     */
+    private fun isMediaPlaying(): Boolean {
+        return try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val playing = audioManager?.isMusicActive ?: false
+            Log.i(TAG, "🎵 Media playback check: ${if (playing) "PLAYING" else "NOT PLAYING"}")
+            playing
+        } catch (e: Exception) {
+            Log.e(TAG, "🎵 Error checking media playback", e)
             false
         }
     }

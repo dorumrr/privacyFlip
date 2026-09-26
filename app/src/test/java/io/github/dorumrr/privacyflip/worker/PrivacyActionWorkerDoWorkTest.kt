@@ -7,6 +7,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.media.AudioManager
 import android.os.Process
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
@@ -172,6 +173,7 @@ class PrivacyActionWorkerDoWorkTest {
         var featureInUse = false
         var exemptApp: String? = null
         var realForegroundDetector = false
+        var realInUseCheck = false
         var enableSucceeds = true
         var disableSucceeds = true
         var disableFailsFor: Set<PrivacyFeature> = emptySet()
@@ -200,7 +202,8 @@ class PrivacyActionWorkerDoWorkTest {
             return features.map { PrivacyResult(it, disableSucceeds && it !in disableFailsFor) }
         }
 
-        override suspend fun isFeatureInUse(feature: PrivacyFeature): Boolean = featureInUse
+        override suspend fun isFeatureInUse(feature: PrivacyFeature): Boolean =
+            if (realInUseCheck) super.isFeatureInUse(feature) else featureInUse
 
         override fun privilegeMethod(): PrivilegeMethod = method
 
@@ -616,6 +619,38 @@ class PrivacyActionWorkerDoWorkTest {
             "with the switch off, being in use must not save it",
             unguarded.disabled.contains(PrivacyFeature.WIFI)
         )
+    }
+
+    @Test
+    fun `Only if no media is playing keeps Mobile Data on while media plays, and only then`() {
+        // Runs the real in-use check, so the answer comes from AudioManager and not from the fake.
+        val audio = shadowOf(ApplicationProvider.getApplicationContext<Application>().getSystemService(AudioManager::class.java))
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MOBILE_DATA, true)
+        prefs.setFeatureOnlyIfUnused(PrivacyFeature.MOBILE_DATA, true)
+        recordLock()
+
+        audio.setIsMusicActive(true)
+        val playing = worker(isLocking = true).apply { realInUseCheck = true }
+        runBlocking { playing.doWork() }
+
+        assertTrue("media is playing, so Mobile Data must be left on", playing.disabled.isEmpty())
+        assertTrue(
+            "and the user must be told why, was: ${notifications()}",
+            notificationsSeen().any { it.contains("in use/connected") }
+        )
+
+        audio.setIsMusicActive(false)
+        val silent = worker(isLocking = true).apply { realInUseCheck = true }
+        runBlocking { silent.doWork() }
+
+        assertEquals("nothing playing, so Mobile Data goes off", listOf(PrivacyFeature.MOBILE_DATA), silent.disabled)
+
+        audio.setIsMusicActive(true)
+        prefs.setFeatureOnlyIfUnused(PrivacyFeature.MOBILE_DATA, false)
+        val unticked = worker(isLocking = true).apply { realInUseCheck = true }
+        runBlocking { unticked.doWork() }
+
+        assertEquals("with the box unticked, playing media must not save it", listOf(PrivacyFeature.MOBILE_DATA), unticked.disabled)
     }
 
     @Test

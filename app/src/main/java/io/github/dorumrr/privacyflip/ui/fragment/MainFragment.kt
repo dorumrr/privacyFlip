@@ -506,14 +506,14 @@ class MainFragment : Fragment() {
             showOnlyIfUnused = true
         )
 
-        // Mobile Data, NFC - hide "only if unused" checkbox (detection not supported)
         updatePrivacyFeatureSetting(
             binding.screenLockCard.mobileDataSettings,
             uiState.screenLockConfig.mobileDataDisableOnLock,
             uiState.screenLockConfig.mobileDataEnableOnUnlock,
-            onlyIfUnused = false,
+            onlyIfUnused = uiState.screenLockConfig.mobileDataOnlyIfUnused,
             onlyIfNotEnabled = uiState.screenLockConfig.mobileDataOnlyIfNotEnabled,
-            showOnlyIfUnused = false
+            showOnlyIfUnused = true,
+            onlyIfUnusedLabel = "Only if no media is playing"
         )
 
         // Location - "only if unused" detects active location requests (e.g., navigation apps)
@@ -527,6 +527,7 @@ class MainFragment : Fragment() {
             onlyIfUnusedLabel = "Only if not in use"
         )
 
+        // NFC - hide "only if unused" checkbox (detection not supported)
         updatePrivacyFeatureSetting(
             binding.screenLockCard.nfcSettings,
             uiState.screenLockConfig.nfcDisableOnLock,
@@ -957,11 +958,10 @@ class MainFragment : Fragment() {
         onDisableLockChange: (Boolean) -> Unit,
         onEnableUnlockChange: (Boolean) -> Unit
     ) {
-        // Check if this feature supports "only if unused" detection
-        // WiFi/Bluetooth: checks active connections
-        // Location: checks for active location requests (e.g., navigation apps)
-        val supportsOnlyIfUnused = feature == PrivacyFeature.WIFI || 
+        // Must match the rows that pass showOnlyIfUnused = true in updatePrivacySettings.
+        val supportsOnlyIfUnused = feature == PrivacyFeature.WIFI ||
                                    feature == PrivacyFeature.BLUETOOTH ||
+                                   feature == PrivacyFeature.MOBILE_DATA ||
                                    feature == PrivacyFeature.LOCATION
         
         featureBinding.featureIcon.setImageResource(iconRes)

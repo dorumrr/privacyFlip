@@ -34,19 +34,18 @@ open class NFCToggle(
 
     override val enableCommands = listOf(
         CommandSet("svc nfc enable", description = "Service control method (primary)"),
-        CommandSet("settings put global nfc_on 1", description = "Settings database method"),
         CommandSet("cmd nfc enable", description = "Modern cmd method (Android 8+)")
     )
 
     override val disableCommands = listOf(
         CommandSet("svc nfc disable", description = "Service control method (primary)"),
-        CommandSet("settings put global nfc_on 0", description = "Settings database method"),
         CommandSet("cmd nfc disable", description = "Modern cmd method (Android 8+)")
     )
 
+    // No "nfc_on" global setting: the NFC service keeps that flag in its own preferences, so
+    // writing it switches nothing and reading it back only echoes the write.
     override val statusCommands = listOf(
-        CommandSet("dumpsys nfc | grep 'mState='", description = "Primary status check"),
-        CommandSet("settings get global nfc_on", description = "Settings database check")
+        CommandSet("dumpsys nfc | grep 'mState='", description = "Primary status check")
     )
 
     override fun parseStatusOutput(output: String): FeatureState {
@@ -55,8 +54,9 @@ open class NFCToggle(
         val state = when {
             output.contains("mState=on", ignoreCase = true) -> FeatureState.ENABLED
             output.contains("mState=off", ignoreCase = true) -> FeatureState.DISABLED
-            output.contains("1") -> FeatureState.ENABLED
-            output.contains("0") -> FeatureState.DISABLED
+            // Read by the direction it is heading: "turning on" after a disable means NFC is coming back.
+            output.contains("mState=turning on", ignoreCase = true) -> FeatureState.ENABLED
+            output.contains("mState=turning off", ignoreCase = true) -> FeatureState.DISABLED
             output.isEmpty() -> FeatureState.UNAVAILABLE
             else -> FeatureState.UNKNOWN
         }
@@ -104,7 +104,9 @@ open class NFCToggle(
             return PrivacyResult(
                 feature = feature,
                 success = false,
-                message = "NFC read as enabled again right after being disabled. Turn on 'NFC Auto-Retry' on the main screen to retry automatically. A payment or wallet app may be turning it back on."
+                message = "NFC still reads as on after the disable. Last attempt reported: ${initialResult.message}. " +
+                    "A payment or wallet app may be turning it back on (turn on 'NFC Auto-Retry' on the main screen), " +
+                    "or the privileged shell may be failing."
             )
         }
 

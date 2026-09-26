@@ -69,6 +69,133 @@ class NFCToggleDisableTest {
         }
     }
 
+    // Runs each command in order like the real executor: the first that exits 0 wins.
+    private class ChainFakeNfc(
+        context: Context,
+        private val svcWorks: Boolean = false,
+        private val dumpsysReadable: Boolean = false,
+        startOn: Boolean = true
+    ) : NFCToggle(RootManager.getInstance(Unit), context) {
+        var radioOn = startOn
+        val globalSettings = mutableMapOf<String, String>()
+
+        private fun run(command: String): CommandResult {
+            return when {
+                command.startsWith("svc nfc") && !svcWorks -> CommandResult.failure("svc: no nfc here")
+                command == "svc nfc disable" -> { radioOn = false; CommandResult.success() }
+                command == "svc nfc enable" -> { radioOn = true; CommandResult.success() }
+                command.startsWith("settings put global ") -> {
+                    val (key, value) = command.removePrefix("settings put global ").split(" ")
+                    globalSettings[key] = value
+                    CommandResult.success()
+                }
+                command.startsWith("settings get global ") ->
+                    CommandResult.success(listOf(globalSettings[command.removePrefix("settings get global ")] ?: "null"))
+                command.startsWith("dumpsys nfc") && dumpsysReadable ->
+                    CommandResult.success(listOf(if (radioOn) "mState=on" else "mState=off"))
+                command.startsWith("dumpsys nfc") -> CommandResult.failure("grep found no mState line")
+                else -> CommandResult.failure("unknown command")
+            }
+        }
+
+        override suspend fun runCommands(commands: List<String>): CommandResult {
+            var last = CommandResult.failure("no commands")
+            for (command in commands) {
+                last = run(command)
+                if (last.success) return last
+            }
+            return last
+        }
+
+        fun parse(output: String) = parseStatusOutput(output)
+    }
+
+    @Test
+    fun `a disable the NFC service never received is not reported as done`() = runBlocking {
+        val toggle = ChainFakeNfc(context)
+
+        val result = toggle.disable()
+
+        assertTrue("the radio never changed", toggle.radioOn)
+        assertFalse("so the disable must not be reported as a success, was: ${result.message}", result.success)
+    }
+
+    @Test
+    fun `an enable the NFC service never received is not reported as done`() = runBlocking {
+        val toggle = ChainFakeNfc(context)
+
+        val result = toggle.enable()
+
+        assertFalse("nothing reached the NFC service, was: ${result.message}", result.success)
+    }
+
+    @Test
+    fun `a disable that reaches the NFC service is reported as done`() = runBlocking {
+        val toggle = ChainFakeNfc(context, svcWorks = true, dumpsysReadable = true)
+
+        val result = toggle.disable()
+
+        assertFalse("the working path must still switch the radio", toggle.radioOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    fun `an enable that reaches the NFC service is reported as done`() = runBlocking {
+        val toggle = ChainFakeNfc(context, svcWorks = true, dumpsysReadable = true, startOn = false)
+
+        val result = toggle.enable()
+
+        assertTrue("the working path must still switch the radio on", toggle.radioOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    fun `an enable that still reads off is not reported as done`() = runBlocking {
+        val toggle = FakeNfc(context, statusOutputs = listOf("mState=off"))
+
+        val result = toggle.enable()
+
+        assertFalse("NFC reads off, was: ${result.message}", result.success)
+    }
+
+    @Test
+    fun `a failed disable with NFC still on keeps the real error and does not only blame an app`() = runBlocking {
+        val toggle = ChainFakeNfc(context, svcWorks = false, dumpsysReadable = true)
+
+        val result = toggle.disable()
+
+        assertFalse(result.success)
+        assertTrue("the attempt's own error must be kept, was: ${result.message}", result.message?.contains("unknown command") == true)
+        assertTrue("and the shell must be named as a possible cause, was: ${result.message}", result.message?.contains("privileged shell") == true)
+    }
+
+    @Test
+    fun `NFC turning back on after the disable is not reported as disabled`() = runBlocking {
+        val toggle = FakeNfc(context, statusOutputs = listOf("mState=off", "mState=turning on"))
+
+        val result = toggle.disable()
+
+        assertFalse("NFC is coming back on, was: ${result.message}", result.success)
+    }
+
+    @Test
+    fun `an enable seen turning on is confirmed, not reported as unreadable`() = runBlocking {
+        val toggle = FakeNfc(context, statusOutputs = listOf("mState=turning on"))
+
+        val result = toggle.enable()
+
+        assertTrue(result.success)
+        assertFalse("the state was read, was: ${result.message}", result.message?.contains("could not be read back") == true)
+    }
+
+    @Test
+    fun `a bare digit is not read as an NFC state`() {
+        val toggle = ChainFakeNfc(context)
+
+        assertEquals(io.github.dorumrr.privacyflip.data.FeatureState.UNKNOWN, toggle.parse("1"))
+        assertEquals(io.github.dorumrr.privacyflip.data.FeatureState.UNKNOWN, toggle.parse("0"))
+    }
+
     private fun loggedStayedOff(): Boolean =
         ShadowLog.getLogs().any { it.msg?.contains("stayed off") == true }
 

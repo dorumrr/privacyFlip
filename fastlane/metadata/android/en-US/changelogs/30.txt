@@ -1,0 +1,6 @@
+- New: Mobile Data can stay on at lock while media plays ("Only if no media is playing")
+- Camera and microphone now switch off at lock with a Swipe lock, and on Dhizuku
+- The main screen warns when camera or microphone stayed on at lock
+- App exemptions now work, and the app says when Usage Access is missing
+- Airplane Mode now works with Shizuku on Android 11+, Location on Android 9 and older
+- No more false "disabled" for NFC, WiFi, Bluetooth, Mobile Data, Airplane Mode or Battery Saver

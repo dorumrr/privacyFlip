@@ -115,18 +115,25 @@ abstract class BasePrivacyToggle(
      * A state that cannot be READ is reported as unconfirmed rather than as a failure, so an
      * unreadable status command never turns a real success into a false "it did not work".
      */
+    // A toggle whose state is read from a service that switches in the background waits longer.
+    protected open val readBackAttempts: Int get() = READ_BACK_ATTEMPTS
+
     private suspend fun confirmReachedState(intended: FeatureState): Confirmation {
-        repeat(READ_BACK_ATTEMPTS) { attempt ->
+        repeat(readBackAttempts) { attempt ->
             when (val actual = getCurrentState()) {
                 intended -> return Confirmation.CONFIRMED
                 // UNAVAILABLE is a definite "not present here", not an unreadable one, so it is
                 // never reported as an unconfirmed success.
                 FeatureState.UNAVAILABLE -> return Confirmation.ABSENT
+                // A service still switching reads as unknown, so only the last read gives up.
                 FeatureState.UNKNOWN, FeatureState.ERROR -> {
-                    Log.w(TAG, "⚠️ $featureName reads as $actual - cannot confirm, reporting unconfirmed")
-                    return Confirmation.UNREADABLE
+                    if (attempt == readBackAttempts - 1) {
+                        Log.w(TAG, "⚠️ $featureName reads as $actual - cannot confirm, reporting unconfirmed")
+                        return Confirmation.UNREADABLE
+                    }
+                    delay(READ_BACK_GAP_MS)
                 }
-                else -> if (attempt < READ_BACK_ATTEMPTS - 1) delay(READ_BACK_GAP_MS)
+                else -> if (attempt < readBackAttempts - 1) delay(READ_BACK_GAP_MS)
             }
         }
         Log.w(TAG, "⚠️ $featureName never reached $intended - command was accepted but ignored")
@@ -172,8 +179,8 @@ abstract class BasePrivacyToggle(
     protected abstract fun parseStatusOutput(output: String): FeatureState
 
     private companion object {
-        // Measured on the device: WiFi, Bluetooth and both sensors all reported their new state on
-        // the FIRST read, so the second try is headroom for a slower phone, not the expected path.
+        // Both sensors report their new state on the first read; Wi-Fi and Bluetooth, which can take
+        // a few hundred ms, override readBackAttempts.
         const val READ_BACK_ATTEMPTS = 2
         const val READ_BACK_GAP_MS = 150L
     }

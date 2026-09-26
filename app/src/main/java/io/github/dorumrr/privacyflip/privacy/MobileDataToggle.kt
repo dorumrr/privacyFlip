@@ -4,35 +4,23 @@ import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
 import io.github.dorumrr.privacyflip.util.StatusParsingUtils
 
-class MobileDataToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
+open class MobileDataToggle(rootManager: RootManager) : BasePrivacyToggle(rootManager) {
 
     override val feature = PrivacyFeature.MOBILE_DATA
     override val featureName = "Mobile Data"
 
+    // No mobile_data fallback: telephony only stores that key (per SIM on dual-SIM phones), and the
+    // ANY_DATA_STATE broadcast is a state report, not a command.
     override val enableCommands = listOf(
-        CommandSet("svc data enable", description = "Service control method"),
-        CommandSet("settings put global mobile_data 1", description = "Settings database method"),
-        CommandSet("am broadcast -a android.intent.action.ANY_DATA_STATE --ez state true",
-                  description = "Broadcast method")
+        CommandSet("svc data enable", description = "Service control method")
     )
 
     override val disableCommands = listOf(
-        CommandSet("svc data disable", description = "Service control method"),
-        CommandSet("settings put global mobile_data 0", description = "Settings database method"),
-        CommandSet("am broadcast -a android.intent.action.ANY_DATA_STATE --ez state false",
-                  description = "Broadcast method")
+        CommandSet("svc data disable", description = "Service control method")
     )
 
-    // Checked first: the real per-SIM enabled flag from the telephony service itself,
-    // for the specific SIM that's actually carrying data. A dual-SIM phone's dumpsys
-    // output lists one "mIsDataEnabled" line per SIM (per "Phone Id="), and a plain
-    // "grab the first one" reads whichever SIM happens to be listed first, not
-    // necessarily the one the phone is actually using for data. This command reads
-    // "mActiveDataSubId" (which SIM is actually carrying data), matches it to its
-    // "Phone Id=" block via a "phoneId=... subId=..." line dumpsys also logs, then
-    // reads that specific block's "mIsDataEnabled" - not just whichever comes first.
-    // Falls back to the old first-match version, then the legacy settings flag, if any
-    // step above finds nothing (a single-SIM phone, or a dump shape this doesn't expect).
+    // A dual-SIM dump lists one mIsDataEnabled per SIM, so the first reads the data-carrying SIM's.
+    // Its awk exits 0 even with no match (no such line before Android 12), so then the state reads unknown.
     override val statusCommands = listOf(
         CommandSet(
             "SUBID=\$(dumpsys telephony.registry | grep -m1 'mActiveDataSubId=' | sed 's/.*=//'); " +

@@ -231,9 +231,7 @@ class PrivacyMonitorService : Service() {
                 }
             }
 
-            // Only the keyguard decides whether the sensors can still be reached, which is what
-            // this flag controls. Screen-off alone used to count here and skipped them wrongly.
-            val isDeviceLocked = io.github.dorumrr.privacyflip.util.isKeyguardEngaged(this, TAG)
+            val isDeviceLocked = io.github.dorumrr.privacyflip.util.isDeviceSecurelyLocked(this, TAG)
 
             val workName = PrivacyActionWork.enqueue(
                 context = this,

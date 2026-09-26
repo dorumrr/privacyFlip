@@ -174,10 +174,12 @@ class PrivacyActionWorkerDoWorkTest {
         var realForegroundDetector = false
         var enableSucceeds = true
         var disableSucceeds = true
+        var disableFailsFor: Set<PrivacyFeature> = emptySet()
         var beforeEnable: (Set<PrivacyFeature>) -> Unit = {}
         var beforeDisable: (Set<PrivacyFeature>) -> Unit = {}
         var statusReads = 0
         var method = PrivilegeMethod.ROOT
+        var deviceSecurelyLocked = false
 
         override suspend fun confirmPrivilege(): Boolean = privileged
 
@@ -195,7 +197,7 @@ class PrivacyActionWorkerDoWorkTest {
         override suspend fun disableFeatures(features: Set<PrivacyFeature>): List<PrivacyResult> {
             beforeDisable(features)
             disabled += features
-            return features.map { PrivacyResult(it, disableSucceeds) }
+            return features.map { PrivacyResult(it, disableSucceeds && it !in disableFailsFor) }
         }
 
         override suspend fun isFeatureInUse(feature: PrivacyFeature): Boolean = featureInUse
@@ -208,6 +210,8 @@ class PrivacyActionWorkerDoWorkTest {
             if (realForegroundDetector) super.getFirstForegroundApp(exemptApps) else exemptApp
 
         override fun isScreenCurrentlyLocked(): Boolean = screenLocked
+
+        override fun isDeviceSecurelyLocked(): Boolean = deviceSecurelyLocked
     }
 
     private fun worker(isLocking: Boolean, isDeviceLocked: Boolean = false, trigger: String = "test"): FakeWorker =
@@ -399,7 +403,7 @@ class PrivacyActionWorkerDoWorkTest {
     @Test
     fun `a second trigger for the same lock says nothing about sensors already off`() {
         // One real lock can raise 2 jobs: the accessibility service fires before
-        // ACTION_SCREEN_OFF, so the second arrives with the keyguard up and isDeviceLocked=true.
+        // ACTION_SCREEN_OFF, so the second arrives with the phone locked and isDeviceLocked=true.
         // It used to report the whole list as skipped, naming sensors the FIRST job had just
         // turned off a second earlier.
         prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
@@ -1081,6 +1085,82 @@ class PrivacyActionWorkerDoWorkTest {
         micInUse.states[PrivacyFeature.MICROPHONE] = FeatureState.ENABLED
         runBlocking { micInUse.doWork() }
         assertTrue("left on for being in use, not for the lock screen", prefs.sensorsLeftOnAtLastLock.isEmpty())
+    }
+
+    @Test
+    fun `a lock that took hold before the camera step is treated as already locked`() {
+        // The trigger saw no credential lock, but one was in force by the time the job ran.
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = false)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        worker.states[PrivacyFeature.MICROPHONE] = FeatureState.DISABLED
+        worker.deviceSecurelyLocked = true
+        runBlocking { worker.doWork() }
+
+        assertTrue("Android would refuse, so no shell round trip is spent", worker.disabled.isEmpty())
+        assertEquals("the note names only the sensor read as on", setOf(PrivacyFeature.CAMERA), prefs.sensorsLeftOnAtLastLock)
+        val said = notificationsSeen()
+        assertEquals("one message, was: $said", 1, said.size)
+        assertTrue("saying why, was: $said", said.single().contains("device already locked"))
+    }
+
+    @Test
+    fun `a failure is never blamed on the lock unless the lock was seen first`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.MICROPHONE, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = false)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        worker.states[PrivacyFeature.MICROPHONE] = FeatureState.ENABLED
+        worker.disableFailsFor = setOf(PrivacyFeature.CAMERA)
+        worker.beforeDisable = { worker.deviceSecurelyLocked = true }
+        runBlocking { worker.doWork() }
+
+        assertTrue("the attempt ran", worker.disabled.contains(PrivacyFeature.CAMERA))
+        assertTrue("its failure may have another cause, so no note", prefs.sensorsLeftOnAtLastLock.isEmpty())
+        val said = notificationsSeen()
+        assertEquals("the failure is reported once, was: $said", 1, said.count { it.contains("Failed to disable: Camera") })
+        assertTrue("and never called skipped, was: $said", said.none { it.contains("Skipped") })
+    }
+
+    @Test
+    fun `with Dhizuku a credential lock does not stop camera and microphone`() {
+        // Dhizuku switches them by device policy, which no lock refuses.
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = true)
+        worker.method = PrivilegeMethod.DHIZUKU
+        worker.deviceSecurelyLocked = true
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { worker.doWork() }
+
+        assertTrue("the camera must be switched off", worker.disabled.contains(PrivacyFeature.CAMERA))
+        assertTrue("and nothing claims it could not be", prefs.sensorsLeftOnAtLastLock.isEmpty())
+        assertTrue(
+            "not in a message either, was: ${notifications()}",
+            notificationsSeen().none { it.contains("device already locked") }
+        )
+    }
+
+    @Test
+    fun `a sensor disable that worked leaves no note, even with the phone locked right after`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        recordLock()
+
+        val worker = worker(isLocking = true, isDeviceLocked = false)
+        worker.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        worker.beforeDisable = { worker.deviceSecurelyLocked = true }
+        runBlocking { worker.doWork() }
+
+        assertTrue("the camera was switched off", worker.disabled.contains(PrivacyFeature.CAMERA))
+        assertTrue("so nothing stayed on", prefs.sensorsLeftOnAtLastLock.isEmpty())
+        val said = notificationsSeen()
+        assertTrue("nothing says it was locked out, was: $said", said.none { it.contains("device already locked") })
     }
 
     @Test

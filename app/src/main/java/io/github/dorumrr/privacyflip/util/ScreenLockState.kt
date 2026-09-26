@@ -5,37 +5,19 @@ import android.content.Context
 import android.os.PowerManager
 import android.util.Log
 
-/**
- * Checks whether the screen is currently locked (keyguard engaged, or the screen is simply off).
- *
- * Shared by PrivacyMonitorService and PrivacyActionWorker rather than each holding its own copy:
- * two independent copies of this same check previously drifted (one failed open on an
- * exception, the other failed closed), so a fix to one silently left the other wrong. One shared
- * function means only one place is left to get this right.
- */
-/**
- * Whether the keyguard is already enforcing.
- *
- * This is a different question from [isScreenCurrentlyLocked] and must not be answered with it.
- * Android refuses a sensor privacy change once the KEYGUARD is up, and does not care whether the
- * screen is merely off, so treating screen-off as locked skips the camera and microphone on a
- * phone that has no secure lock screen at all, and during the grace period before the keyguard
- * engages.
- *
- * Fails OPEN, unlike [isScreenCurrentlyLocked]: an unreadable keyguard means "try anyway", since
- * a refused attempt is now read back and reported honestly, while a skipped one leaves the
- * sensor on.
- */
-fun isKeyguardEngaged(context: Context, tag: String): Boolean {
+// Android refuses a camera/mic privacy change only while unlocking needs a PIN, pattern or password.
+// Fails open: a wrong "locked" skips a switch Android may allow, while a refused attempt is reported.
+fun isDeviceSecurelyLocked(context: Context, tag: String): Boolean {
     return try {
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        keyguardManager.isKeyguardLocked
+        keyguardManager.isDeviceLocked
     } catch (e: Exception) {
         Log.e(tag, "Error reading keyguard state", e)
         false
     }
 }
 
+// The one copy of this check for the service and the worker, so its fail-closed default cannot drift.
 fun isScreenCurrentlyLocked(context: Context, tag: String): Boolean {
     return try {
         val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -48,10 +30,7 @@ fun isScreenCurrentlyLocked(context: Context, tag: String): Boolean {
         isKeyguardLocked || !isScreenOn
     } catch (e: Exception) {
         Log.e(tag, "Error checking screen lock state", e)
-        // Fail closed: default to LOCKED when the read itself fails, matching every other
-        // lock-state read in this app (ScreenStateReceiver, PrivacyAccessibilityService both use
-        // `?: true`) - assuming unlocked on a failed read risks cancelling a real pending
-        // disable, or letting a real pending enable proceed, on a phone that may still be locked.
+        // Fail closed: a wrong "unlocked" would cancel a real pending disable, or run a pending enable, on a locked phone.
         true
     }
 }

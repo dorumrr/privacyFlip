@@ -10,6 +10,7 @@ import io.github.dorumrr.privacyflip.util.DualLogger
 import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
+import io.github.dorumrr.privacyflip.util.isDeviceSecurelyLocked
 
 class ScreenStateReceiver : BroadcastReceiver() {
 
@@ -34,15 +35,11 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 // enough (real WorkManager dispatch latency, outside doWork()'s own control, sits
                 // between this line and doWork() actually starting).
                 PendingLockWork.recordLock()
-                // Check if device is already locked (keyguard engaged)
-                val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                val isKeyguardLocked = keyguardManager?.isKeyguardLocked ?: true
-
-                if (!isKeyguardLocked) {
+                if (!isDeviceSecurelyLocked(context, TAG)) {
                     logDebug(context, "✅ Screen OFF but device NOT locked yet - triggering privacy actions")
                     triggerPrivacyAction(context, isLocking = true, isDeviceLocked = false, reason = "Screen Off (Unlocked)")
                 } else {
-                    logWarning(context, "⚠️ Screen OFF and device ALREADY locked - camera/mic cannot be disabled")
+                    logWarning(context, "⚠️ Screen OFF and device ALREADY locked - Android refuses camera/mic sensor privacy changes now")
                     triggerPrivacyAction(context, isLocking = true, isDeviceLocked = true, reason = "Screen Off (Locked)")
                 }
             }
@@ -82,9 +79,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                 // is now always honoured, so this blip window is easier to hit than
                 // when the already-locked case used to skip the wait.
                 val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                // Same conservative default as the SCREEN_OFF handler above: if the
-                // lock state genuinely can't be read, assume still locked rather than
-                // cancel protection on a guess.
+                // An unreadable lock state counts as still locked, so protection is not cancelled on a guess.
                 val isStillLocked = keyguardManager?.isKeyguardLocked ?: true
 
                 if (isStillLocked) {

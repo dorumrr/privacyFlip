@@ -1,11 +1,13 @@
 package io.github.dorumrr.privacyflip.service
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import io.github.dorumrr.privacyflip.initWorkManagerWithoutRealWork
 import io.github.dorumrr.privacyflip.util.Constants
+import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,7 +40,11 @@ class PrivacyMonitorServiceTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        initWorkManagerWithoutRealWork(context)
+        initWorkManagerWithoutRealWork(context, onRun = { params ->
+            if (params.inputData.getBoolean(PrivacyActionWork.KEY_IS_LOCKING, false)) {
+                lockJobFlags += params.inputData.keyValueMap[PrivacyActionWork.KEY_IS_DEVICE_LOCKED]
+            }
+        })
         // Shared companion state - reset so an earlier test in this JVM can never leak a stale
         // timestamp into this one.
         PrivacyActionWorker.lastUnlockAtMillis = 0L
@@ -71,5 +77,30 @@ class PrivacyMonitorServiceTest {
             0L,
             PrivacyActionWorker.lastUnlockAtMillis
         )
+    }
+
+    // Read from each lock job's own input as WorkManager runs it, not from a log line.
+    private val lockJobFlags = mutableListOf<Any?>()
+    private fun catchUpLockFlags(): List<Any?> = lockJobFlags
+
+    private fun startBehind(keyguardShowing: Boolean, needsCredential: Boolean) {
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        shadowOf(keyguardManager).setKeyguardLocked(keyguardShowing)
+        shadowOf(keyguardManager).setIsDeviceLocked(needsCredential)
+        Robolectric.buildService(PrivacyMonitorService::class.java).create().get()
+    }
+
+    @Test
+    fun `the start-up catch-up behind a Swipe lock still switches camera and microphone`() {
+        startBehind(keyguardShowing = true, needsCredential = false)
+
+        assertEquals("one catch-up lock job, not marked already locked", listOf<Any?>(false), catchUpLockFlags())
+    }
+
+    @Test
+    fun `the start-up catch-up behind a PIN is marked already locked`() {
+        startBehind(keyguardShowing = true, needsCredential = true)
+
+        assertEquals("one catch-up lock job, marked, since Android would refuse", listOf<Any?>(true), catchUpLockFlags())
     }
 }

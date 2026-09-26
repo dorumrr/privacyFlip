@@ -12,7 +12,11 @@ import java.util.concurrent.Executor
 
 // A real PrivacyActionWorker runs privilege detection (the host's su) and holds static
 // in-progress flags past the end of a test, which silently skips the next test's enqueue.
-fun initWorkManagerWithoutRealWork(context: Context, taskExecutor: Executor = SynchronousExecutor()) {
+fun initWorkManagerWithoutRealWork(
+    context: Context,
+    onRun: (WorkerParameters) -> Unit = {},
+    taskExecutor: Executor = SynchronousExecutor()
+) {
     WorkManagerTestInitHelper.initializeTestWorkManager(
         context,
         Configuration.Builder()
@@ -23,8 +27,11 @@ fun initWorkManagerWithoutRealWork(context: Context, taskExecutor: Executor = Sy
                     appContext: Context,
                     workerClassName: String,
                     workerParameters: WorkerParameters
-                ): ListenableWorker = object : Worker(appContext, workerParameters) {
-                    override fun doWork() = Result.success()
+                ): ListenableWorker {
+                    onRun(workerParameters)
+                    return object : Worker(appContext, workerParameters) {
+                        override fun doWork() = Result.success()
+                    }
                 }
             })
             .build(),

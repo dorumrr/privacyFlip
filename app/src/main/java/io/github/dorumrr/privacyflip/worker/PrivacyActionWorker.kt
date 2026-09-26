@@ -177,7 +177,7 @@ open class PrivacyActionWorker(
     }
 
     // What doWork() cannot reach without a privileged shell arrives through an open member: the 8
-    // here plus isScreenCurrentlyLocked below. Stored preferences stay direct, being themselves
+    // here plus the two lock-state reads below. Stored preferences stay direct, being themselves
     // in a test. Built lazily above, so a stand-in never constructs the real one.
     protected open suspend fun confirmPrivilege(): Boolean {
         rootManager.initialize(applicationContext)
@@ -235,6 +235,9 @@ open class PrivacyActionWorker(
      */
     protected open fun isScreenCurrentlyLocked(): Boolean =
         io.github.dorumrr.privacyflip.util.isScreenCurrentlyLocked(applicationContext, TAG)
+
+    protected open fun isDeviceSecurelyLocked(): Boolean =
+        io.github.dorumrr.privacyflip.util.isDeviceSecurelyLocked(applicationContext, TAG)
 
     /**
      * Applies "only if unused" to a group of features, with an optional hotspot exception for
@@ -369,29 +372,9 @@ open class PrivacyActionWorker(
                         it !in sensorFeatureSet && it !in systemModeFeatureSet
                     }
 
-                    // Disable camera/microphone - attempted immediately, no artificial delay.
-                    //
-                    // Whichever of the 3 producers enqueued this job (ScreenStateReceiver,
-                    // PrivacyAccessibilityService, or PrivacyMonitorService's restart catch-up -
-                    // see sensorDisableInProgress's own comment above; doWork() never branches on
-                    // the "trigger" field itself, only logs it), a fresh re-check of
-                    // isScreenCurrentlyLocked() here would only hand the keyguard more time to win
-                    // the race before the attempt is even made, without changing what the command
-                    // itself can prove. Instead, the real outcome of the command is trusted
-                    // directly: attempt the disable right away, and let
-                    // disableFeatures()'s own success/failure (already captured and
-                    // logged below via processResults, same as every other feature) be the source
-                    // of truth. If the keyguard genuinely wins the race, the command fails and
-                    // that's reported honestly.
-                    //
-                    // One narrower gate does remain, and it is NOT that heuristic: the
-                    // `else if (!isDeviceLocked)` below reads the flag the trigger supplied - each
-                    // producer sets it from its own best knowledge of whether the device is
-                    // already locked, rather than this code guessing from screen state. Skipping
-                    // there is right, not pessimistic: on a real device, `cmd sensor_privacy
-                    // enable 0 camera` leaves the camera allowed
-                    // when the keyguard is up, and flips it the moment the same command runs
-                    // unlocked. Attempting it would cost a shell round trip to change nothing.
+                    // Camera/mic go first, with no delay, and are skipped only where Android refuses them:
+                    // a PIN, pattern or password lock, on the sensor-privacy route (Dhizuku uses device policy).
+                    val lockRefusesSensors = privilegeMethod() != PrivilegeMethod.DHIZUKU
                     if (sensorFeatures.isNotEmpty()) {
                       val filteredSensorFeatures = filterByOnlyIfUnused(sensorFeatures, hotspotActiveNow = false)
                       if (filteredSensorFeatures.isNotEmpty()) {
@@ -411,26 +394,18 @@ open class PrivacyActionWorker(
                                   filteredSensorFeatures.map { it.displayName }.joinToString(", "),
                                   "unlocked since this lock cycle started"
                               )
-                          } else if (!isDeviceLocked) {
+                          } else if (!lockRefusesSensors || (!isDeviceLocked && !isDeviceSecurelyLocked())) {
                               logDebug("🔒 Attempting to disable sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
                               val sensorResults = disableFeatures(filteredSensorFeatures.toSet())
                               processResults(sensorResults, filteredSensorFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
                               recordTurnedOff(sensorResults)
                               val stillFailed = sensorResults.filter { !it.success }
                               if (stillFailed.isNotEmpty()) {
-                                  // processResults above has already reported this failure. A second
-                                  // notification calling it "skipped", with a cause nothing
-                                  // determined, contradicted that: the keyguard winning the race is
-                                  // the usual reason but not the only one, and it was attempted,
-                                  // not skipped.
+                                  // processResults already reported it; a second "skipped" message would contradict that.
                                   logWarning("⚠️ Sensor disable did not take effect: ${stillFailed.map { it.feature.displayName }}")
                               }
                           } else {
-                              // One real lock can raise 2 jobs: the accessibility service fires
-                              // before ACTION_SCREEN_OFF, and the second job arrives with the
-                              // keyguard already up. Reporting the whole list here named sensors
-                              // the first job had just turned off. An unreadable state counts as
-                              // still on, so nothing is called handled that nobody observed.
+                              // A second job for the same lock can find them already off; unreadable counts as still on.
                               val status = getCurrentStatus()
                               val stillOn = filteredSensorFeatures.filter {
                                   status[it] != FeatureState.DISABLED
@@ -439,7 +414,7 @@ open class PrivacyActionWorker(
                               if (stillOn.isEmpty()) {
                                   logDebug("🔒 Sensors were already off when this trigger arrived - nothing to disable")
                               } else {
-                                  logWarning("⚠️ Device already locked at ACTION_SCREEN_OFF - cannot disable sensors: ${stillOn.map { it.displayName }}")
+                                  logWarning("⚠️ Device already locked - cannot disable sensors: ${stillOn.map { it.displayName }}")
                                   debugNotifier.notifyFeatureSkipped(
                                       stillOn.map { it.displayName }.joinToString(", "),
                                       "device already locked"

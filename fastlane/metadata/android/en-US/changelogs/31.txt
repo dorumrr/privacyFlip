@@ -1,0 +1,3 @@
+- NFC now really turns off at lock on Android 15 and newer, using the NFC service's own command
+- If you pay by tapping your phone: NFC now stays off after unlock unless you tick "Enable on unlock" under NFC
+- When an NFC switch fails, the debug log now names the commands it tried instead of "null"

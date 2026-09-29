@@ -90,9 +90,8 @@ open class NFCToggle(
         val actualState = getCurrentState()
 
         if (!needsRetry(initialResult.success, actualState)) {
-            // This read is fresher than the one the base class took, so it decides. "It stayed
-            // off" is now said only when the state actually says off: a state that merely cannot
-            // be read is not evidence of anything, and used to be reported as a success.
+            // Only a fresh "off" read says NFC stayed off. Otherwise the base result stands: for an
+            // unreadable state that is a success worded "could not be read back", never "stayed off".
             if (actualState == FeatureState.DISABLED) {
                 Log.d(TAG, "✅ NFC is off and stayed off")
                 return PrivacyResult(feature, true, "NFC disabled", commandUsed = initialResult.commandUsed)

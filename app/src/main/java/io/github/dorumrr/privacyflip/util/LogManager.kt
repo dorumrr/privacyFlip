@@ -11,11 +11,9 @@ import android.util.Log
  * reads and shares, belongs to [DebugLogHelper] and is gated behind the user's own
  * "Debug Logs" preference.
  */
-class LogManager private constructor(context: Context) {
+class LogManager private constructor() {
 
-    companion object : SingletonHolder<LogManager, Context>({ context ->
-        LogManager(context.applicationContext)
-    }) {
+    companion object : SingletonHolder<LogManager, Context>({ LogManager() }) {
         private const val LOG_PREFIX = "privacyFlip-"
 
         private fun prefixTag(tag: String): String {

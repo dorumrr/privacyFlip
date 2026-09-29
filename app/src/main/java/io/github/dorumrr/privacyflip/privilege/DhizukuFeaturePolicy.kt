@@ -1,6 +1,7 @@
 package io.github.dorumrr.privacyflip.privilege
 
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.location.LocationManager
 import android.media.AudioManager
@@ -106,12 +107,16 @@ internal object DhizukuFeaturePolicy {
         }
     }
 
+    // Marked @NonNull, but only a Java assert enforces it and Android does not run asserts, so
+    // it is null until Dhizuku.init(context) has run.
+    private fun ownerComponent(): ComponentName? = Dhizuku.getOwnerComponent()
+
     fun apply(context: Context, feature: PrivacyFeature, enable: Boolean): CommandResult {
         if (!supports(feature)) return CommandResult.failure(unsupportedReason(feature))
 
         val dpm = ownerDpm(context)
             ?: return CommandResult.failure("Dhizuku could not provide Device Owner access")
-        val admin = Dhizuku.getOwnerComponent()
+        val admin = ownerComponent()
             ?: return CommandResult.failure("Dhizuku reported no Device Owner component")
 
         return try {
@@ -196,12 +201,11 @@ internal object DhizukuFeaturePolicy {
 
     fun releaseStaleBlocks(context: Context, lockIsInFlight: Boolean) {
         if (!shouldSweep(isScreenCurrentlyLocked(context, TAG), lockIsInFlight)) return
-        // Dhizuku.getOwnerComponent() ASSERTS rather than returning null when Dhizuku was never
-        // initialised, and this runs before any executor has done that. An AssertionError is an
-        // Error, not an Exception, so it has to be prevented here rather than caught downstream.
+        // This runs before any executor has initialised Dhizuku, and with assertions on (as in
+        // tests) getOwnerComponent() throws an AssertionError, an Error no catch here would take.
         if (!Dhizuku.init(context) || !Dhizuku.isPermissionGranted()) return
         val dpm = ownerDpm(context) ?: return
-        val admin = Dhizuku.getOwnerComponent() ?: return
+        val admin = ownerComponent() ?: return
         RESTRICTIONS.forEach { (feature, restriction) ->
             if (Build.VERSION.SDK_INT < minSdkFor(feature)) return@forEach
             try {

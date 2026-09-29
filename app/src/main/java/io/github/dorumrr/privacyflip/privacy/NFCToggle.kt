@@ -1,6 +1,7 @@
 package io.github.dorumrr.privacyflip.privacy
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
@@ -32,15 +33,21 @@ open class NFCToggle(
     override val feature = PrivacyFeature.NFC
     override val featureName = "NFC"
 
-    override val enableCommands = listOf(
-        CommandSet("svc nfc enable", description = "Service control method (primary)"),
-        CommandSet("cmd nfc enable", description = "Modern cmd method (Android 8+)")
-    )
+    override val enableCommands = commandsFor(true)
+    override val disableCommands = commandsFor(false)
 
-    override val disableCommands = listOf(
-        CommandSet("svc nfc disable", description = "Service control method (primary)"),
-        CommandSet("cmd nfc disable", description = "Modern cmd method (Android 8+)")
-    )
+    // From Android 15 svc nfc can exit 0 without switching, and the NFC service's own commands are
+    // disable-nfc/enable-nfc. '[persist]' keeps it off after a reboot, as svc nfc disable did.
+    private fun commandsFor(on: Boolean): List<CommandSet> {
+        val svc = CommandSet("svc nfc ${if (on) "enable" else "disable"}", description = "Service control method")
+        if (Build.VERSION.SDK_INT < 35) {
+            return listOf(svc, CommandSet("cmd nfc ${if (on) "enable" else "disable"}", description = "Modern cmd method (Android 8+)"))
+        }
+        return listOf(
+            CommandSet(if (on) "cmd nfc enable-nfc" else "cmd nfc disable-nfc '[persist]'", description = "NFC service shell command"),
+            svc
+        )
+    }
 
     // No "nfc_on" global setting: the NFC service keeps that flag in its own preferences, so
     // writing it switches nothing and reading it back only echoes the write.
@@ -88,7 +95,7 @@ open class NFCToggle(
             // be read is not evidence of anything, and used to be reported as a success.
             if (actualState == FeatureState.DISABLED) {
                 Log.d(TAG, "✅ NFC is off and stayed off")
-                return PrivacyResult(feature, true, "NFC disabled")
+                return PrivacyResult(feature, true, "NFC disabled", commandUsed = initialResult.commandUsed)
             }
             Log.w(TAG, "⚠️ NFC could not be confirmed off (state: $actualState)")
             return initialResult
@@ -106,7 +113,8 @@ open class NFCToggle(
                 success = false,
                 message = "NFC still reads as on after the disable. Last attempt reported: ${initialResult.message}. " +
                     "A payment or wallet app may be turning it back on (turn on 'NFC Auto-Retry' on the main screen), " +
-                    "or the privileged shell may be failing."
+                    "or the privileged shell may be failing.",
+                commandUsed = initialResult.commandUsed
             )
         }
 
@@ -131,7 +139,8 @@ open class NFCToggle(
                 return PrivacyResult(
                     feature = feature,
                     success = true,
-                    message = "NFC disabled (auto-retry succeeded on attempt $retryCount)"
+                    message = "NFC disabled (auto-retry succeeded on attempt $retryCount)",
+                    commandUsed = lastAttempt.commandUsed
                 )
             }
 
@@ -149,7 +158,8 @@ open class NFCToggle(
             // payment cards for a privilege failure wastes their time.
             message = "NFC did not read back as disabled after $maxRetries attempts. " +
                 "Last attempt reported: ${lastAttempt?.message ?: "nothing"}. " +
-                "A payment or wallet app may be turning it back on, or the privileged shell may be failing."
+                "A payment or wallet app may be turning it back on, or the privileged shell may be failing.",
+            commandUsed = lastAttempt?.commandUsed ?: initialResult.commandUsed
         )
     }
 }

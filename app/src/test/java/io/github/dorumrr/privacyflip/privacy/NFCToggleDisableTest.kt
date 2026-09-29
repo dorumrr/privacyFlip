@@ -274,4 +274,108 @@ class NFCToggleDisableTest {
         assertTrue("the fresher read says off, so the stale failure must not stand", result.success)
         assertEquals("NFC disabled", result.message)
     }
+
+    // Android 15+ as a Samsung S25+ on Android 16 behaved through Shizuku: svc nfc is refused or
+    // silently ignored, "cmd nfc disable" does not exist, and disable-nfc/enable-nfc do the switch.
+    private class Android15FakeNfc(
+        context: Context,
+        private val svcSilentlyIgnored: Boolean = false,
+        startOn: Boolean = true
+    ) : NFCToggle(RootManager.getInstance(Unit), context) {
+        var radioOn = startOn
+        var savedOn = startOn
+        val ran = mutableListOf<String>()
+
+        private fun run(command: String): CommandResult = when {
+            command.startsWith("dumpsys nfc") -> CommandResult.success(listOf(if (radioOn) "mState=on" else "mState=off"))
+            command.startsWith("svc nfc") ->
+                if (svcSilentlyIgnored) CommandResult.success() else CommandResult.failure("SecurityException", 1)
+            command == "cmd nfc disable-nfc '[persist]'" -> { radioOn = false; savedOn = false; CommandResult.success() }
+            command == "cmd nfc disable-nfc" -> { radioOn = false; CommandResult.success() }
+            command == "cmd nfc enable-nfc" -> { radioOn = true; savedOn = true; CommandResult.success() }
+            else -> CommandResult.failure(
+                "java.lang.SecurityException: Uid 2000 does not have access to ${command.removePrefix("cmd nfc ")} nfc command (or such command doesn't exist)",
+                255
+            )
+        }
+
+        override suspend fun runCommands(commands: List<String>): CommandResult {
+            var last = CommandResult.failure("no commands")
+            for (command in commands) {
+                ran += command
+                last = run(command)
+                if (last.success) return last
+            }
+            return last
+        }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 and newer a disable refused by svc still switches NFC off and keeps it off`() = runBlocking {
+        val toggle = Android15FakeNfc(context)
+
+        val result = toggle.disable()
+
+        assertFalse("NFC must really be off, was: ${result.message}", toggle.radioOn)
+        assertFalse("and stay off after a reboot, as svc nfc disable left it", toggle.savedOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 and newer a svc that exits 0 and does nothing does not stop the disable`() = runBlocking {
+        val toggle = Android15FakeNfc(context, svcSilentlyIgnored = true)
+
+        val result = toggle.disable()
+
+        assertFalse("NFC must really be off, was: ${result.message} after ${toggle.ran}", toggle.radioOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 and newer an enable switches NFC on`() = runBlocking {
+        val toggle = Android15FakeNfc(context, startOn = false)
+
+        val result = toggle.enable()
+
+        assertTrue("NFC must really be on, was: ${result.message}", toggle.radioOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    fun `a disable result always names the commands it tried`() = runBlocking {
+        val stillOn = FakeNfc(context, statusOutputs = listOf("mState=on"))
+        assertTrue("auto-retry off", stillOn.disable().commandUsed?.contains("svc nfc disable") == true)
+
+        PreferenceManager.getInstance(context).samsungNfcAutoRetry = true
+        val exhausted = FakeNfc(context, statusOutputs = listOf("mState=on"))
+        assertTrue("retry exhausted", exhausted.disable().commandUsed?.contains("svc nfc disable") == true)
+
+        val settledOff = FakeNfc(context, statusOutputs = listOf("mState=on", "mState=on", "mState=off"))
+        PreferenceManager.getInstance(context).samsungNfcAutoRetry = false
+        assertTrue("settled off", settledOff.disable().commandUsed?.contains("svc nfc disable") == true)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 and newer an svc enable that exits 0 and does nothing does not stop the enable`() = runBlocking {
+        val toggle = Android15FakeNfc(context, svcSilentlyIgnored = true, startOn = false)
+
+        val result = toggle.enable()
+
+        assertTrue("NFC must really be on, was: ${result.message} after ${toggle.ran}", toggle.radioOn)
+        assertTrue(result.success)
+    }
+
+    @Test
+    @Config(sdk = [34])
+    fun `Android 14 and older keep svc first and the old cmd fallback`() = runBlocking {
+        val toggle = Android15FakeNfc(context)
+
+        toggle.disable()
+
+        assertEquals(listOf("svc nfc disable", "cmd nfc disable"), toggle.ran.take(2))
+    }
 }

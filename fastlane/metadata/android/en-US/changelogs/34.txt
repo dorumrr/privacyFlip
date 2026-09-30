@@ -1,0 +1,1 @@
+- Bluetooth "Only if not connected" now also counts LE Audio earbuds and speakers, so a lock no longer turns Bluetooth off while they play

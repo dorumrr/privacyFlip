@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
 import android.util.Log
@@ -18,8 +19,8 @@ import io.github.dorumrr.privacyflip.root.RootManager
  * 
  * Detection methods:
  * - WiFi: Uses dumpsys connectivity to check for active WIFI connection
- * - Bluetooth: Uses BluetoothAdapter's own connection-state API (needs BLUETOOTH_CONNECT
- *   on Android 12+) - no dumpsys parsing, see isBluetoothConnected()
+ * - Bluetooth: Uses BluetoothAdapter's connection state, plus an LE Audio sound output
+ *   (needs BLUETOOTH_CONNECT on Android 12+), see isBluetoothConnected()
  * - Hotspot: Uses dumpsys tethering to check for an active tethered interface
  * - Location: Uses dumpsys appops to check for active location requests (e.g., navigation apps)
  * - Microphone: Uses AudioManager to check call/communication mode
@@ -133,18 +134,8 @@ class ConnectionStateChecker(
         }
     }
 
-    /**
-     * Check if Bluetooth is connected to any device, using Android's own
-     * BluetoothAdapter API - not dumpsys text. The old approach (4 stacked guesses at raw
-     * dumpsys wording) silently failed on some phone makers whose dumpsys output didn't match
-     * any of the guessed patterns. getProfileConnectionState() is the same synchronous, no-root
-     * API real launcher/accessory apps use, and needs no shell access at all.
-     *
-     * Needs BLUETOOTH_CONNECT (a runtime-prompted permission from Android 12+,
-     * requested from the settings screen when this feature is turned on - see
-     * MainFragment's onlyIfUnusedCheckbox listener). Below Android 12 the older,
-     * non-prompting BLUETOOTH permission covers it.
-     */
+    // The adapter's own API, not dumpsys text: dumpsys wording differs between phone makers.
+    // Needs BLUETOOTH_CONNECT from Android 12, asked for when "only if not connected" is ticked.
     private fun isBluetoothConnected(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -162,19 +153,19 @@ class ConnectionStateChecker(
                 return false
             }
 
-            // The profiles a real accessory (headphones, a car kit, a hearing aid)
-            // actually connects through. Not an exhaustive list of every profile
-            // Android has - just the ones relevant to "is something in active use".
-            val profiles = listOf(
-                BluetoothProfile.A2DP to "A2DP (audio)",
-                BluetoothProfile.HEADSET to "HEADSET (calls)",
-                BluetoothProfile.HEARING_AID to "HEARING_AID"
-            )
+            val profiles = buildList {
+                add(BluetoothProfile.A2DP to "A2DP (audio)")
+                add(BluetoothProfile.HEADSET to "HEADSET (calls)")
+                add(BluetoothProfile.HEARING_AID to "HEARING_AID")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    add(BluetoothProfile.LE_AUDIO to "LE_AUDIO")
+                }
+            }
             val connectedOn = profiles.firstOrNull { (profile, _) ->
                 adapter.getProfileConnectionState(profile) == BluetoothProfile.STATE_CONNECTED
-            }
+            }?.second ?: leAudioOutput()
 
-            Log.i(TAG, "🔵 Bluetooth connection check: ${if (connectedOn != null) "CONNECTED (${connectedOn.second})" else "NOT CONNECTED"}")
+            Log.i(TAG, "🔵 Bluetooth connection check: ${if (connectedOn != null) "CONNECTED ($connectedOn)" else "NOT CONNECTED"}")
             connectedOn != null
         } catch (e: SecurityException) {
             Log.w(TAG, "🔵 Missing Bluetooth permission when checking connection state", e)
@@ -183,6 +174,20 @@ class ConnectionStateChecker(
             Log.e(TAG, "🔵 Error checking Bluetooth connection state", e)
             false
         }
+    }
+
+    // Android 13 never records LE Audio in the adapter's connection state; the sound route still shows it.
+    private fun leAudioOutput(): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val leTypes = buildMap {
+            put(AudioDeviceInfo.TYPE_BLE_HEADSET, "LE Audio headset")
+            put(AudioDeviceInfo.TYPE_BLE_SPEAKER, "LE Audio speaker")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                put(AudioDeviceInfo.TYPE_BLE_BROADCAST, "LE Audio broadcast")
+            }
+        }
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
+        return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstNotNullOfOrNull { leTypes[it.type] }
     }
 
     /**

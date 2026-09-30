@@ -64,14 +64,84 @@ class PrivilegeExecutorFallbackTest {
     }
 
     @Test
-    fun `when every command fails the LAST failure is returned, not the first`() = runBlocking {
-        val executor = FakeExecutor(succeedOn = null)
+    fun `when every command fails, every command's reason reaches the caller`() = runBlocking {
+        val executor = FakeExecutor()
 
         val result = executor.executeWithFallbacks(listOf("first", "second", "third"))
 
         assertFalse(result.success)
-        assertEquals("the caller sees why the last attempt failed", "failed: third", result.error)
+        listOf("first", "second", "third").forEach {
+            assertTrue("reason of $it missing, was: ${result.error}", result.error?.contains("failed: $it") == true)
+        }
         assertEquals(listOf("first", "second", "third"), executor.attempted)
+    }
+
+    private class ScriptedExecutor(private val results: Map<String, CommandResult>) : PrivilegeExecutor {
+        override suspend fun initialize(context: Context) = Unit
+        override suspend fun isAvailable(): Boolean = true
+        override suspend fun isPermissionGranted(): Boolean = true
+        override suspend fun requestPermission(): Boolean = true
+        override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.SHIZUKU
+        override fun cleanup() = Unit
+        override suspend fun executeCommand(command: String): CommandResult = results.getValue(command)
+    }
+
+    @Test
+    fun `each failed command is named with its exit code and the first lines of its reason`() = runBlocking {
+        val stackTrace = listOf("Exception while executing nfc shell command disable-nfc: ", "java.lang.SecurityException: denied") +
+            (1..40).map { "\tat com.android.nfc.Frame$it(Frame.java:$it)" }
+        val executor = ScriptedExecutor(
+            mapOf(
+                "cmd nfc disable-nfc" to CommandResult.fromProcess(255, stackTrace, emptyList()),
+                "svc nfc disable" to CommandResult.fromProcess(1, emptyList(), emptyList())
+            )
+        )
+
+        val error = executor.executeWithFallbacks(listOf("cmd nfc disable-nfc", "svc nfc disable")).error.orEmpty()
+
+        assertTrue(error, error.contains("cmd nfc disable-nfc (exit 255)"))
+        assertTrue(error, error.contains("SecurityException: denied"))
+        assertTrue(error, error.contains("svc nfc disable (exit 1): no output"))
+        assertTrue("a stack trace must not flood the log, was ${error.length} chars", error.length < 600)
+    }
+
+    @Test
+    fun `each reason keeps its first 3 lines and at most 200 characters`() = runBlocking {
+        val executor = ScriptedExecutor(
+            mapOf(
+                "four" to CommandResult.fromProcess(2, listOf("l1", "l2", "l3", "l4"), emptyList()),
+                "long" to CommandResult.fromProcess(3, listOf("x".repeat(500)), emptyList())
+            )
+        )
+
+        val error = executor.executeWithFallbacks(listOf("four", "long")).error.orEmpty()
+
+        assertTrue(error, error.startsWith("four (exit 2): l1 / l2 / l3; "))
+        assertFalse(error, error.contains("l4"))
+        assertEquals("long (exit 3): " + "x".repeat(200), error.substringAfter("; "))
+    }
+
+    @Test
+    fun `in a mixed list only the command that really ran carries an exit code`() = runBlocking {
+        val executor = ScriptedExecutor(
+            mapOf(
+                "never ran" to CommandResult.failure("Shizuku service not available"),
+                "ran" to CommandResult.fromProcess(2, emptyList(), listOf("bad argument"))
+            )
+        )
+
+        val error = executor.executeWithFallbacks(listOf("never ran", "ran")).error
+
+        assertEquals("never ran: Shizuku service not available; ran (exit 2): bad argument", error)
+    }
+
+    @Test
+    fun `a failure that never ran a command shows no exit code`() = runBlocking {
+        val executor = ScriptedExecutor(mapOf("svc wifi disable" to CommandResult.failure("Shizuku permission not granted")))
+
+        val error = executor.executeWithFallbacks(listOf("svc wifi disable")).error.orEmpty()
+
+        assertEquals("svc wifi disable: Shizuku permission not granted", error)
     }
 
     @Test
@@ -110,6 +180,7 @@ class PrivilegeExecutorFallbackTest {
             "the reason must survive into the result, was: ${result.error}",
             result.error?.contains("binder died") == true
         )
+        assertFalse("a thrown command produced no exit code, was: ${result.error}", result.error.orEmpty().contains("(exit"))
     }
 
     @Test

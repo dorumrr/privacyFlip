@@ -24,26 +24,6 @@ class RootExecutor : PrivilegeExecutor {
         internal fun shouldDropCachedShell(hasCachedShell: Boolean, cachedIsRoot: Boolean): Boolean =
             hasCachedShell && !cachedIsRoot
 
-        /**
-         * What a finished command should report as its error.
-         *
-         * FLAG_REDIRECT_STDERR makes libsu use ONE list for both streams, so err is then literally
-         * the same object as out and carries nothing of its own; reading it made every successful
-         * command report its own normal output as a failure. But that flag is only applied if the
-         * shell had not already been built, so err is a real, separate stderr often enough that
-         * discarding it would throw away the only reason a failure ever gives.
-         */
-        internal fun errorFrom(
-            success: Boolean,
-            outputLines: List<String>,
-            errorLines: List<String>
-        ): String? {
-            if (success) return null
-            val separateStderr = errorLines !== outputLines && errorLines.isNotEmpty()
-            val source = if (separateStderr) errorLines else outputLines
-            return source.joinToString("\n").ifBlank { null }
-        }
-
         // The flag below is static, so the lock has to be too. Guarding it with the instance lock
         // let two RootExecutors configure the shell at once.
         private val shellInitLock = Any()
@@ -69,7 +49,7 @@ class RootExecutor : PrivilegeExecutor {
                 } catch (e: Exception) {
                     // libsu refuses this once its main shell already exists, so the flags above
                     // are simply not in effect. Nothing here can undo that, but it must not pass
-                    // silently: errorFrom() below copes with either arrangement precisely because
+                    // silently: CommandResult.errorFrom() copes with either arrangement precisely because
                     // this can fail.
                     logManager?.w(TAG, "Shell defaults not applied (shell already built): ${e.message}")
                     isShellInitialized = true
@@ -159,12 +139,7 @@ class RootExecutor : PrivilegeExecutor {
 
         try {
             val result = Shell.cmd(command).exec()
-            return@withContext CommandResult(
-                success = result.isSuccess,
-                output = result.out,
-                error = errorFrom(result.isSuccess, result.out, result.err),
-                exitCode = result.code
-            )
+            return@withContext CommandResult.fromProcess(result.code, result.out, result.err)
         } catch (e: Exception) {
             return@withContext CommandResult.failure("Exception: ${e.message}")
         }

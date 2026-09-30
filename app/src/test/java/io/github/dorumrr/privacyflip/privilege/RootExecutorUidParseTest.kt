@@ -76,7 +76,7 @@ class RootExecutorUidParseTest {
         val merged = listOf("BluetoothShellCommand: Success")
         assertNull(
             "a command that worked has no error to report",
-            RootExecutor.errorFrom(success = true, outputLines = merged, errorLines = merged)
+            CommandResult.errorFrom(success = true, outputLines = merged, errorLines = merged)
         )
     }
 
@@ -87,7 +87,7 @@ class RootExecutorUidParseTest {
         // string, which is the exact regression this file exists to stop, in the branch the other
         // success case never enters.
         assertNull(
-            RootExecutor.errorFrom(
+            CommandResult.errorFrom(
                 success = true,
                 outputLines = listOf("ordinary output"),
                 errorLines = listOf("a warning nobody asked about")
@@ -102,7 +102,7 @@ class RootExecutorUidParseTest {
         val merged = listOf("su: applying SELinux context", "cmd: Failure calling service")
         assertEquals(
             "su: applying SELinux context\ncmd: Failure calling service",
-            RootExecutor.errorFrom(success = false, outputLines = merged, errorLines = merged)
+            CommandResult.errorFrom(success = false, outputLines = merged, errorLines = merged)
         )
     }
 
@@ -112,7 +112,7 @@ class RootExecutorUidParseTest {
         // separate stderr happens. Ignoring it would throw away the only reason a failure gives.
         assertEquals(
             "svc: Killed",
-            RootExecutor.errorFrom(
+            CommandResult.errorFrom(
                 success = false,
                 outputLines = listOf("some ordinary output"),
                 errorLines = listOf("svc: Killed")
@@ -122,9 +122,9 @@ class RootExecutorUidParseTest {
 
     @Test
     fun `a failed command with no output at all reports null rather than an empty string`() {
-        assertNull(RootExecutor.errorFrom(false, emptyList(), emptyList()))
+        assertNull(CommandResult.errorFrom(false, emptyList(), emptyList()))
         val blank = listOf("", "   ")
-        assertNull(RootExecutor.errorFrom(false, blank, blank))
+        assertNull(CommandResult.errorFrom(false, blank, blank))
     }
 
     @Test

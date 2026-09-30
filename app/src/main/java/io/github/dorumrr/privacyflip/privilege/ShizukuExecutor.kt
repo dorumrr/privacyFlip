@@ -166,12 +166,7 @@ class ShizukuExecutor : PrivilegeExecutor {
 
             val exitCode = process.waitFor()
 
-            return@withContext CommandResult(
-                success = exitCode == 0,
-                output = output,
-                error = if (error.isNotEmpty()) error.joinToString("\n") else null,
-                exitCode = exitCode
-            )
+            return@withContext CommandResult.fromProcess(exitCode, output, error)
         } catch (e: Exception) {
             return@withContext CommandResult.failure("Exception: ${e.message}")
         }

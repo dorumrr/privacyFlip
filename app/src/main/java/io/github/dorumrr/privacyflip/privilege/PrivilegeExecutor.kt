@@ -42,14 +42,14 @@ interface PrivilegeExecutor {
      * Execute multiple commands with fallback support
      * Tries each command in order until one succeeds
      * @param commands List of commands to try
-     * @return CommandResult from the first successful command, or last failure
+     * @return CommandResult from the first successful command, or a failure naming every command's reason
      */
     suspend fun executeWithFallbacks(commands: List<String>): CommandResult {
         if (commands.isEmpty()) {
             return CommandResult.failure("No commands provided")
         }
 
-        var lastResult: CommandResult? = null
+        val failures = mutableListOf<Pair<String, CommandResult>>()
 
         for (command in commands) {
             // A command that THROWS must not abort the chain. A dead binder, or a command this
@@ -65,10 +65,16 @@ interface PrivilegeExecutor {
             if (result.success) {
                 return result
             }
-            lastResult = result
+            failures += command to result
         }
 
-        return lastResult ?: CommandResult.failure("All commands failed")
+        val last = failures.last().second
+        return CommandResult(
+            success = false,
+            output = last.output,
+            error = failures.joinToString("; ") { (command, result) -> describeFailure(command, result) },
+            exitCode = last.exitCode
+        )
     }
     
     /**
@@ -112,3 +118,18 @@ interface PrivilegeExecutor {
     fun cleanup()
 }
 
+private const val REASON_LINES = 3
+private const val REASON_CHARS = 200
+
+// Capped: a stack trace on stdout would otherwise flood the debug log.
+internal fun describeFailure(command: String, result: CommandResult): String {
+    val exit = result.exitCode?.let { " (exit $it)" }.orEmpty()
+    val reason = result.error?.lineSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.take(REASON_LINES)
+        ?.joinToString(" / ")
+        ?.take(REASON_CHARS)
+        ?.ifEmpty { null }
+    return "$command$exit: ${reason ?: "no output"}"
+}

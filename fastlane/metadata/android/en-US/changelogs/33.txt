@@ -1,0 +1,1 @@
+- When a switch fails, the debug log now shows the reason Android gives and the exit code of each command tried, instead of "the command gave no reason"

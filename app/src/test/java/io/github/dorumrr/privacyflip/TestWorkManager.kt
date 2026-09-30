@@ -15,12 +15,14 @@ import java.util.concurrent.Executor
 fun initWorkManagerWithoutRealWork(
     context: Context,
     onRun: (WorkerParameters) -> Unit = {},
+    workExecutor: Executor = SynchronousExecutor(),
+    // Last, so the existing trailing-lambda callers keep binding here.
     taskExecutor: Executor = SynchronousExecutor()
 ) {
     WorkManagerTestInitHelper.initializeTestWorkManager(
         context,
         Configuration.Builder()
-            .setExecutor(SynchronousExecutor())
+            .setExecutor(workExecutor)
             .setTaskExecutor(taskExecutor)
             .setWorkerFactory(object : WorkerFactory() {
                 override fun createWorker(

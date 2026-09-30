@@ -1,7 +1,9 @@
 package io.github.dorumrr.privacyflip.privilege
 
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,6 +29,56 @@ class DhizukuFeaturePolicyTest {
         ).forEach {
             assertFalse("${it.displayName} has no Device Owner API", DhizukuFeaturePolicy.supports(it))
         }
+    }
+
+    @Test
+    fun `lifting the block at unlock turns NFC, the mic and the camera back on`() {
+        listOf(PrivacyFeature.NFC, PrivacyFeature.MICROPHONE, PrivacyFeature.CAMERA).forEach {
+            assertEquals("${it.displayName} comes back on", true, DhizukuFeaturePolicy.fixedAtUnlock(it))
+        }
+    }
+
+    @Test
+    fun `lifting the Bluetooth block never turns Bluetooth back on`() {
+        assertEquals(false, DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.BLUETOOTH))
+    }
+
+    @Test
+    fun `location follows the setting, and unsupported features have no unlock rule`() {
+        listOf(PrivacyFeature.LOCATION, PrivacyFeature.WIFI, PrivacyFeature.BATTERY_SAVER).forEach {
+            assertNull(it.displayName, DhizukuFeaturePolicy.fixedAtUnlock(it))
+        }
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun `on Android 9 only Bluetooth has an unlock rule, and it never comes back on`() {
+        assertEquals(false, DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.BLUETOOTH))
+        listOf(PrivacyFeature.NFC, PrivacyFeature.MICROPHONE, PrivacyFeature.CAMERA, PrivacyFeature.LOCATION).forEach {
+            assertNull(it.displayName, DhizukuFeaturePolicy.fixedAtUnlock(it))
+        }
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `on Android 11 camera and microphone have no Dhizuku block, so no unlock rule`() {
+        assertNull(DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.CAMERA))
+        assertNull(DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.MICROPHONE))
+        assertEquals(false, DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.BLUETOOTH))
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun `on Android 12 camera and microphone come back on at unlock, NFC has no rule yet`() {
+        assertEquals(true, DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.CAMERA))
+        assertEquals(true, DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.MICROPHONE))
+        assertNull(DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.NFC))
+    }
+
+    @Test
+    @Config(sdk = [34])
+    fun `NFC below Android 15 has no Dhizuku block to lift`() {
+        assertNull(DhizukuFeaturePolicy.fixedAtUnlock(PrivacyFeature.NFC))
     }
 
     @Test

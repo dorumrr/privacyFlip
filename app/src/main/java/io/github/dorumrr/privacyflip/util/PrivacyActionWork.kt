@@ -10,7 +10,7 @@ import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 
 /**
  * The one place that defines how a privacy action is handed to WorkManager: the input-data
- * contract, which unique name a direction uses, and the REPLACE policy.
+ * contract, which unique name a direction uses, and the default REPLACE policy.
  *
  * Four call sites across three classes used to hand-write this, and the worker read the same
  * four key strings back from its own copies of them, so a key renamed in one place and not the
@@ -27,7 +27,7 @@ object PrivacyActionWork {
 
     /**
      * Lock work and unlock work each have one unique name, so a newer action of the same
-     * direction REPLACEs the older one rather than running alongside it.
+     * direction REPLACEs the older one rather than running alongside it, unless the caller KEEPs it.
      */
     fun workName(isLocking: Boolean): String =
         if (isLocking) Constants.Work.NAME_LOCK else Constants.Work.NAME_UNLOCK
@@ -56,12 +56,13 @@ object PrivacyActionWork {
         isLocking: Boolean,
         isDeviceLocked: Boolean,
         trigger: String,
-        reason: String
+        reason: String,
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE
     ): String {
         val name = workName(isLocking)
         WorkManager.getInstance(context).enqueueUniqueWork(
             name,
-            ExistingWorkPolicy.REPLACE,
+            policy,
             buildRequest(isLocking, isDeviceLocked, trigger, reason)
         )
         return name

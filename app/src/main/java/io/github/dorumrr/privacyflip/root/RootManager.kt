@@ -126,5 +126,11 @@ class RootManager private constructor() {
         return privilegeManager?.getCurrentMethod() ?: PrivilegeMethod.NONE
     }
 
+    fun unsupportedReason(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): String? =
+        privilegeManager?.unsupportedReason(feature)
+
+    fun fixedAtUnlock(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): Boolean? =
+        privilegeManager?.fixedAtUnlock(feature)
+
 }
 

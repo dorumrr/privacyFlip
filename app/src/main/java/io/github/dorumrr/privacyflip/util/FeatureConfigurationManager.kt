@@ -2,7 +2,11 @@ package io.github.dorumrr.privacyflip.util
 
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 
-class FeatureConfigurationManager(private val preferenceManager: PreferenceManager) {
+class FeatureConfigurationManager(
+    private val preferenceManager: PreferenceManager,
+    private val backendCanSwitch: (PrivacyFeature) -> Boolean = { true },
+    private val unlockDecides: (PrivacyFeature) -> Boolean = { true }
+) {
 
     fun getFeaturesToDisableOnLock(): List<PrivacyFeature> {
         return getConfiguredFeatures(true)
@@ -24,6 +28,12 @@ class FeatureConfigurationManager(private val preferenceManager: PreferenceManag
             // preference is deliberately left alone: it is the user's, this device just
             // cannot act on it.
             if (feature in sensorFeatures && !sensorsUsable) {
+                return@forEach
+            }
+            if (!backendCanSwitch(feature)) {
+                return@forEach
+            }
+            if (!isLockAction && !unlockDecides(feature)) {
                 return@forEach
             }
             val shouldInclude = if (isLockAction) {

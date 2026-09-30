@@ -53,6 +53,18 @@ internal object DhizukuFeaturePolicy {
         else -> Build.VERSION_CODES.O
     }
 
+    // Lifting these blocks turns the feature back on (AOSP android15-release NfcService, AudioService);
+    // a lifted Bluetooth block leaves Bluetooth off (BluetoothManagerService has no enable branch).
+    private val BACK_ON_WHEN_LIFTED = setOf(PrivacyFeature.NFC, PrivacyFeature.MICROPHONE, PrivacyFeature.CAMERA)
+
+    /** Every unlock lifts every block ([releaseStaleBlocks]), so "Enable on unlock" cannot decide these. */
+    fun fixedAtUnlock(feature: PrivacyFeature): Boolean? = when {
+        !supports(feature) -> null
+        feature in BACK_ON_WHEN_LIFTED -> true
+        feature == PrivacyFeature.BLUETOOTH -> false
+        else -> null
+    }
+
     fun supports(feature: PrivacyFeature): Boolean =
         (feature in DIRECT || feature in RESTRICTIONS) && Build.VERSION.SDK_INT >= minSdkFor(feature)
 

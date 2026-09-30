@@ -61,6 +61,7 @@ class PrivacyActionWorkerDoWorkTest {
         applyBaseline()
         PrivacyActionWorker.lastLockAtMillis = 0L
         PrivacyActionWorker.lastUnlockAtMillis = 0L
+        PrivacyActionWorker.usageAccessWarningLogged.set(false)
         clock = 0L
     }
 
@@ -182,6 +183,8 @@ class PrivacyActionWorkerDoWorkTest {
         var statusReads = 0
         var method = PrivilegeMethod.ROOT
         var deviceSecurelyLocked = false
+        var backendCannotSwitch: Set<PrivacyFeature> = emptySet()
+        var backendFixesAtUnlock: Set<PrivacyFeature> = emptySet()
 
         override suspend fun confirmPrivilege(): Boolean = privileged
 
@@ -215,6 +218,10 @@ class PrivacyActionWorkerDoWorkTest {
         override fun isScreenCurrentlyLocked(): Boolean = screenLocked
 
         override fun isDeviceSecurelyLocked(): Boolean = deviceSecurelyLocked
+
+        override fun backendCanSwitch(feature: PrivacyFeature): Boolean = feature !in backendCannotSwitch
+
+        override fun unlockDecides(feature: PrivacyFeature): Boolean = feature !in backendFixesAtUnlock
     }
 
     private fun worker(isLocking: Boolean, isDeviceLocked: Boolean = false, trigger: String = "test"): FakeWorker =
@@ -537,6 +544,73 @@ class PrivacyActionWorkerDoWorkTest {
             "and the log must say why no app could be exempt",
             ShadowLog.getLogs().any { it.msg?.contains("Usage Access is not granted") == true }
         )
+    }
+
+    private fun installExemptAppWithUsageAccess(vararg modes: Int) {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setExemptApps(setOf("com.example.maps"))
+        shadowOf(context.packageManager).installPackage(
+            PackageInfo().apply {
+                packageName = "com.example.maps"
+                applicationInfo = ApplicationInfo().apply { packageName = "com.example.maps" }
+            }
+        )
+        val appOps = context.getSystemService(AppOpsManager::class.java)
+        modes.forEach { mode ->
+            shadowOf(appOps).setMode(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName, mode)
+            recordLock()
+            val worker = worker(isLocking = true)
+            worker.realForegroundDetector = true
+            runBlocking { worker.doWork() }
+        }
+    }
+
+    private fun usageAccessWarnings() =
+        ShadowLog.getLogs().count { it.msg?.contains("Usage Access is not granted") == true }
+
+    @Test
+    fun `a lock never asks the backend for a feature it cannot switch`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.BLUETOOTH, true)
+        recordLock()
+        val worker = worker(isLocking = true)
+        worker.backendCannotSwitch = setOf(PrivacyFeature.WIFI)
+
+        runBlocking { worker.doWork() }
+
+        assertEquals(listOf(PrivacyFeature.BLUETOOTH), worker.disabled)
+    }
+
+    @Test
+    fun `an unlock never asks for a feature whose unlock result the backend fixes`() {
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.BLUETOOTH, true)
+        recordUnlock()
+        val worker = worker(isLocking = false)
+        worker.screenLocked = false
+        worker.backendFixesAtUnlock = setOf(PrivacyFeature.BLUETOOTH)
+
+        runBlocking { worker.doWork() }
+
+        assertEquals(listOf(PrivacyFeature.WIFI), worker.enabled)
+    }
+
+    @Test
+    fun `a missing Usage Access is logged once, not on every lock`() {
+        installExemptAppWithUsageAccess(
+            AppOpsManager.MODE_IGNORED, AppOpsManager.MODE_IGNORED, AppOpsManager.MODE_IGNORED
+        )
+
+        assertEquals("one warning for three locks", 1, usageAccessWarnings())
+    }
+
+    @Test
+    fun `losing Usage Access again after it was granted is logged again`() {
+        installExemptAppWithUsageAccess(
+            AppOpsManager.MODE_IGNORED, AppOpsManager.MODE_ALLOWED, AppOpsManager.MODE_IGNORED
+        )
+
+        assertEquals("warned, granted, lost again: two warnings", 2, usageAccessWarnings())
     }
 
     @Test

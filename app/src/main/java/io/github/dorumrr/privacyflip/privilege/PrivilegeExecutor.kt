@@ -82,10 +82,16 @@ interface PrivilegeExecutor {
     suspend fun setFeatureState(feature: PrivacyFeature, enable: Boolean): CommandResult? = null
 
     /**
-     * Whether this backend can act on a feature at all. A backend that cannot should say so, so
-     * the user is told the thing is impossible here rather than shown a bare failure.
+     * Why this backend can never act on a feature, or null when it can. A backend that cannot
+     * says so, so the user is told the thing is impossible here rather than shown a bare failure.
      */
-    fun supportsFeature(feature: PrivacyFeature): Boolean = true
+    fun unsupportedReason(feature: PrivacyFeature): String? = null
+
+    /**
+     * What unlock always does to a feature on this backend, whatever "Enable on unlock" says: true
+     * turns it on, false can never turn it on, null follows the setting.
+     */
+    fun fixedAtUnlock(feature: PrivacyFeature): Boolean? = null
 
     /**
      * Read a feature's state through this backend's own API.

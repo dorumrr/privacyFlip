@@ -177,8 +177,10 @@ class DhizukuExecutor : PrivilegeExecutor {
         return@withContext DhizukuFeaturePolicy.apply(ctx, feature, enable)
     }
 
-    override fun supportsFeature(feature: PrivacyFeature): Boolean =
-        DhizukuFeaturePolicy.supports(feature)
+    override fun unsupportedReason(feature: PrivacyFeature): String? =
+        if (DhizukuFeaturePolicy.supports(feature)) null else DhizukuFeaturePolicy.unsupportedReason(feature)
+
+    override fun fixedAtUnlock(feature: PrivacyFeature): Boolean? = DhizukuFeaturePolicy.fixedAtUnlock(feature)
 
     override suspend fun readFeatureState(feature: PrivacyFeature) = withContext(Dispatchers.IO) {
         val ctx = context

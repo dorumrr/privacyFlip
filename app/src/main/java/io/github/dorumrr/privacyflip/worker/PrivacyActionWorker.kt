@@ -35,6 +35,8 @@ open class PrivacyActionWorker(
     companion object {
         private const val TAG = "privacyFlip-PrivacyActionWorker"
 
+        internal val usageAccessWarningLogged = java.util.concurrent.atomic.AtomicBoolean(false)
+
         // True from the start of a lock-direction doWork() invocation until that invocation's
         // own sensor stage concludes, or until the whole invocation exits early (no privilege,
         // global privacy off, exempt app) - not only during the moments a disable command is
@@ -200,9 +202,21 @@ open class PrivacyActionWorker(
 
     protected open fun privilegeMethod(): PrivilegeMethod = rootManager.getPrivilegeMethod()
 
+    protected open fun backendCanSwitch(feature: PrivacyFeature): Boolean =
+        rootManager.unsupportedReason(feature) == null
+
+    // Where the backend fixes the unlock result, asking for it only reports a switch that did not happen.
+    protected open fun unlockDecides(feature: PrivacyFeature): Boolean =
+        rootManager.fixedAtUnlock(feature) == null
+
+    protected open fun inUseDetail(feature: PrivacyFeature): String? =
+        if (feature == PrivacyFeature.MOBILE_DATA) connectionChecker.describeMediaPlayers() else null
+
     protected open fun getFirstForegroundApp(exemptApps: Set<String>): String? {
-        if (foregroundAppDetector.exemptAppsNeedUsageAccess(exemptApps)) {
-            logWarning("⚠️ Usage Access is not granted - exempt apps cannot be detected")
+        if (!foregroundAppDetector.exemptAppsNeedUsageAccess(exemptApps)) {
+            usageAccessWarningLogged.set(false)
+        } else if (usageAccessWarningLogged.compareAndSet(false, true)) {
+            logWarning("⚠️ Usage Access is not granted - exempt apps cannot be detected (logged once until it changes)")
         }
         return foregroundAppDetector.getFirstForegroundApp(exemptApps)
     }
@@ -258,7 +272,8 @@ open class PrivacyActionWorker(
             } else {
                 val inUse = isFeatureInUse(feature)
                 if (inUse) {
-                    logDebug("⏸️ ${feature.displayName} is in use - skipping disable (onlyIfUnused=true)")
+                    val detail = inUseDetail(feature)?.let { " ($it)" }.orEmpty()
+                    logDebug("⏸️ ${feature.displayName} is in use$detail - skipping disable (onlyIfUnused=true)")
                     debugNotifier.notifyFeatureSkipped(feature.displayName, "in use/connected")
                 }
                 !inUse // Only include if NOT in use
@@ -307,7 +322,11 @@ open class PrivacyActionWorker(
                 return Result.failure()
             }
 
-            val configManager = FeatureConfigurationManager(preferenceManager)
+            val configManager = FeatureConfigurationManager(
+                preferenceManager,
+                backendCanSwitch = ::backendCanSwitch,
+                unlockDecides = ::unlockDecides
+            )
 
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
             if (!isGlobalPrivacyEnabled) {

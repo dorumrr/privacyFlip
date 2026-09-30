@@ -98,6 +98,8 @@ abstract class BasePrivacyToggle(
                     commandUsed = commandUsed
                 )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "❌ EXCEPTION ${action}ing $featureName", e)
             PrivacyResult(
@@ -165,6 +167,8 @@ abstract class BasePrivacyToggle(
             val output = result.output.joinToString(" ").lowercase()
 
             parseStatusOutput(output)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error getting $featureName state", e)
             FeatureState.ERROR

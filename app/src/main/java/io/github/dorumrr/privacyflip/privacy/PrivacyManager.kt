@@ -54,6 +54,8 @@ class PrivacyManager private constructor(
         toggles.forEach { (feature, toggle) ->
             try {
                 statusMap[feature] = toggle.getCurrentState()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error getting status for $feature", e)
                 statusMap[feature] = FeatureState.ERROR
@@ -90,6 +92,8 @@ class PrivacyManager private constructor(
                         logWarning("❌ Commands attempted: ${result.commandUsed}")
                         logWarning("❌ Error details: ${result.message}")
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logError("❌ EXCEPTION ${action}ing $feature", e)
                     results.add(

@@ -41,6 +41,10 @@
     <!-- Footer -->
     <string name="open_source_message">Free, open source, no ads, for your privacy.\nConsider donating to support ongoing development.</string>
 
+    <!-- What a backend's unlock always does, whatever "Enable on unlock" says -->
+    <string name="backend_stays_off_at_unlock">With Dhizuku, unlock can only lift the block, never turn this back on. Turn it on yourself.</string>
+    <string name="backend_back_on_at_unlock">With Dhizuku, every unlock turns this back on, so it cannot stay off.</string>
+
     <!-- Camera/microphone availability -->
     <!-- %1$s is "camera" or "microphone". -->
     <string name="sensor_left_on_at_last_lock">⚠️ At the last lock your phone was already locked, so the %1$s could not be switched off. Tap the info icon above for how to fix this.</string>

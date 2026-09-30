@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.work.ExistingWorkPolicy
-import androidx.work.WorkManager
 import io.github.dorumrr.privacyflip.util.DualLogger
 import io.github.dorumrr.privacyflip.util.PendingLockWork
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
@@ -133,14 +132,17 @@ class ScreenStateReceiver : BroadcastReceiver() {
             return
         }
         try {
+            // KEEP: a second screen-off while this lock's job still waits must not restart its delay.
             val workName = PrivacyActionWork.enqueue(
                 context = context,
                 isLocking = isLocking,
                 isDeviceLocked = isDeviceLocked,
                 trigger = "screen_state",
-                reason = reason
+                reason = reason,
+                policy = if (isLocking) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE
             )
-            logDebug(context, "Privacy action work enqueued (unique: $workName) for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
+            val outcome = if (isLocking) "enqueued, or the pending one kept" else "enqueued"
+            logDebug(context, "Privacy action work $outcome (unique: $workName) for ${if (isLocking) "lock" else "unlock"} (deviceLocked=$isDeviceLocked)")
 
         } catch (e: Exception) {
             logError(context, "Failed to trigger privacy action", e)

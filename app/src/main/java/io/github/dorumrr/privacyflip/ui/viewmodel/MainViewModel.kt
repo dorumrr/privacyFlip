@@ -127,6 +127,8 @@ class MainViewModel : ViewModel() {
                         privilegeMethod = privilegeMethod,
                         privilegeMethodName = privilegeMethod.getDisplayName(),
                         privilegeMethodDescription = privilegeMethod.getDescription(),
+                        unsupportedReasons = unsupportedReasons(),
+                        fixedAtUnlock = fixedAtUnlock(),
                         isLoading = false
                     )
                 }
@@ -292,7 +294,9 @@ class MainViewModel : ViewModel() {
                         isRootAvailable = isPrivilegeAvailable,
                         privilegeMethod = privilegeMethod,
                         privilegeMethodName = privilegeMethod.getDisplayName(),
-                        privilegeMethodDescription = privilegeMethod.getDescription()
+                        privilegeMethodDescription = privilegeMethod.getDescription(),
+                        unsupportedReasons = unsupportedReasons(),
+                        fixedAtUnlock = fixedAtUnlock()
                     )
                 }
 
@@ -341,7 +345,9 @@ class MainViewModel : ViewModel() {
                         isRootGranted = isPrivilegeGranted,
                         privilegeMethod = privilegeMethod,
                         privilegeMethodName = privilegeMethod.getDisplayName(),
-                        privilegeMethodDescription = privilegeMethod.getDescription()
+                        privilegeMethodDescription = privilegeMethod.getDescription(),
+                        unsupportedReasons = unsupportedReasons(),
+                        fixedAtUnlock = fixedAtUnlock()
                     )
                 }
 
@@ -739,6 +745,12 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    private fun unsupportedReasons(): Map<PrivacyFeature, String> =
+        PrivacyFeature.values().mapNotNull { f -> rootManager.unsupportedReason(f)?.let { f to it } }.toMap()
+
+    private fun fixedAtUnlock(): Map<PrivacyFeature, Boolean> =
+        PrivacyFeature.values().mapNotNull { f -> rootManager.fixedAtUnlock(f)?.let { f to it } }.toMap()
+
     private fun scheduleServiceHealthCheck(context: Context) {
         handleError("scheduling service health check") {
             WorkManager.getInstance(context).cancelAllWorkByTag("ServiceHealthWorker")
@@ -1028,6 +1040,10 @@ data class UiState(
     val privilegeMethod: PrivilegeMethod = PrivilegeMethod.NONE,
     val privilegeMethodName: String = "None",
     val privilegeMethodDescription: String = "Root or Shizuku required",
+    // Features the backend can never switch, with the reason shown under the row.
+    val unsupportedReasons: Map<PrivacyFeature, String> = emptyMap(),
+    // What the backend's unlock always does to a feature, so its "Enable on unlock" is shown fixed.
+    val fixedAtUnlock: Map<PrivacyFeature, Boolean> = emptyMap(),
     val featureStates: Map<PrivacyFeature, FeatureState> = emptyMap(),
     val privacyStatus: PrivacyStatus = PrivacyStatus(),
     val isGlobalPrivacyEnabled: Boolean = true,

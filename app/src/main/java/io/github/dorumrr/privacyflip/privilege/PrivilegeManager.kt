@@ -256,8 +256,11 @@ class PrivilegeManager private constructor(private val context: Context) {
         enable: Boolean
     ): CommandResult? = currentExecutor?.setFeatureState(feature, enable)
 
-    fun supportsFeature(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): Boolean =
-        currentExecutor?.supportsFeature(feature) ?: true
+    fun unsupportedReason(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): String? =
+        currentExecutor?.unsupportedReason(feature)
+
+    fun fixedAtUnlock(feature: io.github.dorumrr.privacyflip.data.PrivacyFeature): Boolean? =
+        currentExecutor?.fixedAtUnlock(feature)
 
     suspend fun readFeatureState(
         feature: io.github.dorumrr.privacyflip.data.PrivacyFeature

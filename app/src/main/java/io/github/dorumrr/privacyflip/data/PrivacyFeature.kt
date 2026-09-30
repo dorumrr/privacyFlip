@@ -68,7 +68,7 @@ data class TimerSettings(
          * - Position 80: 120 seconds (2 minutes) - Discrete jump at 80%
          * - Position 100: 300 seconds (5 minutes) - Discrete jump at 100%
          *
-         * Note: Positions 61-79 and 81-99 are NOT selectable - they snap to nearest tick.
+         * Positions 61-79 save 2m and 81-99 save 5m; the screen then redraws the thumb on that tick.
          */
         fun positionToSeconds(position: Int): Int {
             return when (position) {

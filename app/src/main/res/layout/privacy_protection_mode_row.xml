@@ -173,4 +173,15 @@
 
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/backendNote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="11sp"
+        android:textColor="@color/text_secondary"
+        android:visibility="gone"
+        tools:text="@string/backend_back_on_at_unlock"
+        tools:visibility="visible" />
+
 </LinearLayout>

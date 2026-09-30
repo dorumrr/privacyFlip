@@ -85,6 +85,8 @@ class ConnectionStateChecker(
 
             Log.i(TAG, "📶 WiFi connection check: ${if (isConnected) "CONNECTED" else "NOT CONNECTED"}")
             isConnected
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error checking WiFi connection state", e)
             false
@@ -123,6 +125,8 @@ class ConnectionStateChecker(
 
             Log.i(TAG, "📡 Hotspot check: ${if (isActive) "ACTIVE" else "NOT ACTIVE"}")
             isActive
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "📡 Error checking hotspot state", e)
             false
@@ -290,6 +294,8 @@ class ConnectionStateChecker(
 
             Log.i(TAG, "📍 Location usage check: ${if (isInUse) "IN USE" else "NOT IN USE"}")
             isInUse
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "📍 Error checking location usage state", e)
             false
@@ -300,6 +306,19 @@ class ConnectionStateChecker(
      * Any app's media stream (STREAM_MUSIC) playing right now. Needs no permission, so it works on
      * every privilege method, and it keeps a lock from cutting a stream mid-song.
      */
+    /** What each player the system counts as active is playing, for the "in use" log line. */
+    fun describeMediaPlayers(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return "player details need Android 8"
+        return try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val players = audioManager?.activePlaybackConfigurations.orEmpty()
+            if (players.isEmpty()) "no active players"
+            else players.joinToString("; ") { it.audioAttributes.toString() }
+        } catch (e: Exception) {
+            "player details unreadable: ${e.message}"
+        }
+    }
+
     private fun isMediaPlaying(): Boolean {
         return try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager

@@ -18,6 +18,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -576,6 +577,16 @@ class MainFragment : Fragment() {
         binding.screenLockCard.microphoneLeftOnNote.visibility =
             if (uiState.screenLockConfig.microphoneDisableOnLock && PrivacyFeature.MICROPHONE in leftOn) View.VISIBLE else View.GONE
 
+        // Shows what the unlock will do on this backend; the stored choice is kept for the others.
+        featureRows().forEach { (feature, row) ->
+            uiState.fixedAtUnlock[feature]?.let {
+                row.enableOnUnlockSwitch.isChecked = it
+                row.onlyIfNotEnabledContainer.visibility = View.GONE
+            }
+        }
+        uiState.fixedAtUnlock[PrivacyFeature.CAMERA]?.let { binding.screenLockCard.cameraEnableOnUnlockSwitch.isChecked = it }
+        uiState.fixedAtUnlock[PrivacyFeature.MICROPHONE]?.let { binding.screenLockCard.microphoneEnableOnUnlockSwitch.isChecked = it }
+
         isUpdatingUI = false
     }
 
@@ -898,16 +909,7 @@ class MainFragment : Fragment() {
 
         // All feature switches (5 standard features using <include>)
         with(binding.screenLockCard) {
-            wifiSettings.disableOnLockSwitch.isEnabled = isEnabled
-            wifiSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            bluetoothSettings.disableOnLockSwitch.isEnabled = isEnabled
-            bluetoothSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            mobileDataSettings.disableOnLockSwitch.isEnabled = isEnabled
-            mobileDataSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            locationSettings.disableOnLockSwitch.isEnabled = isEnabled
-            locationSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            nfcSettings.disableOnLockSwitch.isEnabled = isEnabled
-            nfcSettings.enableOnUnlockSwitch.isEnabled = isEnabled
+            featureRows().forEach { (feature, row) -> applyBackendLimits(row, feature, uiState, isEnabled) }
 
             // Camera and microphone (custom inline layouts). Both run through
             // `cmd sensor_privacy`, which does not exist before Android 12 and has no older
@@ -916,10 +918,14 @@ class MainFragment : Fragment() {
             // which left the user believing the camera was protected. Set here rather than in
             // setup because this method runs on every UI update and would undo it.
             val sensorsUsable = DeviceDetector.supportsSensorPrivacyToggle()
-            cameraDisableOnLockSwitch.isEnabled = isEnabled && sensorsUsable
-            cameraEnableOnUnlockSwitch.isEnabled = isEnabled && sensorsUsable
-            microphoneDisableOnLockSwitch.isEnabled = isEnabled && sensorsUsable
-            microphoneEnableOnUnlockSwitch.isEnabled = isEnabled && sensorsUsable
+            val cameraUsable = sensorsUsable && PrivacyFeature.CAMERA !in uiState.unsupportedReasons
+            val microphoneUsable = sensorsUsable && PrivacyFeature.MICROPHONE !in uiState.unsupportedReasons
+            cameraDisableOnLockSwitch.isEnabled = isEnabled && cameraUsable
+            cameraEnableOnUnlockSwitch.isEnabled =
+                isEnabled && cameraUsable && PrivacyFeature.CAMERA !in uiState.fixedAtUnlock
+            microphoneDisableOnLockSwitch.isEnabled = isEnabled && microphoneUsable
+            microphoneEnableOnUnlockSwitch.isEnabled =
+                isEnabled && microphoneUsable && PrivacyFeature.MICROPHONE !in uiState.fixedAtUnlock
             // Only touched when the sensors cannot be switched at all. Writing
             // `isEnabled && sensorsUsable` here would have greyed it on Android 12+ without
             // privilege too, where nothing used to grey it, which is a change this fix has no
@@ -928,16 +934,20 @@ class MainFragment : Fragment() {
             if (!sensorsUsable) {
                 microphoneOnlyIfUnusedCheckbox.isEnabled = false
             }
-            cameraUnsupportedNote.visibility = if (sensorsUsable) View.GONE else View.VISIBLE
-            microphoneUnsupportedNote.visibility = if (sensorsUsable) View.GONE else View.VISIBLE
+            showBackendNote(cameraUnsupportedNote, sensorNote(PrivacyFeature.CAMERA, sensorsUsable, uiState))
+            showBackendNote(microphoneUnsupportedNote, sensorNote(PrivacyFeature.MICROPHONE, sensorsUsable, uiState))
         }
 
         // Extras card (Airplane Mode, Battery Saver)
         with(binding.extrasCard) {
-            airplaneModeSettings.disableOnLockSwitch.isEnabled = isEnabled
-            airplaneModeSettings.enableOnUnlockSwitch.isEnabled = isEnabled
-            batterySaverSettings.disableOnLockSwitch.isEnabled = isEnabled
-            batterySaverSettings.enableOnUnlockSwitch.isEnabled = isEnabled
+            val airplaneReason = uiState.unsupportedReasons[PrivacyFeature.AIRPLANE_MODE]
+            airplaneModeSettings.disableOnLockSwitch.isEnabled = isEnabled && airplaneReason == null
+            airplaneModeSettings.enableOnUnlockSwitch.isEnabled = isEnabled && airplaneReason == null
+            showBackendNote(airplaneModeSettings.backendNote, airplaneReason)
+            val batterySaverReason = uiState.unsupportedReasons[PrivacyFeature.BATTERY_SAVER]
+            batterySaverSettings.disableOnLockSwitch.isEnabled = isEnabled && batterySaverReason == null
+            batterySaverSettings.enableOnUnlockSwitch.isEnabled = isEnabled && batterySaverReason == null
+            showBackendNote(batterySaverSettings.backendNote, batterySaverReason)
         }
 
         // Timer seekbars
@@ -948,6 +958,46 @@ class MainFragment : Fragment() {
     }
 
 
+
+    private fun applyBackendLimits(
+        row: io.github.dorumrr.privacyflip.databinding.PrivacyFeatureRowBinding,
+        feature: PrivacyFeature,
+        uiState: UiState,
+        isEnabled: Boolean
+    ) {
+        val reason = uiState.unsupportedReasons[feature]
+        val fixed = uiState.fixedAtUnlock[feature]
+        row.disableOnLockSwitch.isEnabled = isEnabled && reason == null
+        row.enableOnUnlockSwitch.isEnabled = isEnabled && reason == null && fixed == null
+        showBackendNote(row.backendNote, reason ?: fixedAtUnlockNote(fixed))
+    }
+
+    private fun featureRows() = with(binding.screenLockCard) {
+        mapOf(
+            PrivacyFeature.WIFI to wifiSettings,
+            PrivacyFeature.BLUETOOTH to bluetoothSettings,
+            PrivacyFeature.MOBILE_DATA to mobileDataSettings,
+            PrivacyFeature.LOCATION to locationSettings,
+            PrivacyFeature.NFC to nfcSettings
+        )
+    }
+
+    private fun fixedAtUnlockNote(fixed: Boolean?): String? = when (fixed) {
+        true -> getString(R.string.backend_back_on_at_unlock)
+        false -> getString(R.string.backend_stays_off_at_unlock)
+        null -> null
+    }
+
+    private fun sensorNote(feature: PrivacyFeature, sensorsUsable: Boolean, uiState: UiState): String? = when {
+        !sensorsUsable -> getString(R.string.sensor_needs_android_12)
+        feature in uiState.unsupportedReasons -> uiState.unsupportedReasons[feature]
+        else -> fixedAtUnlockNote(uiState.fixedAtUnlock[feature])
+    }
+
+    private fun showBackendNote(note: TextView, text: String?) {
+        note.text = text
+        note.visibility = if (text == null) View.GONE else View.VISIBLE
+    }
 
     // DRY Helper Functions
     private fun setupPrivacyFeature(

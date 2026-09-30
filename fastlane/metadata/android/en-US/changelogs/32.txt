@@ -1,0 +1,5 @@
+- Dhizuku: switches it cannot use are greyed with the reason, and are no longer tried on every lock
+- Dhizuku: "Enable on unlock" now shows what really happens: NFC, microphone and camera always come back on, Bluetooth never does
+- An unlock during a lock no longer reports the rest as failed
+- Waking the screen without unlocking no longer restarts the lock delay
+- The debug log says what was playing when Mobile Data stayed on

@@ -1,0 +1,4 @@
+- New opt-in "Keep off while locked": if something the lock switched is changed back before you unlock, for example from Quick Settings, the lock actions run again
+- Shizuku and Sui on Android 15+: NFC turns off and on again on phones that refuse the NFC service's own command
+- "Side Button Support" is now "Lock Screen Detection", and no longer promises camera and microphone with an instant power-button lock
+- The debug log no longer says "Commands attempted: null"

@@ -157,7 +157,7 @@ class ReblockWatcher(
             context.registerReceiver(receiver, filter)
             context.contentResolver.registerContentObserver(Settings.Global.CONTENT_URI, true, observer)
             registered = true
-            Log.i(TAG, "Block is on - watching for features turned back on while locked")
+            Log.i(TAG, "Block is on - watching for features changed back while locked")
         } catch (e: Exception) {
             Log.e(TAG, "Could not start watching", e)
             unregister()
@@ -204,13 +204,13 @@ class ReblockWatcher(
             return
         }
         runsThisLock++
-        Log.i(TAG, "Turned back on while locked: ${due.map { it.displayName }} - queuing the lock job again ($runsThisLock of $MAX_RUNS_PER_LOCK)")
+        Log.i(TAG, "Changed back while locked: ${due.map { it.displayName }} - queuing the lock job again ($runsThisLock of $MAX_RUNS_PER_LOCK)")
         PrivacyActionWork.enqueue(
             context,
             isLocking = true,
             isDeviceLocked = true,
             trigger = PrivacyActionWork.TRIGGER_REBLOCK,
-            reason = "Turned back on while locked: ${due.joinToString { it.displayName }}",
+            reason = "Changed back while locked: ${due.joinToString { it.displayName }}",
             policy = ExistingWorkPolicy.APPEND_OR_REPLACE
         )
     }

@@ -5,13 +5,6 @@ import android.content.Intent
 import android.provider.Settings
 import android.util.Log
 
-/**
- * Utility object to manage the Privacy Flip Accessibility Service.
- * 
- * The Accessibility Service allows the app to detect side/power button locks earlier,
- * before the keyguard fully engages, enabling sensor privacy features to be disabled
- * even when using instant-lock methods.
- */
 object AccessibilityServiceManager {
     
     private const val TAG = "privacyFlip-AccessibilityManager"

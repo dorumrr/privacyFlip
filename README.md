@@ -46,7 +46,7 @@
 - **App Exemptions** - Exclude specific apps from privacy actions when in foreground
 - **NFC Auto-Retry** - Opt-in: if a payment or wallet app turns NFC back on right after Privacy Flip turns it off, retry disabling it
 - **Keep Off While Locked** - Opt-in: if Wi-Fi, Bluetooth, mobile data, location or NFC is switched back on before you unlock (for example from Quick Settings), or Airplane Mode or Battery Saver is switched off, Privacy Flip runs its lock actions again, with the same "only if" rules; camera and microphone cannot change while locked
-- **Accessibility Service** - Experimental support for side/power button instant-lock (opt-in, requires Accessibility permission; the instant-lock benefit applies to camera/microphone, which needs Android 12+)
+- **Accessibility Service** - Experimental, opt-in: an extra lock and unlock signal from the lock screen window (requires Accessibility permission). It does not make camera and microphone work with an instant power-button lock: Android refuses that once the phone is locked
 - **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 
 ### **Customizable Timing**

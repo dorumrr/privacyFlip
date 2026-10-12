@@ -11,10 +11,8 @@
 
     <string name="lock_delay_warning_message">Android prevents changing camera or microphone privacy while locked. For this reason, camera and microphone ignore custom lock/unlock delays and trigger immediately.\n\nMicrophone can skip this while genuinely in use (a call), if you turn that on below. Camera has no way to detect active use, so it always triggers immediately, even during a video call.\n\nTo ensure automatic disabling on lock:\n\n1. Go to Settings → Security → Screen Lock\n2. Tap the gear icon ⚙️ next to your lock method\n3. Set \"Automatically lock\" to 5 seconds or more\n4. Disable \"Power button instantly locks\" (if present)</string>
 
-    <string name="accessibility_service_description">Allows Privacy Flip to detect side/power button locks earlier, enabling camera and microphone privacy features to work with instant-lock. This service does not read screen content or passwords. It detects lock screen appearance to trigger privacy actions before keyguard fully engages, and detects when the lock screen is replaced by another window (a genuine unlock) to cancel privacy actions that are no longer needed.</string>
+    <string name="accessibility_service_description">Lets Privacy Flip notice the lock screen appearing and going away, as an extra signal next to the screen on/off events, and cancel lock actions an unlock made unnecessary. This service does not read screen content or passwords. It does not make camera and microphone work with an instant power-button lock: Android refuses that once the phone is locked.</string>
 
-    <string name="accessibility_service_card_subtitle">Enable Accessibility Service for instant-lock support</string>
-
-    <string name="accessibility_service_card_description">Allows Privacy Flip to detect side/power button locks before keyguard fully engages, and detects when you unlock again to cancel actions that are no longer needed. Enables camera and microphone privacy even with instant-lock. Does not read screen content.</string>
+    <string name="accessibility_service_card_description">Notices the lock screen appearing and going away, as an extra signal next to the screen on/off events, and cancels lock actions an unlock made unnecessary. Does not read screen content. It does not make camera and microphone work with an instant power-button lock: Android refuses that once the phone is locked.</string>
 
 </resources>

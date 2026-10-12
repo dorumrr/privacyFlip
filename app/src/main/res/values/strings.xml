@@ -52,17 +52,10 @@
 
     <!-- Accessibility Service -->
     <string name="accessibility_service_label">Privacy Flip - Side Button Support</string>
-    <!-- Android 11 and below, shown by Android's own Accessibility settings screen. The
-         Android 12+ wording is in values-v31/strings.xml and names the camera and microphone
-         benefit, which only exists from 12. Asking for an accessibility service in exchange
-         for something this Android cannot do would be a false trade. -->
-    <string name="accessibility_service_description">Allows Privacy Flip to detect side/power button locks earlier, so privacy actions start before the keyguard fully engages. This service does not read screen content or passwords. It detects lock screen appearance to trigger privacy actions, and detects when the lock screen is replaced by another window (a genuine unlock) to cancel privacy actions that are no longer needed.</string>
+    <!-- The service sees the lock screen after it is up, so it cannot beat an instant lock to anything.
+         values-v31 adds the camera/microphone limit, which only exists from Android 12. -->
+    <string name="accessibility_service_description">Lets Privacy Flip notice the lock screen appearing and going away, as an extra signal next to the screen on/off events, and cancel lock actions an unlock made unnecessary. This service does not read screen content or passwords.</string>
 
-    <!-- The subtitle and body of the Side Button Support card. Both were hardcoded in
-         card_accessibility_service.xml, which gave them no way to differ by Android version.
-         "Instant-lock support" only ever meant beating the keyguard to the camera and
-         microphone, so below Android 12 it would be selling an accessibility grant for
-         something this Android cannot do. -->
-    <string name="accessibility_service_card_subtitle">Enable Accessibility Service for earlier lock detection</string>
-    <string name="accessibility_service_card_description">Allows Privacy Flip to detect side/power button locks before keyguard fully engages, and detects when you unlock again to cancel actions that are no longer needed. Does not read screen content.</string>
+    <string name="accessibility_service_card_subtitle">Enable Accessibility Service as an extra lock and unlock signal</string>
+    <string name="accessibility_service_card_description">Notices the lock screen appearing and going away, as an extra signal next to the screen on/off events, and cancels lock actions an unlock made unnecessary. Does not read screen content.</string>
 </resources>

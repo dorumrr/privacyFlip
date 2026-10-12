@@ -13,19 +13,8 @@ import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 
-/**
- * Accessibility Service that detects screen-off / lock events earlier than the standard
- * ACTION_SCREEN_OFF broadcast, so this app's own lock actions can start before the keyguard
- * fully engages rather than after. triggerEarlyPrivacyActions() enqueues the same
- * PrivacyActionWorker job used for every configured feature, not only camera/microphone - but
- * camera/microphone are the one case where this earlier start is load-bearing rather than just
- * a head start: Android blocks changing sensor privacy once the device is already locked, and
- * camera/microphone control itself only exists from Android 12 onward, so without this service
- * instant-lock methods leave no window to act on them at all.
- *
- * This service is OPTIONAL and requires explicit user permission via Android Settings > Accessibility.
- * Users must opt-in to this experimental feature.
- */
+// A second lock/unlock signal from the lock screen window. It sees the keyguard once it is up, so it
+// cannot beat an instant power-button lock to camera/microphone (seen on a real Android 14 phone).
 class PrivacyAccessibilityService : AccessibilityService() {
 
     companion object {
@@ -189,11 +178,7 @@ class PrivacyAccessibilityService : AccessibilityService() {
                className.contains("LockScreen", ignoreCase = true)
     }
 
-    /**
-     * Triggers privacy actions early (before keyguard fully engages).
-     * Uses WorkManager with REPLACE policy to prevent duplicate execution
-     * if the normal ACTION_SCREEN_OFF flow also triggers.
-     */
+    // Queued with the default REPLACE, so this and the screen-off path never run the same lock twice.
     private fun triggerEarlyPrivacyActions() {
         try {
             // Recorded unconditionally, before the sensorDisableInProgress check below - a plain

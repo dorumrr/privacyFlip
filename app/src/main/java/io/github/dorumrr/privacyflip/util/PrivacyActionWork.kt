@@ -24,6 +24,7 @@ object PrivacyActionWork {
     const val KEY_REASON = "reason"
 
     const val TRIGGER_SERVICE_INIT = "service_init"
+    const val TRIGGER_REBLOCK = "reblock"
 
     /**
      * Lock work and unlock work each have one unique name, so a newer action of the same

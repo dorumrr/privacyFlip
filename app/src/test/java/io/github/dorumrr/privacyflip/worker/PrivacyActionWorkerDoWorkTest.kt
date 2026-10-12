@@ -186,7 +186,12 @@ class PrivacyActionWorkerDoWorkTest {
         var backendCannotSwitch: Set<PrivacyFeature> = emptySet()
         var backendFixesAtUnlock: Set<PrivacyFeature> = emptySet()
 
-        override suspend fun confirmPrivilege(): Boolean = privileged
+        var onConfirmPrivilege: () -> Unit = {}
+
+        override suspend fun confirmPrivilege(): Boolean {
+            onConfirmPrivilege()
+            return privileged
+        }
 
         override suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> {
             statusReads++
@@ -1325,5 +1330,56 @@ class PrivacyActionWorkerDoWorkTest {
         runBlocking { keeps.doWork() }
         assertTrue("the catch-up did switch the camera off", keeps.disabled.contains(PrivacyFeature.CAMERA))
         assertEquals("but the note from the real lock stays", setOf(PrivacyFeature.CAMERA), prefs.sensorsLeftOnAtLastLock)
+    }
+
+    // A reblock runs on a phone that is already locked, so the sensors cannot change and the note is the real lock's.
+    @Test
+    fun `a reblock turns features off again but leaves camera, microphone and the note alone`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.sensorsLeftOnAtLastLock = setOf(PrivacyFeature.CAMERA)
+
+        recordLock()
+        val reblock = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK)
+        reblock.method = PrivilegeMethod.DHIZUKU
+        reblock.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        reblock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        runBlocking { reblock.doWork() }
+
+        assertTrue("Wi-Fi goes off again", reblock.disabled.contains(PrivacyFeature.WIFI))
+        assertFalse("the sensor step is skipped", reblock.disabled.contains(PrivacyFeature.CAMERA))
+        assertEquals("the real lock's note stays", setOf(PrivacyFeature.CAMERA), prefs.sensorsLeftOnAtLastLock)
+    }
+
+    @Test
+    fun `a reblock does not wait for the lock delay`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.lockDelaySeconds = 30
+
+        recordLock()
+        val reblock = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK)
+        reblock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        runBlocking { kotlinx.coroutines.withTimeout(5_000) { reblock.doWork() } }
+
+        assertTrue(reblock.disabled.contains(PrivacyFeature.WIFI))
+    }
+
+    // The flag stops an unlock cancelling a sensor change; a reblock has none, so it must stay cancellable.
+    @Test
+    fun `a reblock never holds the flag that stops an unlock from cancelling it`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        var flagWhileStarting: Boolean? = null
+
+        recordLock()
+        val reblock = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK)
+        reblock.onConfirmPrivilege = { flagWhileStarting = PrivacyActionWorker.sensorDisableInProgress }
+        runBlocking { reblock.doWork() }
+        assertEquals(false, flagWhileStarting)
+
+        recordLock()
+        val realLock = worker(isLocking = true, isDeviceLocked = true)
+        realLock.onConfirmPrivilege = { flagWhileStarting = PrivacyActionWorker.sensorDisableInProgress }
+        runBlocking { realLock.doWork() }
+        assertEquals("a real lock still holds it", true, flagWhileStarting)
     }
 }

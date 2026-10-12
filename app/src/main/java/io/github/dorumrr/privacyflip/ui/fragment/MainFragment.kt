@@ -231,6 +231,13 @@ class MainFragment : Fragment() {
                 }
             }
 
+            blockWhileLockedSwitch.isChecked = preferenceManager.blockWhileLocked
+            blockWhileLockedSwitch.setOnCheckedChangeListener { _, isChecked ->
+                if (!isUpdatingUI) {
+                    preferenceManager.blockWhileLocked = isChecked
+                }
+            }
+
             cameraDisableOnLockSwitch.setOnCheckedChangeListener { _, isChecked ->
                 if (!isUpdatingUI) {
                     viewModel.updateFeatureSetting(PrivacyFeature.CAMERA, disableOnLock = isChecked)
@@ -910,6 +917,7 @@ class MainFragment : Fragment() {
         // All feature switches (5 standard features using <include>)
         with(binding.screenLockCard) {
             featureRows().forEach { (feature, row) -> applyBackendLimits(row, feature, uiState, isEnabled) }
+            blockWhileLockedSwitch.isEnabled = isEnabled
 
             // Camera and microphone (custom inline layouts). Both run through
             // `cmd sensor_privacy`, which does not exist before Android 12 and has no older

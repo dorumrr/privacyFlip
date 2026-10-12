@@ -44,6 +44,8 @@ object Constants {
         // Applies to every device despite the name: renaming the stored key would silently
         // reset the setting for everyone who already turned it on.
         const val KEY_SAMSUNG_NFC_AUTO_RETRY = "samsung_nfc_auto_retry"
+
+        const val KEY_BLOCK_WHILE_LOCKED = "block_while_locked"
         
         // Accessibility service preference
         const val KEY_ACCESSIBILITY_SERVICE_ENABLED = "accessibility_service_enabled"

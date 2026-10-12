@@ -52,6 +52,7 @@ class PrivacyMonitorService : Service() {
     }
     
     private var screenStateReceiver: ScreenStateReceiver? = null
+    private var reblockWatcher: ReblockWatcher? = null
     
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +67,7 @@ class PrivacyMonitorService : Service() {
                 startForeground(Constants.ServiceNotification.NOTIFICATION_ID, createNotification())
             }
             registerScreenStateReceiver()
+            reblockWatcher = ReblockWatcher(this).also { it.start() }
 
             // Apply initial privacy state based on current screen lock status
             applyInitialPrivacyState()
@@ -89,6 +91,8 @@ class PrivacyMonitorService : Service() {
         Log.d(TAG, "Privacy Monitor Service destroyed")
 
         unregisterScreenStateReceiver()
+        reblockWatcher?.stop()
+        reblockWatcher = null
     }
     
     override fun onBind(intent: Intent?): IBinder? {

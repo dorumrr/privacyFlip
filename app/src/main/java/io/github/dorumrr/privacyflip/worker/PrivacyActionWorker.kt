@@ -290,15 +290,19 @@ open class PrivacyActionWorker(
         // normal path, preserving the "still cancellable during the regular-features delay"
         // behaviour), and in the outer finally below for every early-return and exception path,
         // for THIS direction only (see that finally's own comment).
+        // A reblock re-runs on a phone already locked: no lock delay, no sensor step (sensors cannot change
+        // now), so it never holds or clears the flag that stops an unlock cancelling it.
+        val isReblock = isLocking &&
+            inputData.getString(PrivacyActionWork.KEY_TRIGGER) == PrivacyActionWork.TRIGGER_REBLOCK
         if (isLocking) {
-            sensorDisableInProgress = true
+            if (!isReblock) sensorDisableInProgress = true
         } else {
             sensorEnableInProgress = true
         }
         // Tracks whether THIS invocation's own explicit clear (right after its own sensor block,
         // the normal path) has already run - see that finally's own comment for why this is
         // needed even when the clear happens on the normal path.
-        var ownSensorGuardCleared = false
+        var ownSensorGuardCleared = isReblock
         // Cleared in finally, not here: a cancelled unlock leaves it to the unlock that replaced it.
         val offSinceLastUnlock = if (isLocking) emptySet() else preferenceManager.featuresOffSinceUnlock
         var cancelled = false
@@ -306,8 +310,8 @@ open class PrivacyActionWorker(
             val isDeviceLocked = inputData.getBoolean(PrivacyActionWork.KEY_IS_DEVICE_LOCKED, false)
             val trigger = inputData.getString(PrivacyActionWork.KEY_TRIGGER) ?: "unknown"
             val reason = inputData.getString(PrivacyActionWork.KEY_REASON) ?: "Unknown"
-            // The start-up catch-up is not a lock the user made, so it never touches the note.
-            val isUserLock = isLocking && trigger != PrivacyActionWork.TRIGGER_SERVICE_INIT
+            // The start-up catch-up and a reblock are not locks the user made, so they never touch the note.
+            val isUserLock = isLocking && trigger != PrivacyActionWork.TRIGGER_SERVICE_INIT && !isReblock
             if (isUserLock) preferenceManager.sensorsLeftOnAtLastLock = emptySet()
 
             logDebug("🔒 Executing privacy actions: locking=$isLocking, deviceLocked=$isDeviceLocked, trigger=$trigger, reason=$reason")
@@ -385,7 +389,7 @@ open class PrivacyActionWorker(
                     // every call).
                     val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
                     val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
-                    val sensorFeatures = featuresToDisable.filter { it in sensorFeatureSet }
+                    val sensorFeatures = if (isReblock) emptyList() else featuresToDisable.filter { it in sensorFeatureSet }
                     val protectionModes = featuresToDisable.filter { it in systemModeFeatureSet }
                     val regularFeatures = featuresToDisable.filter {
                         it !in sensorFeatureSet && it !in systemModeFeatureSet
@@ -449,8 +453,10 @@ open class PrivacyActionWorker(
                     // cancellable while waiting" behaviour. The outer finally is a safety net for
                     // early returns/exceptions above this point only - marked done here so it
                     // knows not to touch the flag again (see that finally's own comment).
-                    sensorDisableInProgress = false
-                    ownSensorGuardCleared = true
+                    if (!ownSensorGuardCleared) {
+                        sensorDisableInProgress = false
+                        ownSensorGuardCleared = true
+                    }
 
                     // Handle regular features and protection modes after delay
                     if (regularFeatures.isNotEmpty() || protectionModes.isNotEmpty()) {
@@ -464,9 +470,9 @@ open class PrivacyActionWorker(
                         // setting rarely applied at all. Safe to always wait:
                         // the isStillLocked check right below already cancels the whole action
                         // if the user unlocks again during the wait.
-                        val lockDelay = preferenceManager.lockDelaySeconds
+                        val lockDelay = if (isReblock) 0 else preferenceManager.lockDelaySeconds
 
-                        logDebug("⏱️ Lock delay: ${lockDelay}s (isDeviceLocked=$isDeviceLocked, always honoured)")
+                        logDebug("⏱️ Lock delay: ${lockDelay}s (isDeviceLocked=$isDeviceLocked, trigger=$trigger)")
 
                         if (lockDelay > 0) {
                             logDebug("⏳ Waiting ${lockDelay}s before disabling other features")

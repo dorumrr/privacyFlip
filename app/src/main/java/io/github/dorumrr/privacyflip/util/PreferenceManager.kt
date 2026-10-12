@@ -56,6 +56,16 @@ class PreferenceManager private constructor(private val context: Context) {
         get() = prefs.getBoolean(Constants.Preferences.KEY_SAMSUNG_NFC_AUTO_RETRY, false)
         set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_SAMSUNG_NFC_AUTO_RETRY, value).apply()
 
+    var blockWhileLocked: Boolean
+        get() = prefs.getBoolean(Constants.Preferences.KEY_BLOCK_WHILE_LOCKED, false)
+        set(value) = prefs.edit().putBoolean(Constants.Preferences.KEY_BLOCK_WHILE_LOCKED, value).apply()
+
+    fun registerChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+
+    fun unregisterChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+
     /**
      * Accessibility service preference.
      * Tracks whether the user has chosen to enable the accessibility service feature.

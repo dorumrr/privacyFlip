@@ -32,7 +32,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:text="Side Button Support (Experimental)"
+                android:text="Lock Screen Detection (Experimental)"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
@@ -62,7 +62,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Enable Side Button Support"
+                android:text="Enable Lock Screen Detection"
                 android:textSize="14sp"
                 android:textColor="@color/text_primary" />
 

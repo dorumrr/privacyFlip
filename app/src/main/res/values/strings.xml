@@ -51,7 +51,7 @@
     <string name="sensor_needs_android_12">Needs Android 12 or newer. Your Android version has no way to switch the camera or microphone.</string>
 
     <!-- Accessibility Service -->
-    <string name="accessibility_service_label">Privacy Flip - Side Button Support</string>
+    <string name="accessibility_service_label">Privacy Flip - Lock Screen Detection</string>
     <!-- The service sees the lock screen after it is up, so it cannot beat an instant lock to anything.
          values-v31 adds the camera/microphone limit, which only exists from Android 12. -->
     <string name="accessibility_service_description">Lets Privacy Flip notice the lock screen appearing and going away, as an extra signal next to the screen on/off events, and cancel lock actions an unlock made unnecessary. This service does not read screen content or passwords.</string>

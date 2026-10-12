@@ -1284,7 +1284,7 @@ class MainFragment : Fragment() {
                 serviceActive -> {
                     // Feature enabled AND service active in system settings
                     accessibilityServiceStatus.visibility = View.VISIBLE
-                    accessibilityServiceStatus.text = "✅ Service Active - Side button support enabled"
+                    accessibilityServiceStatus.text = "✅ Service Active - Lock screen detection enabled"
                     accessibilityServiceStatus.setTextColor(
                         androidx.core.content.ContextCompat.getColor(requireContext(), R.color.trust_blue)
                     )

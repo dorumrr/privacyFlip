@@ -80,8 +80,8 @@ interface PrivilegeExecutor {
     /**
      * Switch a feature through this backend's own API rather than a shell command.
      *
-     * Dhizuku holds Device Owner rights, not shell rights, so the commands the toggles build are
-     * denied there and a real API call is the only route.
+     * For where the toggles' commands are denied: Dhizuku has no shell rights at all, and Android 16
+     * refuses the NFC command from Shizuku's shell user.
      *
      * @return null when this backend has no such route, meaning the caller should run the commands
      */

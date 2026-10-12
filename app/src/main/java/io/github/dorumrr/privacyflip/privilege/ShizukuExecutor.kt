@@ -3,6 +3,8 @@ package io.github.dorumrr.privacyflip.privilege
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.IBinder
+import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
@@ -12,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
@@ -22,6 +25,7 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     companion object {
         private const val TAG = "privacyFlip-ShizukuExecutor"
+        private const val SHELL_PACKAGE = "com.android.shell"
     }
 
     private var logManager: LogManager? = null
@@ -29,6 +33,9 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     // Use a dedicated coroutine scope instead of GlobalScope
     private val executorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // A test stands in a fake here: the real service is only reachable through a live Shizuku.
+    internal var nfcService: suspend () -> Any? = { reachNfcService() }
 
     // The caching, timeout and hand-back-the-answer rules live in the gate, shared with
     // DhizukuExecutor. Everything Shizuku-specific stays here, as the hooks below.
@@ -172,6 +179,49 @@ class ShizukuExecutor : PrivilegeExecutor {
         }
     }
     
+    // Android 16's own `cmd nfc disable-nfc` names the NFC app's package, which the service refuses
+    // from the shell user. Calling the service with the shell's package works. null runs the commands.
+    override suspend fun setFeatureState(feature: PrivacyFeature, enable: Boolean): CommandResult? =
+        withContext(Dispatchers.IO) {
+            if (feature != PrivacyFeature.NFC || Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                return@withContext null
+            }
+            val service = nfcService() ?: return@withContext null
+            try {
+                val call = if (enable) {
+                    service.javaClass.getMethod("enable", String::class.java)
+                } else {
+                    service.javaClass.getMethod("disable", Boolean::class.javaPrimitiveType, String::class.java)
+                }
+                // The binder proxy class is not public, so its methods refuse a plain reflective call.
+                call.isAccessible = true
+                val accepted = if (enable) call.invoke(service, SHELL_PACKAGE) else call.invoke(service, true, SHELL_PACKAGE)
+                if (accepted == true) CommandResult.success() else {
+                    logManager?.w(TAG, "NFC service did not accept ${if (enable) "enable" else "disable"} - trying the commands")
+                    null
+                }
+            } catch (e: Exception) {
+                val cause = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e
+                logManager?.w(TAG, "NFC service call failed (${cause.javaClass.simpleName}: ${cause.message}) - trying the commands")
+                null
+            }
+        }
+
+    private suspend fun reachNfcService(): Any? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return null
+        if (!isAvailable() || !isPermissionGranted()) return null
+        return try {
+            val binder = SystemServiceHelper.getSystemService(Context.NFC_SERVICE) ?: return null
+            HiddenApiBypass.addHiddenApiExemptions("Landroid/nfc/INfcAdapter")
+            Class.forName("android.nfc.INfcAdapter\$Stub")
+                .getMethod("asInterface", IBinder::class.java)
+                .invoke(null, ShizukuBinderWrapper(binder))
+        } catch (e: Exception) {
+            logManager?.w(TAG, "NFC service not reachable through Shizuku: ${e.message}")
+            null
+        }
+    }
+
     override fun getPrivilegeMethod(): PrivilegeMethod = PrivilegeMethod.SHIZUKU
 
     override fun cleanup() {

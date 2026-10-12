@@ -20,6 +20,9 @@ class PrivacyManager private constructor(
         )
     }) {
         private const val TAG = "privacyFlip-PrivacyManager"
+
+        internal fun attemptedLine(commandUsed: String?): String =
+            "❌ Commands attempted: ${commandUsed ?: "none recorded"}"
     }
 
     private val dualLog = DualLogger(context, TAG)
@@ -89,7 +92,7 @@ class PrivacyManager private constructor(
                     val status = if (result.success) "✅ SUCCESS" else "❌ FAILED"
                     logDebug("$status $action ${feature.displayName}: ${result.message}")
                     if (!result.success) {
-                        logWarning("❌ Commands attempted: ${result.commandUsed}")
+                        logWarning(attemptedLine(result.commandUsed))
                         logWarning("❌ Error details: ${result.message}")
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {

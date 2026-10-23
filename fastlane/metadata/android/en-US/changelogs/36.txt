@@ -1,0 +1,3 @@
+- Battery Saver: a switch Android refuses while the phone is charging now says so, instead of "the system accepted the command and left the state unchanged"
+- Mobile Data on dual-SIM phones: the state check now reads the SIM that carries data, not the first SIM
+- The unlock skip for Airplane Mode and Battery Saver now says "not turned on by Privacy Flip" instead of "manually set"

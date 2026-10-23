@@ -839,10 +839,9 @@ open class PrivacyActionWorker(
                                 val wasEnabledByApp = preferenceManager.getFeatureEnabledByApp(mode)
 
                                 if (onlyIfNotManual && !wasEnabledByApp) {
-                                    // "Only if not manually set" is enabled AND we didn't enable it
-                                    // Skip disabling - user had it enabled manually
-                                    logDebug("🛡️ ${mode.displayName} was manually set - skipping disable (onlyIfNotManual=true)")
-                                    debugNotifier.notifyFeatureSkipped(mode.displayName, "manually set")
+                                    // Unowned is not proof the user set it: a lock that could not read the state never claims it.
+                                    logDebug("🛡️ ${mode.displayName} was not turned on by Privacy Flip - skipping disable (onlyIfNotManual=true)")
+                                    debugNotifier.notifyFeatureSkipped(mode.displayName, "not turned on by Privacy Flip")
                                 } else {
                                     // Either "only if not manually set" is disabled, or we enabled it
                                     // Disable it and clear the flag

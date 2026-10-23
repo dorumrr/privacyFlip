@@ -5,8 +5,8 @@ import io.github.dorumrr.privacyflip.privilege.CommandResult
 
 /**
  * A device whose settings keys and real states behave as measured on API 26, 34 and 35 emulators:
- * wifi_on / bluetooth_on / mobile_data are only stored, low_power and (from API 29) location_mode
- * switch the real state, the airplane broadcast is refused to the shell user, Battery Saver is
+ * wifi_on / bluetooth_on / mobile_data are only stored (svc data writes mobile_data on a single-SIM
+ * phone), low_power and (from API 29) location_mode switch the real state, the airplane broadcast is refused to the shell user, Battery Saver is
  * refused on a charger, and API 26 has no airplane shell command and no mIsDataEnabled line.
  * Command lists run like PrivilegeExecutor.executeWithFallbacks: the first that exits 0 wins.
  */
@@ -23,7 +23,8 @@ class FakeDeviceShell(
     var svcWifiNoop: Boolean = false,
     var bluetoothRevertsToOff: Boolean = false,
     var bluetoothReadsBeforeOff: Int = 0,
-    var svcBluetoothNoop: Boolean = false
+    var svcBluetoothNoop: Boolean = false,
+    var saverIgnored: Boolean = false
 ) {
     private var bluetoothOffLeft = 0
     private var wifiStaleLeft = 0
@@ -88,7 +89,8 @@ class FakeDeviceShell(
                 }
             }
             command.startsWith("svc data ") ->
-                if (svcDataFails) fail("data: no permission") else { dataOn = command.endsWith("enable"); ok() }
+                if (svcDataFails) fail("data: no permission")
+                else { dataOn = command.endsWith("enable"); global["mobile_data"] = if (dataOn) "1" else "0"; ok() }
 
             command.startsWith("cmd connectivity airplane-mode ") -> when {
                 sdk < 28 -> ok("No shell command implementation.")
@@ -104,14 +106,14 @@ class FakeDeviceShell(
             command.startsWith("cmd power set-mode ") && sdk < 26 -> ok("No shell command implementation.")
             command.startsWith("cmd power set-mode ") -> {
                 val on = command.endsWith("1")
-                if (!(on && charging)) { saverOn = on; global["low_power"] = if (on) "1" else "0" }
+                if (!(on && charging) && !saverIgnored) { saverOn = on; global["low_power"] = if (on) "1" else "0" }
                 ok()
             }
 
             command.startsWith("settings put global ") -> {
                 val (key, value) = command.removePrefix("settings put global ").split(" ", limit = 2)
                 global[key] = value
-                if (key == "low_power" && !(value == "1" && charging)) saverOn = value == "1"
+                if (key == "low_power" && !(value == "1" && charging) && !saverIgnored) saverOn = value == "1"
                 ok()
             }
             command.startsWith("settings put secure location_providers_allowed ") -> {
@@ -148,11 +150,13 @@ class FakeDeviceShell(
                 bluetoothOffLeft == 1 -> { bluetoothOffLeft--; ok("  enabled: false", "  state: TURNING_OFF") }
                 else -> ok("  enabled: $bluetoothOn", "  state: ${if (bluetoothOn) "ON" else "OFF"}")
             }
+            command.startsWith("dumpsys power") && command.contains("mIsPowered") -> ok("  mIsPowered=$charging")
             command.startsWith("dumpsys power") && command.contains("Battery saver state machine") ->
                 if (sdk >= 28) ok("  Enabled=$saverOn") else fail("no match")
             command.startsWith("dumpsys power") && command.contains("mLowPowerModeEnabled") ->
                 if (sdk < 28) ok("  mLowPowerModeEnabled=$saverOn") else fail("no match")
-            command.startsWith("SUBID=") -> if (sdk >= 31) ok("    mIsDataEnabled=$dataOn") else ok()
+            command.startsWith("SUBID=") && command.contains("settings get global mobile_data") -> fail("no per-SIM key")
+            command.startsWith("SUBID=") -> if (sdk >= 31) ok("    mIsDataEnabled=$dataOn") else fail("no match")
             command.startsWith("dumpsys telephony.registry") ->
                 if (sdk >= 31) ok("    mIsDataEnabled=$dataOn") else fail("no match")
             command.startsWith("dumpsys location") -> ok()

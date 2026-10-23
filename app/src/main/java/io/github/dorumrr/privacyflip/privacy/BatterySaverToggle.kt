@@ -28,6 +28,14 @@ open class BatterySaverToggle(rootManager: RootManager) : BasePrivacyToggle(root
         CommandSet("settings get global low_power", description = "Stored battery saver state")
     )
 
+    // The power service refuses either direction while powered, and its command still exits 0.
+    override suspend fun whyUnchanged(): String? {
+        val powered = runCommands(listOf("dumpsys power | grep -m1 'mIsPowered='"))
+        return if (powered.success && powered.output.any { "mIsPowered=true" in it }) {
+            "Android does not switch Battery Saver while the phone is charging"
+        } else null
+    }
+
     override fun parseStatusOutput(output: String): FeatureState {
         Regex("enabled=(true|false)").find(output.lowercase())?.let {
             return if (it.groupValues[1] == "true") FeatureState.ENABLED else FeatureState.DISABLED

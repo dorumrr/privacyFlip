@@ -127,6 +127,24 @@ class SettingsKeyFallbackTest {
         assertFalse("Android refused it, was: ${result.message}", result.success)
         assertFalse(d.saverOn)
         assertNotEquals("a refused enable must not leave the key armed for later", "1", d.global["low_power"])
+        assertEquals(
+            "Battery Saver was not enabled: Android does not switch Battery Saver while the phone is charging",
+            result.message
+        )
+    }
+
+    @Test
+    @Config(sdk = [34])
+    fun `battery saver ignored while unplugged does not blame the charger`() = runBlocking {
+        val d = FakeDeviceShell(saverIgnored = true)
+
+        val result = Saver(d).enable()
+
+        assertFalse(result.success)
+        assertEquals(
+            "Battery Saver was not enabled: the system accepted the command and left the state unchanged",
+            result.message
+        )
     }
 
     @Test

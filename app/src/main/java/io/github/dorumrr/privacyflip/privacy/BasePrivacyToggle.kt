@@ -82,7 +82,7 @@ abstract class BasePrivacyToggle(
                 Confirmation.CONTRADICTED -> PrivacyResult(
                     feature = feature,
                     success = false,
-                    message = "$featureName was not ${action}d: the system accepted the command and left the state unchanged",
+                    message = "$featureName was not ${action}d: ${whyUnchanged() ?: "the system accepted the command and left the state unchanged"}",
                     commandUsed = commandUsed
                 )
                 Confirmation.UNREADABLE -> PrivacyResult(
@@ -143,6 +143,9 @@ abstract class BasePrivacyToggle(
     }
 
     private enum class Confirmation { CONFIRMED, CONTRADICTED, UNREADABLE, ABSENT }
+
+    // Why the system kept the state, where the toggle can tell; null keeps the general message.
+    protected open suspend fun whyUnchanged(): String? = null
 
     // The API route's twin for reads. Without it a backend whose WRITE worked would still read
     // back through a shell it cannot use, and report its own successful change as a failure.

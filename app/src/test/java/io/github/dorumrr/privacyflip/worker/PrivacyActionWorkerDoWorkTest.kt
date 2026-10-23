@@ -666,7 +666,7 @@ class PrivacyActionWorkerDoWorkTest {
         assertTrue("a setting this app never claimed is not its to undo", unlock.disabled.isEmpty())
         assertTrue(
             "and it must say so, was: ${notifications()}",
-            notificationsSeen().any { it.contains("manually set") }
+            notificationsSeen().any { it.contains("not turned on by Privacy Flip") }
         )
     }
 

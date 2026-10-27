@@ -1,0 +1,7 @@
+- Android 8.0 or newer is now required
+- The tile and widget now need an unlocked phone to turn protection off
+- Turning protection off while locked no longer leaves radios off after unlock
+- Root: "Check Again" now appears if you refused Magisk the first time
+- Lock detection resumes after a Shizuku restart, even with protection off
+- Debug output shows when a radio is turned back on while locked
+- "Only if not manually set" is renamed "Only if Privacy Flip turned it on"

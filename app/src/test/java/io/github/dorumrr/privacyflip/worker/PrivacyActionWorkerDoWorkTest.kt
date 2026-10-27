@@ -193,8 +193,13 @@ class PrivacyActionWorkerDoWorkTest {
             return privileged
         }
 
+        var statusError: Exception? = null
+        var onStatusRead: () -> Unit = {}
+
         override suspend fun getCurrentStatus(): Map<PrivacyFeature, FeatureState> {
             statusReads++
+            onStatusRead()
+            statusError?.let { throw it }
             return states.toMap()
         }
 
@@ -229,15 +234,15 @@ class PrivacyActionWorkerDoWorkTest {
         override fun unlockDecides(feature: PrivacyFeature): Boolean = feature !in backendFixesAtUnlock
     }
 
-    private fun worker(isLocking: Boolean, isDeviceLocked: Boolean = false, trigger: String = "test"): FakeWorker =
+    private fun worker(
+        isLocking: Boolean,
+        isDeviceLocked: Boolean = false,
+        trigger: String = "test",
+        foundOnAt: Map<PrivacyFeature, Long> = emptyMap()
+    ): FakeWorker =
         TestListenableWorkerBuilder<PrivacyActionWorker>(context)
             .setInputData(
-                workDataOf(
-                    PrivacyActionWork.KEY_IS_LOCKING to isLocking,
-                    PrivacyActionWork.KEY_IS_DEVICE_LOCKED to isDeviceLocked,
-                    PrivacyActionWork.KEY_TRIGGER to trigger,
-                    PrivacyActionWork.KEY_REASON to "test"
-                )
+                PrivacyActionWork.buildRequest(isLocking, isDeviceLocked, trigger, "test", foundOnAt).workSpec.input
             )
             .setWorkerFactory(object : WorkerFactory() {
                 override fun createWorker(
@@ -1533,5 +1538,210 @@ class PrivacyActionWorkerDoWorkTest {
             listOf(PrivacyFeature.BATTERY_SAVER),
             unlock.disabled
         )
+    }
+
+    @Test
+    fun `a lock tells a radio it turned off apart from one that was already off`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.BLUETOOTH, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        lock.states[PrivacyFeature.BLUETOOTH] = FeatureState.DISABLED
+        // A real switch changes what a later read sees, so a read taken after it would call Wi-Fi already off.
+        lock.beforeDisable = { switched -> switched.forEach { lock.states[it] = FeatureState.DISABLED } }
+        runBlocking { lock.doWork() }
+
+        assertEquals("what gets switched is unchanged", setOf(PrivacyFeature.WIFI, PrivacyFeature.BLUETOOTH), lock.disabled.toSet())
+        assertEquals("one read for the whole lock", 1, lock.statusReads)
+        val sent = notificationsSeen()
+        val wifi = PrivacyFeature.WIFI.displayName
+        val bluetooth = PrivacyFeature.BLUETOOTH.displayName
+        assertTrue("Wi-Fi was on, so this lock turned it off, was: $sent", sent.any { it.contains("Disabling") && it.contains(wifi) })
+        assertTrue("Bluetooth was already off, was: $sent", sent.any { it.contains("$bluetooth - already off") })
+        assertTrue("and is not claimed as switched off, was: $sent", sent.none { it.contains("Disabling") && it.contains(bluetooth) })
+    }
+
+    @Test
+    fun `a reblock says a radio was found on while locked, and how long after it was seen`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.BLUETOOTH, true)
+        recordLock()
+
+        val seenAt = android.os.SystemClock.elapsedRealtime()
+        val reblock = worker(
+            isLocking = true,
+            isDeviceLocked = true,
+            trigger = PrivacyActionWork.TRIGGER_REBLOCK,
+            foundOnAt = mapOf(PrivacyFeature.BLUETOOTH to seenAt)
+        )
+        reblock.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        runBlocking { reblock.doWork() }
+
+        val bluetooth = PrivacyFeature.BLUETOOTH.displayName
+        val sent = notificationsSeen()
+        assertTrue("was: $sent", sent.any { it.contains("Found ON while locked") && it.contains(bluetooth) && it.contains("s after it was seen on") })
+        assertTrue("not the plain lock line, was: $sent", sent.none { it.contains("Disabling") && it.contains(bluetooth) })
+    }
+
+    @Test
+    fun `with debug output off the lock reads no extra state`() {
+        prefs.debugNotificationsEnabled = false
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        runBlocking { lock.doWork() }
+
+        assertEquals(listOf(PrivacyFeature.WIFI), lock.disabled)
+        assertEquals("the read exists only for the debug output", 0, lock.statusReads)
+    }
+
+    @Test
+    fun `a radio whose state cannot be read is still switched and said plainly, not guessed`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        runBlocking { lock.doWork() }
+
+        val wifi = PrivacyFeature.WIFI.displayName
+        assertEquals(listOf(PrivacyFeature.WIFI), lock.disabled)
+        assertTrue(ShadowLog.getLogs().any { it.msg?.contains("$wifi switched off - its state before could not be read") == true })
+        assertTrue("never called already off", notificationsSeen().none { it.contains("already off") })
+    }
+
+    @Test
+    fun `the seconds since a turn-on was seen are the real gap, and left out when they cannot be right`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.BLUETOOTH, true)
+        recordLock()
+        val bluetooth = PrivacyFeature.BLUETOOTH.displayName
+
+        val seenAt = android.os.SystemClock.elapsedRealtime()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(5))
+        val reblock = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK, foundOnAt = mapOf(PrivacyFeature.BLUETOOTH to seenAt))
+        reblock.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        runBlocking { reblock.doWork() }
+        assertTrue("was: ${notifications()}", notifications().any { it.contains("$bluetooth - turned off 5 s after it was seen on") })
+
+        ShadowLog.clear()
+        val fromOldBoot = android.os.SystemClock.elapsedRealtime() + 60_000
+        val stale = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK, foundOnAt = mapOf(PrivacyFeature.BLUETOOTH to fromOldBoot))
+        stale.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        runBlocking { stale.doWork() }
+        val sent = notificationsSeen()
+        assertTrue("still reported, was: $sent", sent.any { it.contains("Found ON while locked") })
+        assertTrue("but with no made-up gap, was: $sent", sent.none { it.contains("after it was seen on") })
+    }
+
+    @Test
+    fun `with only the debug log on the lock still reads once and writes the lines`() {
+        prefs.debugNotificationsEnabled = false
+        prefs.debugLogsEnabled = true
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        runBlocking { lock.doWork() }
+
+        assertEquals(1, lock.statusReads)
+        val wifi = PrivacyFeature.WIFI.displayName
+        assertTrue(ShadowLog.getLogs().any { it.msg?.contains("$wifi was on - turned off by Privacy Flip") == true })
+    }
+
+    @Test
+    fun `a failing debug read never stops the lock switching`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.statusError = IllegalStateException("shell gone")
+        val result = runBlocking { lock.doWork() }
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(listOf(PrivacyFeature.WIFI), lock.disabled)
+    }
+
+    @Test
+    fun `each feature found on gets its own seen time, and none when it has none`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.BLUETOOTH, true)
+        recordLock()
+
+        val bluetoothSeen = android.os.SystemClock.elapsedRealtime()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(7))
+        val reblock = worker(
+            isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK,
+            foundOnAt = mapOf(PrivacyFeature.BLUETOOTH to bluetoothSeen)
+        )
+        reblock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        reblock.states[PrivacyFeature.BLUETOOTH] = FeatureState.ENABLED
+        runBlocking { reblock.doWork() }
+
+        val sent = notificationsSeen().single { it.contains("Found ON while locked") }
+        assertTrue("was: $sent", sent.contains("${PrivacyFeature.BLUETOOTH.displayName} - turned off 7 s after it was seen on"))
+        assertTrue("Wi-Fi has no time of its own, was: $sent", sent.contains("${PrivacyFeature.WIFI.displayName} - turned off;") || sent.endsWith("${PrivacyFeature.WIFI.displayName} - turned off"))
+    }
+
+    @Test
+    fun `a radio that fails to switch off is still reported as failed with the report on`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        lock.disableFailsFor = setOf(PrivacyFeature.WIFI)
+        runBlocking { lock.doWork() }
+
+        val sent = notificationsSeen()
+        assertTrue("was: $sent", sent.any { it.contains("Failed to disable") && it.contains(PrivacyFeature.WIFI.displayName) })
+        assertTrue("and never called switched off, was: $sent", sent.none { it.contains("Disabling") })
+    }
+
+    @Test
+    fun `an unlock landing during the read stops the lock from switching`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        var reads = 0
+        lock.onStatusRead = { if (++reads == 1) recordUnlock() }
+        runBlocking { lock.doWork() }
+
+        assertTrue("the phone was unlocked mid-read, was: ${lock.disabled}", lock.disabled.isEmpty())
+    }
+
+    @Test
+    fun `a reblock that finds a feature already off never calls it found on`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.NFC, true)
+        recordLock()
+
+        val reblock = worker(
+            isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK,
+            foundOnAt = mapOf(PrivacyFeature.NFC to android.os.SystemClock.elapsedRealtime())
+        )
+        reblock.states[PrivacyFeature.NFC] = FeatureState.DISABLED
+        runBlocking { reblock.doWork() }
+
+        val sent = notificationsSeen()
+        assertTrue("was: $sent", sent.any { it.contains("${PrivacyFeature.NFC.displayName} - already off") })
+        assertTrue("was: $sent", sent.none { it.contains("Found ON while locked") })
+    }
+
+    @Test
+    fun `a lock that finds every radio already off reports no empty switch-off`() {
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.DISABLED
+        runBlocking { lock.doWork() }
+
+        val lines = ShadowLog.getLogs().mapNotNull { it.msg }
+        assertTrue("the already-off line is there", lines.any { it.contains("${PrivacyFeature.WIFI.displayName} was already off") })
+        assertTrue("and no '0/0 disabled' line, was: ${lines.filter { it.contains("completed") }}", lines.none { it.contains("Lock action completed: 0/0") })
     }
 }

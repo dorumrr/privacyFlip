@@ -36,11 +36,13 @@ class ReblockWatcherTest {
     private val context = ApplicationProvider.getApplicationContext<Application>()
     private val prefs = PreferenceManager.getInstance(context)
     private val runs: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val foundOnAts: MutableList<Map<PrivacyFeature, Long>> = Collections.synchronizedList(mutableListOf())
     private var watcher: ReblockWatcher? = null
 
     @Before
     fun lockedWithWifiTurnedOff() {
         initWorkManagerWithoutRealWork(context, onRun = { params ->
+            foundOnAts += PrivacyActionWork.foundOnAt(params.inputData.getString(PrivacyActionWork.KEY_FOUND_ON_AT))
             runs += params.inputData.getString(PrivacyActionWork.KEY_TRIGGER).orEmpty()
         })
         prefs.blockWhileLocked = true
@@ -93,6 +95,60 @@ class ReblockWatcherTest {
 
         assertEquals(1, awaitRuns(1))
         assertEquals(PrivacyActionWork.TRIGGER_REBLOCK, runs.single())
+    }
+
+    @Test
+    fun `a reblock carries when the turn-on was first seen`() {
+        startWatcher()
+        val before = android.os.SystemClock.elapsedRealtime()
+
+        wifiTurnedOn()
+
+        assertEquals(1, awaitRuns(1))
+        val seenAt = foundOnAts.single()[PrivacyFeature.WIFI] ?: 0L
+        assertTrue("seen at $seenAt, test started at $before", seenAt >= before && seenAt > 0L)
+    }
+
+    @Test
+    fun `the time carried is when the reblocked feature was seen, not an earlier unrelated change`() {
+        ReblockWatcher(context, mergeWindowMs = 500).also { it.start(); watcher = it }
+
+        // Bluetooth was not switched off by this lock, so it is not reblocked; it only opens the window.
+        Settings.Global.putInt(context.contentResolver, Settings.Global.BLUETOOTH_ON, 1)
+        context.contentResolver.notifyChange(Uri.withAppendedPath(Settings.Global.CONTENT_URI, Settings.Global.BLUETOOTH_ON), null)
+        shadowOf(Looper.getMainLooper()).idle()
+        Thread.sleep(50)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(3))
+        val wifiSeenFrom = android.os.SystemClock.elapsedRealtime()
+        wifiTurnedOn()
+
+        assertEquals(1, awaitRuns(1))
+        val carried = foundOnAts.single()
+        assertEquals("only the reblocked feature is carried", setOf(PrivacyFeature.WIFI), carried.keys)
+        assertTrue("carried $carried, Wi-Fi seen from $wifiSeenFrom", carried.getValue(PrivacyFeature.WIFI) >= wifiSeenFrom)
+    }
+
+    @Test
+    fun `two features turned on at different moments each keep their own first-seen time`() {
+        prefs.addFeaturesOffSinceUnlock(listOf(PrivacyFeature.BLUETOOTH))
+        ReblockWatcher(context, mergeWindowMs = 500).also { it.start(); watcher = it }
+
+        val bluetoothFrom = android.os.SystemClock.elapsedRealtime()
+        Settings.Global.putInt(context.contentResolver, Settings.Global.BLUETOOTH_ON, 1)
+        context.contentResolver.notifyChange(Uri.withAppendedPath(Settings.Global.CONTENT_URI, Settings.Global.BLUETOOTH_ON), null)
+        shadowOf(Looper.getMainLooper()).idle()
+        Thread.sleep(50)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(3))
+        val wifiFrom = android.os.SystemClock.elapsedRealtime()
+        wifiTurnedOn()
+        wifiTurnedOn()
+
+        assertEquals(1, awaitRuns(1))
+        val carried = foundOnAts.single()
+        val bluetooth = carried.getValue(PrivacyFeature.BLUETOOTH)
+        val wifi = carried.getValue(PrivacyFeature.WIFI)
+        assertTrue("Bluetooth $bluetooth from $bluetoothFrom", bluetooth in bluetoothFrom until wifiFrom)
+        assertTrue("Wi-Fi $wifi from $wifiFrom, kept from its first turn-on", wifi >= wifiFrom && wifi < wifiFrom + 3_000)
     }
 
     @Test

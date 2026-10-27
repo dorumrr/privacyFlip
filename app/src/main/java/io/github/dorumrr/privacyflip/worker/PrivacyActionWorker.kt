@@ -88,6 +88,18 @@ open class PrivacyActionWorker(
         // Shared by all 6 of doWork()'s supersede checks, 3 per direction, so a regression in the
         // comparison fails every one the same way. Callers must read the timestamp FRESH at each
         // checkpoint: one frozen at job start misses a re-trigger folded into this same job.
+        internal enum class LockOutcome { TURNED_OFF, ALREADY_OFF, FOUND_ON_WHILE_LOCKED, STATE_UNKNOWN, FAILED }
+
+        // processResults' "Disabling: X" would say these were switched off by this lock, which is not what happened.
+        private val REPORTED_ON_THEIR_OWN = setOf(LockOutcome.ALREADY_OFF, LockOutcome.FOUND_ON_WHILE_LOCKED)
+
+        internal fun lockOutcome(before: FeatureState?, success: Boolean, isReblock: Boolean): LockOutcome = when {
+            !success -> LockOutcome.FAILED
+            before == FeatureState.DISABLED -> LockOutcome.ALREADY_OFF
+            before == FeatureState.ENABLED -> if (isReblock) LockOutcome.FOUND_ON_WHILE_LOCKED else LockOutcome.TURNED_OFF
+            else -> LockOutcome.STATE_UNKNOWN
+        }
+
         internal fun isSupersededByFresherOppositeAction(
             oppositeActionAtMillis: Long,
             ownLastKnownAtMillis: Long
@@ -575,13 +587,27 @@ open class PrivacyActionWorker(
 
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔒 Disabling regular features (count=${filteredRegularFeatures.size}): ${filteredRegularFeatures.map { it.displayName }}")
-                                logDebug("🔒 About to call disableFeatures()...")
-
+                                val stateBefore = stateBeforeForDebugOutput()
+                                // The read is a slow shell round-trip, so an unlock it overlapped is checked for again.
+                                if (stateBefore != null && isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
+                                    logWarning("⚠️ Unlocked while reading states - cancelling remaining disable actions")
+                                    debugNotifier.notifyActionCancelled("Unlocked during lock cycle - disable cancelled")
+                                    return Result.success()
+                                }
                                 val regularResults = disableFeatures(filteredRegularFeatures.toSet())
 
                                 logDebug("🔒 disableFeatures() returned ${regularResults.size} results")
 
-                                processResults(regularResults, filteredRegularFeatures, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
+                                val outcomes = regularResults.associate {
+                                    it.feature to lockOutcome(stateBefore?.get(it.feature), it.success, isReblock)
+                                }
+                                val plainResults = regularResults.filter {
+                                    stateBefore == null || outcomes[it.feature] !in REPORTED_ON_THEIR_OWN
+                                }
+                                if (plainResults.isNotEmpty()) {
+                                    processResults(plainResults, plainResults.map { it.feature }, "🔒", "disabled", "Disabled", isLockCycle = true, didEnable = false)
+                                }
+                                if (stateBefore != null) reportLockOutcomes(outcomes)
                                 recordTurnedOff(regularResults)
                             } else {
                                 logDebug("ℹ️ No regular features left to disable after the in-use/hotspot check")
@@ -928,6 +954,46 @@ open class PrivacyActionWorker(
             if (unlockFinished && !relockedWithProtection) {
                 preferenceManager.removeFeaturesOffSinceUnlock(offSinceLastUnlock - notRestored)
             }
+        }
+    }
+
+    // Read only for the debug output, as logFeaturesBackOnSinceLock does, so a plain lock costs no extra shell reads.
+    // A debug-only read must never stop the lock itself, so any failure here only loses the report.
+    private suspend fun stateBeforeForDebugOutput(): Map<PrivacyFeature, FeatureState>? {
+        if (!preferenceManager.debugLogsEnabled && !preferenceManager.debugNotificationsEnabled) return null
+        return try {
+            getCurrentStatus()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWarning("Could not read states for the lock report: ${e.message}")
+            null
+        }
+    }
+
+    private fun reportLockOutcomes(outcomes: Map<PrivacyFeature, LockOutcome>) {
+        val foundOnAt = PrivacyActionWork.foundOnAt(inputData.getString(PrivacyActionWork.KEY_FOUND_ON_AT))
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Only a feature's own time counts. A job that outlived a reboot holds old-boot times, which read negative.
+        fun sinceSeen(feature: PrivacyFeature): String {
+            val seconds = foundOnAt[feature]?.let { (now - it) / 1000 }?.takeIf { it >= 0 } ?: return ""
+            return " $seconds s after it was seen on"
+        }
+        outcomes.forEach { (feature, outcome) ->
+            val name = feature.displayName
+            when (outcome) {
+                LockOutcome.TURNED_OFF -> logDebug("🔒 $name was on - turned off by Privacy Flip")
+                LockOutcome.ALREADY_OFF -> logDebug("⏸️ $name was already off")
+                LockOutcome.FOUND_ON_WHILE_LOCKED -> logWarning("🚨 $name was ON while locked - turned off${sinceSeen(feature)}")
+                LockOutcome.STATE_UNKNOWN -> logDebug("❔ $name switched off - its state before could not be read")
+                LockOutcome.FAILED -> Unit
+            }
+        }
+        val alreadyOff = outcomes.filterValues { it == LockOutcome.ALREADY_OFF }.keys.map { it.displayName }
+        if (alreadyOff.isNotEmpty()) debugNotifier.notifyFeatureSkipped(alreadyOff.joinToString(", "), "already off")
+        val foundOn = outcomes.filterValues { it == LockOutcome.FOUND_ON_WHILE_LOCKED }.keys
+        if (foundOn.isNotEmpty()) {
+            debugNotifier.notify("🚨 Found ON while locked", foundOn.joinToString("; ") { "${it.displayName} - turned off${sinceSeen(it)}" })
         }
     }
 

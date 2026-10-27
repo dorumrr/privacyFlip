@@ -13,6 +13,7 @@ import android.nfc.NfcAdapter
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.location.LocationManagerCompat
@@ -91,7 +92,7 @@ class ReblockWatcher(
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
 
     // Touched only on the scheduler thread.
-    private val pending = mutableSetOf<PrivacyFeature>()
+    private val pending = mutableMapOf<PrivacyFeature, Long>()
     private var runsThisLock = 0
     private var countedSinceUnlockAt = Long.MIN_VALUE
 
@@ -176,7 +177,7 @@ class ReblockWatcher(
             scheduler.execute {
                 // The first change opens the window; the rest join the run it schedules.
                 if (pending.isEmpty()) scheduler.schedule(::fire, mergeWindowMs, TimeUnit.MILLISECONDS)
-                pending += feature
+                pending.getOrPut(feature) { SystemClock.elapsedRealtime() }
             }
         } catch (_: java.util.concurrent.RejectedExecutionException) {
             // Stopped: the service is going away.
@@ -184,7 +185,8 @@ class ReblockWatcher(
     }
 
     private fun fire() {
-        val features = pending.toSet()
+        val firstSeenAt = pending.toMap()
+        val features = firstSeenAt.keys
         pending.clear()
         if (!preferenceManager.blockWhileLocked) return
         val lastLock = PrivacyActionWorker.lastLockAtMillis
@@ -211,7 +213,8 @@ class ReblockWatcher(
             isDeviceLocked = true,
             trigger = PrivacyActionWork.TRIGGER_REBLOCK,
             reason = "Changed back while locked: ${due.joinToString { it.displayName }}",
-            policy = ExistingWorkPolicy.APPEND_OR_REPLACE
+            policy = ExistingWorkPolicy.APPEND_OR_REPLACE,
+            foundOnAt = firstSeenAt.filterKeys { it in due }
         )
     }
 

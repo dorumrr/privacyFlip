@@ -7,7 +7,6 @@ import android.os.IBinder
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.LogManager
-import io.github.dorumrr.privacyflip.util.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -246,17 +245,8 @@ class ShizukuExecutor : PrivilegeExecutor {
                     logManager?.d(TAG, "Shizuku auto-restoration: permission granted = $granted")
 
                     if (granted) {
-                        // Check if protection was active before Shizuku died
-                        val preferenceManager = PreferenceManager.getInstance(ctx)
-                        val wasProtectionActive = preferenceManager.isGlobalPrivacyEnabled
-
-                        if (wasProtectionActive) {
-                            logManager?.i(TAG, "Shizuku auto-restoration: restoring protection state")
-                            // Restart the privacy monitor service to restore protection
-                            PrivacyMonitorService.start(ctx)
-                        } else {
-                            logManager?.d(TAG, "Shizuku auto-restoration: protection was inactive, not restoring")
-                        }
+                        logManager?.i(TAG, "Shizuku auto-restoration: restarting the monitor service")
+                        PrivacyMonitorService.start(ctx)
                     }
 
                     // Broadcast to UI to refresh (permission status may have changed)

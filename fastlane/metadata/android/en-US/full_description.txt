@@ -1,11 +1,11 @@
 Privacy Flip automatically manages your device's privacy features based on screen lock/unlock state. When you lock your device, it can disable Wi-Fi, Bluetooth, mobile data, location services, NFC, and even camera/microphone sensors. When you unlock, it intelligently restores the features you want back on.
 
-<b>Works with Root OR Shizuku - Choose your preferred privilege method!</b>
+<b>Works with Sui, Root, Dhizuku or Shizuku - Choose your preferred privilege method!</b>
 
 <b>Features:</b>
 
 • Manage your device privacy based on lock/unlock state
-• Dual privilege support: Root OR Shizuku (no root required!)
+• Four privilege methods: Sui, Root, Dhizuku or Shizuku (no root needed for Dhizuku or Shizuku)
 • Automatic privilege detection (Sui > Root > Dhizuku > Shizuku)
 • Configurable feature control (Wi-Fi, Bluetooth, Mobile Data, Location, NFC, Camera, Microphone, Airplane Mode, Battery Saver)
 • Customizable timing delays (0-60 seconds granular, 2 minutes, or 5 minutes)
@@ -16,6 +16,7 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Advanced multi-tier Bluetooth connection detection
 • Background service for persistent monitoring
 • Quick Settings tile integration
+• Home screen widget
 
 <b>Privacy Features Controlled:</b>
 
@@ -29,11 +30,11 @@ Privacy Flip automatically manages your device's privacy features based on scree
 • Airplane Mode - Enable on lock (opt-in, disables all radios at once)
 • Battery Saver - Enable on lock (opt-in, reduces background activity)
 
-Note: Camera and microphone ignore custom delays and trigger immediately, due to Android limitations. Microphone can skip this during a real call if enabled in settings; camera cannot detect active use, so it always triggers immediately
+Note: Camera and microphone ignore custom delays and trigger immediately, due to Android limitations. Microphone can skip this during a phone or VoIP call if enabled in settings; camera cannot detect active use, so it always triggers immediately
 
 <b>Requirements:</b>
 
-• Android 7.0+ (API level 24)
+• Android 8.0+ (API level 26)
 • Android 12+ (API level 31) for camera/microphone features
 
 <b>Choose your privilege method:</b>
@@ -65,6 +66,6 @@ way to switch those. Use Root or Shizuku for them.
 <b>Privacy & Security:</b>
 
 • Zero telemetry - Nothing is sent to us or any third party
-• Settings stay on your device, and in your own Android backup if you have one turned on - never sent anywhere else
+• Settings and the app's own lock state stay on your device, and in your own Android backup if you have one turned on - never sent anywhere else
 • No network permissions - App cannot access internet
 • Open source - https://github.com/dorumrr/privacyFlip

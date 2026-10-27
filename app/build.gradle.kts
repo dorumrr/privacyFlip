@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.dorumrr.privacyflip"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
 
         versionCode = 36

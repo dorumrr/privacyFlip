@@ -1382,4 +1382,156 @@ class PrivacyActionWorkerDoWorkTest {
         runBlocking { realLock.doWork() }
         assertEquals("a real lock still holds it", true, flagWhileStarting)
     }
+
+    @Test
+    fun `with protection off a lock touches nothing`() {
+        prefs.isGlobalPrivacyEnabled = false
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.AIRPLANE_MODE, true)
+        prefs.setFeatureDisableOnLock(PrivacyFeature.CAMERA, true)
+        recordLock()
+
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        lock.states[PrivacyFeature.AIRPLANE_MODE] = FeatureState.DISABLED
+        lock.states[PrivacyFeature.CAMERA] = FeatureState.ENABLED
+        runBlocking { lock.doWork() }
+
+        assertTrue("nothing switched off, the camera included", lock.disabled.isEmpty())
+        assertTrue("nothing switched on", lock.enabled.isEmpty())
+        assertTrue("and nothing recorded as switched off", prefs.featuresOffSinceUnlock.isEmpty())
+    }
+
+    @Test
+    fun `protection turned off while locked still lets the unlock undo what the lock did`() {
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        lockTurningOff(PrivacyFeature.WIFI)
+        prefs.isGlobalPrivacyEnabled = false
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.screenLocked = false
+        unlock.states[PrivacyFeature.WIFI] = FeatureState.DISABLED
+        runBlocking { unlock.doWork() }
+
+        assertEquals("the radio this app turned off comes back", listOf(PrivacyFeature.WIFI), unlock.enabled)
+    }
+
+    @Test
+    fun `an unlock that stops early keeps the record, so the next unlock still restores`() {
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        lockTurningOff(PrivacyFeature.WIFI)
+        prefs.isGlobalPrivacyEnabled = false
+
+        recordUnlock()
+        val unprivileged = worker(isLocking = false)
+        unprivileged.privileged = false
+        runBlocking { unprivileged.doWork() }
+        assertEquals("nothing was restored, so nothing is forgotten", setOf(PrivacyFeature.WIFI), prefs.featuresOffSinceUnlock)
+
+        recordUnlock()
+        val next = worker(isLocking = false)
+        next.screenLocked = false
+        runBlocking { next.doWork() }
+        assertEquals(listOf(PrivacyFeature.WIFI), next.enabled)
+    }
+
+    @Test
+    fun `a feature whose restore failed stays on the record for the next unlock`() {
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        lockTurningOff(PrivacyFeature.WIFI)
+        prefs.isGlobalPrivacyEnabled = false
+
+        recordUnlock()
+        val failed = worker(isLocking = false)
+        failed.screenLocked = false
+        failed.enableSucceeds = false
+        runBlocking { failed.doWork() }
+        assertEquals(setOf(PrivacyFeature.WIFI), prefs.featuresOffSinceUnlock)
+
+        recordUnlock()
+        val next = worker(isLocking = false)
+        next.screenLocked = false
+        runBlocking { next.doWork() }
+        assertEquals(listOf(PrivacyFeature.WIFI), next.enabled)
+        assertTrue("restored now, so the record is clear", prefs.featuresOffSinceUnlock.isEmpty())
+    }
+
+    @Test
+    fun `a lock during an unlock keeps the record, so the camera it switched off again comes back`() {
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.CAMERA, true)
+        lockTurningOff(PrivacyFeature.CAMERA)
+        prefs.isGlobalPrivacyEnabled = false
+
+        recordUnlock()
+        val overtaken = worker(isLocking = false)
+        overtaken.screenLocked = false
+        // A newer lock lands while this unlock runs and switches the camera off again.
+        overtaken.onConfirmPrivilege = { recordLock() }
+        runBlocking { overtaken.doWork() }
+        assertTrue("the overtaken unlock switched nothing on", overtaken.enabled.isEmpty())
+        assertEquals(setOf(PrivacyFeature.CAMERA), prefs.featuresOffSinceUnlock)
+
+        recordUnlock()
+        val next = worker(isLocking = false)
+        next.screenLocked = false
+        runBlocking { next.doWork() }
+        assertEquals(listOf(PrivacyFeature.CAMERA), next.enabled)
+    }
+
+    @Test
+    fun `with protection off a lock during the unlock does not keep what the unlock restored`() {
+        // That lock switches nothing, so keeping WIFI would let a later unlock undo the user's own switch-off.
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.WIFI, true)
+        lockTurningOff(PrivacyFeature.WIFI)
+        prefs.isGlobalPrivacyEnabled = false
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.screenLocked = false
+        unlock.beforeEnable = { recordLock() }
+        runBlocking { unlock.doWork() }
+
+        assertEquals(listOf(PrivacyFeature.WIFI), unlock.enabled)
+        assertTrue("restored, so off the record, was: ${prefs.featuresOffSinceUnlock}", prefs.featuresOffSinceUnlock.isEmpty())
+    }
+
+    @Test
+    fun `with protection off a reblock touches nothing`() {
+        prefs.isGlobalPrivacyEnabled = false
+        prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
+        prefs.addFeaturesOffSinceUnlock(setOf(PrivacyFeature.WIFI))
+        recordLock()
+
+        val reblock = worker(isLocking = true, isDeviceLocked = true, trigger = PrivacyActionWork.TRIGGER_REBLOCK)
+        reblock.states[PrivacyFeature.WIFI] = FeatureState.ENABLED
+        runBlocking { reblock.doWork() }
+
+        assertTrue("protection is off, so the user's Wi-Fi stays on", reblock.disabled.isEmpty())
+        assertTrue(reblock.enabled.isEmpty())
+        assertEquals("the record stays for the next unlock", setOf(PrivacyFeature.WIFI), prefs.featuresOffSinceUnlock)
+    }
+
+    @Test
+    fun `with protection off an unlock leaves alone what this app did not do`() {
+        // Without this limit, every unlock with protection off would switch radios on and modes off.
+        prefs.isGlobalPrivacyEnabled = false
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.BLUETOOTH, true)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.AIRPLANE_MODE, true)
+        prefs.setFeatureEnableOnUnlock(PrivacyFeature.BATTERY_SAVER, true)
+        prefs.setFeatureEnabledByApp(PrivacyFeature.BATTERY_SAVER, true)
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.screenLocked = false
+        unlock.states[PrivacyFeature.BLUETOOTH] = FeatureState.DISABLED
+        runBlocking { unlock.doWork() }
+
+        assertTrue("Bluetooth was off by the user's hand, was: ${unlock.enabled}", unlock.enabled.isEmpty())
+        assertEquals(
+            "only the mode this app turned on is turned off",
+            listOf(PrivacyFeature.BATTERY_SAVER),
+            unlock.disabled
+        )
+    }
 }

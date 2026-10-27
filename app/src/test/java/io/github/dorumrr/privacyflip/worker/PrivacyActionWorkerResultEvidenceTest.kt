@@ -108,7 +108,7 @@ class PrivacyActionWorkerResultEvidenceTest {
     fun `a mode whose state could not be read is never claimed by an enable`() {
         // An enable reports success when its own read-back is unreadable, so "it worked" here is
         // not evidence the mode was off first. Claiming would take a setting of the user's and
-        // switch it off at the next unlock, past "Only if not manually set".
+        // switch it off at the next unlock, past "Only if Privacy Flip turned it on".
         listOf(FeatureState.UNKNOWN, FeatureState.ERROR, FeatureState.UNAVAILABLE, null).forEach { state ->
             assertFalse(
                 "$state must not be claimed",

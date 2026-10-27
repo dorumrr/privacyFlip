@@ -19,9 +19,13 @@ class PrivilegeManager private constructor(private val context: Context) {
         private const val TAG = "privacyFlip-PrivilegeManager"
 
         // Detection is skipped while the executor we already have still works. It used to run on
-        // every lock AND every unlock, building a fresh executor each time.
-        internal fun shouldRedetect(hasExecutor: Boolean, currentStillAvailable: Boolean): Boolean =
-            !hasExecutor || !currentStillAvailable
+        // every lock AND every unlock, building a fresh executor each time. A denied su is held only
+        // as the last resort, so a Dhizuku or Shizuku started since must still be found.
+        internal fun shouldRedetect(
+            hasExecutor: Boolean,
+            currentStillAvailable: Boolean,
+            holdsDeniedRoot: Boolean
+        ): Boolean = !hasExecutor || !currentStillAvailable || holdsDeniedRoot
     }
 
     private val logManager = LogManager.getInstance(context)
@@ -48,7 +52,10 @@ class PrivilegeManager private constructor(private val context: Context) {
             // not only on the ones that re-detect.
             releaseStaleDhizukuBlocks()
 
-            if (!shouldRedetect(existing != null, stillAvailable)) {
+            val holdsDeniedRoot = stillAvailable && currentMethod == PrivilegeMethod.ROOT &&
+                existing?.isPermissionGranted() == false
+
+            if (!shouldRedetect(existing != null, stillAvailable, holdsDeniedRoot)) {
                 return@withLock currentMethod
             }
 
@@ -136,16 +143,19 @@ class PrivilegeManager private constructor(private val context: Context) {
         }
 
         var rootExecutor: PrivilegeExecutor? = null
+        var rootDenied = false
         try {
             rootExecutor = RootExecutor()
             rootExecutor.initialize(context)
 
-            if (rootExecutor.isAvailable()) {
+            val suInstalled = rootExecutor.isAvailable()
+            if (suInstalled && rootExecutor.isPermissionGranted()) {
                 logManager.d(TAG, "Root detected and available")
                 adopt(rootExecutor)
                 return PrivilegeMethod.ROOT
             }
-            logManager.d(TAG, "Root not available (su binary not found)")
+            rootDenied = suInstalled
+            logManager.d(TAG, if (rootDenied) "Root installed but not granted" else "Root not available (su binary not found)")
             discard(rootExecutor)
         } catch (e: CancellationException) {
             discard(rootExecutor)
@@ -198,6 +208,13 @@ class PrivilegeManager private constructor(private val context: Context) {
                 logManager.d(TAG, "Shizuku detection failed: ${e.message}")
                 discard(shizukuExecutor)
             }
+        }
+
+        // Last, so a working Dhizuku or Shizuku wins over a su the user said no to.
+        if (rootDenied) {
+            val denied = RootExecutor().also { it.initialize(context) }
+            adopt(denied)
+            return PrivilegeMethod.ROOT
         }
 
         logManager.w(TAG, "No privilege method available")

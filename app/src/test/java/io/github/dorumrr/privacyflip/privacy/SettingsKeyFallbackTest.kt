@@ -162,17 +162,6 @@ class SettingsKeyFallbackTest {
     }
 
     @Test
-    @Config(sdk = [25])
-    fun `battery saver on Android 7 switches through the key, where the power command does nothing`() = runBlocking {
-        val d = FakeDeviceShell()
-
-        assertTrue(Saver(d).enable().success)
-        assertTrue(d.saverOn)
-        assertTrue(Saver(d).disable().success)
-        assertFalse(d.saverOn)
-    }
-
-    @Test
     @Config(sdk = [26])
     fun `battery saver state on Android 8 comes from the power service`() = runBlocking {
         val d = FakeDeviceShell()

@@ -766,10 +766,8 @@ class MainViewModel : ViewModel() {
     fun toggleGlobalPrivacy(enabled: Boolean) {
         preferenceManager.isGlobalPrivacyEnabled = enabled
         updateUiState { it.copy(isGlobalPrivacyEnabled = enabled) }
-        // Note: Turning off global privacy simply stops monitoring lock/unlock events.
-        // It does NOT modify current feature states (WiFi, Bluetooth, etc.).
-        // This respects user's current connectivity configuration.
-        
+        // Switches nothing now. Off stops lock actions, but the next unlock still undoes what the last lock did.
+
         // Update widgets to reflect new state
         context?.let { PrivacyFlipWidget.updateAllWidgets(it) }
     }

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
-import io.github.dorumrr.privacyflip.util.PreferenceManager
 import rikka.shizuku.Shizuku
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -56,11 +55,8 @@ object ShizukuRecoveryWatcher {
         val ctx = appContext ?: return
         Log.i(TAG, "Shizuku is back")
         try {
-            // The service re-detects privilege on its own start, so it does not need asking here
-            // whether permission came back with it.
-            if (PreferenceManager.getInstance(ctx).isGlobalPrivacyEnabled) {
-                PrivacyMonitorService.start(ctx)
-            }
+            // Whatever the protection setting: with it off, an unlock still restores what the last lock did.
+            PrivacyMonitorService.start(ctx)
             ctx.sendBroadcast(Intent(STATUS_CHANGED_ACTION))
         } catch (e: Exception) {
             Log.e(TAG, "Error handling Shizuku returning: ${e.message}")

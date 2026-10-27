@@ -4,7 +4,7 @@
 
 **PrivacyFlip** automatically manages your Android device's privacy features based on lock/unlock state. When you lock your device, it can disable **Wi-Fi**, **Bluetooth**, **mobile data**, **location** services, **NFC**, and even **camera/microphone sensors**. When you unlock, it intelligently restores the features you want back on.
 
-**Works with Shizuku or Root** - Choose your preferred privilege method!
+**Works with Sui, Root, Dhizuku or Shizuku** - Choose your preferred privilege method!
 
 <div>
   <a href="https://f-droid.org/en/packages/io.github.dorumrr.privacyflip/" target="_blank" rel="noopener"><img height="50" src="https://f-droid.org/badge/get-it-on.png"></a> 
@@ -22,9 +22,9 @@
 ## 🔒 Features
 
 ### **Automatic Privacy Control**
-- **Lock Detection**: Instantly disables privacy features when screen locks
-- **Unlock Detection**: Waits for proper authentication (not just screen-on)
-- **Smart Restoration**: Configurable feature re-enabling on unlock
+- **Lock Detection**: Disables privacy features when the screen locks, after your lock delay (camera and microphone at once)
+- **Unlock Detection**: With a PIN, pattern or password, waits until you unlock it. With no secure lock, turning the screen on counts as unlocking
+- **Smart Restoration**: Configurable feature re-enabling on unlock. With Dhizuku, some features cannot follow this setting (see Option 3)
 
 ### **Privacy Features Controlled**
 - 📶 **Wi-Fi** - Disable/enable wireless connectivity
@@ -39,14 +39,15 @@
 
 ### **Advanced Features**
 - **Smart Disable Options**:
-  - **"Only if unused/not connected"** - Don't disable WiFi, Bluetooth, or Location if actively in use, or Mobile Data while media is playing
+  - **"Only if unused/not connected"** - Don't disable WiFi, Bluetooth, or Location if actively in use, or Mobile Data while media is playing. The microphone is not disabled during a phone or VoIP call. While a Wi-Fi hotspot is on, Wi-Fi, mobile data and Airplane Mode are always left alone
   - **"Only if not already enabled"** - Prevent connection resets by not re-enabling features that are already on
-  - **"Only if not manually set"** - Respect manually enabled protection modes on unlock
+  - **"Only if Privacy Flip turned it on"** - On unlock, turn Airplane Mode or Battery Saver off only if Privacy Flip turned it on
 
-- **App Exemptions** - Exclude specific apps from privacy actions when in foreground
+- **App Exemptions** - If an exempt app is in front when the phone locks, nothing is disabled. Unlock always runs. Needs Usage Access
 - **NFC Auto-Retry** - Opt-in: if a payment or wallet app turns NFC back on right after Privacy Flip turns it off, retry disabling it
-- **Keep Off While Locked** - Opt-in: if Wi-Fi, Bluetooth, mobile data, location or NFC is switched back on before you unlock (for example from Quick Settings), or Airplane Mode or Battery Saver is switched off, Privacy Flip runs its lock actions again, with the same "only if" rules; camera and microphone cannot change while locked
+- **Keep Off While Locked** - Opt-in: if Wi-Fi, Bluetooth, mobile data, location or NFC is switched back on before you unlock (for example from Quick Settings), or Airplane Mode or Battery Saver is switched off, Privacy Flip runs its lock actions again, with the same "only if" rules; camera and microphone cannot change while locked. It puts back only what Privacy Flip itself turned off, at most 5 times per lock, and only while the background service runs
 - **Accessibility Service** - Experimental, opt-in: an extra lock and unlock signal from the lock screen window (requires Accessibility permission). It does not make camera and microphone work with an instant power-button lock: Android refuses that once the phone is locked
+- **Quick Settings tile and home screen widget** - Turn protection on and off. Turning it off needs an unlocked phone
 - **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 
 ### **Customizable Timing**
@@ -57,7 +58,7 @@
 
 ## 📱 Requirements
 
-**Minimum:** Android 7.0+ (API level 24)
+**Minimum:** Android 8.0+ (API level 26)
 **Camera/Microphone Features:** Android 12+ (API level 31)
 
 **Choose your privilege method:**
@@ -81,6 +82,7 @@
   NFC (Android 15+). Below Android 9 a Dhizuku setup can switch nothing at all.
 - **Cannot do**: WiFi, Mobile Data, Airplane Mode, Battery Saver. Dhizuku shares Device Owner
   rights, and Android gives a Device Owner no way to switch those. Use Root or Shizuku for them.
+- **At unlock**: NFC, camera and microphone always come back on. Bluetooth never does: turn it on yourself
 
 ### **Option 4: Sui** (Best of both worlds)
 - **Rooted device** with Magisk installed

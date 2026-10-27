@@ -145,7 +145,7 @@
 
     </LinearLayout>
 
-    <!-- "Only if not manually set" option for protection modes -->
+    <!-- "Only if Privacy Flip turned it on" option for protection modes -->
     <LinearLayout
         android:id="@+id/onlyIfNotManualContainer"
         android:layout_width="match_parent"

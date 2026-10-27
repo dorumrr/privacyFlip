@@ -303,9 +303,12 @@ open class PrivacyActionWorker(
         // the normal path) has already run - see that finally's own comment for why this is
         // needed even when the clear happens on the normal path.
         var ownSensorGuardCleared = isReblock
-        // Cleared in finally, not here: a cancelled unlock leaves it to the unlock that replaced it.
+        // Cleared in finally, and only by an unlock that finished: one cancelled or stopped early leaves
+        // it to the next unlock, which with protection off restores from nothing else.
         val offSinceLastUnlock = if (isLocking) emptySet() else preferenceManager.featuresOffSinceUnlock
-        var cancelled = false
+        val unlockSeenAtMillis = lastUnlockAtMillis
+        var unlockFinished = false
+        val notRestored = mutableSetOf<PrivacyFeature>()
         try {
             val isDeviceLocked = inputData.getBoolean(PrivacyActionWork.KEY_IS_DEVICE_LOCKED, false)
             val trigger = inputData.getString(PrivacyActionWork.KEY_TRIGGER) ?: "unknown"
@@ -333,7 +336,7 @@ open class PrivacyActionWorker(
             )
 
             val isGlobalPrivacyEnabled = preferenceManager.isGlobalPrivacyEnabled
-            if (!isGlobalPrivacyEnabled) {
+            if (!isGlobalPrivacyEnabled && isLocking) {
                 logDebug("🚫 Global privacy is disabled - skipping all privacy actions")
                 debugNotifier.notifyGlobalPrivacyDisabled()
                 return Result.success()
@@ -671,7 +674,9 @@ open class PrivacyActionWorker(
                 }
 
             } else {
-                val featuresToEnable = configManager.getFeaturesToEnableOnUnlock()
+                val featuresToEnable = configManager.getFeaturesToEnableOnUnlock().let {
+                    if (isGlobalPrivacyEnabled) it else restoredWithProtectionOff(it, offSinceLastUnlock)
+                }
 
                 if (featuresToEnable.isNotEmpty()) {
                     logDebug("Enabling features on unlock: ${featuresToEnable.map { it.displayName }}")
@@ -693,8 +698,8 @@ open class PrivacyActionWorker(
                     val sensorFeatureSet = PrivacyFeature.getSensorFeatures()
                     val systemModeFeatureSet = PrivacyFeature.getSystemModeFeatures()
                     val sensorFeatures = featuresToEnable.filter { it in sensorFeatureSet }
-                    val protectionModes = featuresToEnable.filter { it in systemModeFeatureSet }
-                    val regularFeatures = featuresToEnable.filter {
+                    var protectionModes = featuresToEnable.filter { it in systemModeFeatureSet }
+                    var regularFeatures = featuresToEnable.filter {
                         it !in sensorFeatureSet && it !in systemModeFeatureSet
                     }
 
@@ -735,6 +740,7 @@ open class PrivacyActionWorker(
                           if (filteredSensorFeatures.isNotEmpty() &&
                               isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
                               logDebug("⚠️ A newer lock was recorded since this unlock - skipping sensor enable")
+                              notRestored += filteredSensorFeatures
                               debugNotifier.notifyFeatureSkipped(
                                   filteredSensorFeatures.map { it.displayName }.joinToString(", "),
                                   "locked since this unlock cycle started"
@@ -742,6 +748,7 @@ open class PrivacyActionWorker(
                           } else if (filteredSensorFeatures.isNotEmpty()) {
                               logDebug("⚡ Enabling sensors immediately (no delay): ${filteredSensorFeatures.map { it.displayName }}")
                               val sensorResults = enableFeatures(filteredSensorFeatures.toSet())
+                              notRestored += sensorResults.filter { !it.success }.map { it.feature }
                               processResults(sensorResults, filteredSensorFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                           }
                         }
@@ -766,11 +773,10 @@ open class PrivacyActionWorker(
                                 return Result.success()
                             }
 
-                            // Re-check global privacy setting after delay
                             if (!preferenceManager.isGlobalPrivacyEnabled) {
-                                logDebug("🚫 Global privacy disabled during delay - skipping enable action")
-                                debugNotifier.notifyActionCancelled("Global privacy disabled during delay")
-                                return Result.success()
+                                logDebug("🚫 Global privacy disabled during delay - restoring only what this app turned off")
+                                regularFeatures = restoredWithProtectionOff(regularFeatures, offSinceLastUnlock)
+                                protectionModes = restoredWithProtectionOff(protectionModes, offSinceLastUnlock)
                             }
                         }
 
@@ -815,6 +821,7 @@ open class PrivacyActionWorker(
                             if (filteredRegularFeatures.isNotEmpty()) {
                                 logDebug("🔓 Enabling regular features: ${filteredRegularFeatures.map { it.displayName }}")
                                 val regularResults = enableFeatures(filteredRegularFeatures.toSet())
+                                notRestored += regularResults.filter { !it.success }.map { it.feature }
                                 processResults(regularResults, filteredRegularFeatures, "🔓", "enabled", "Re-enabled", isLockCycle = false, didEnable = true)
                             }
                         }
@@ -863,12 +870,12 @@ open class PrivacyActionWorker(
                 }
                 // Last, so nothing the user waits for waits on its status read.
                 logFeaturesBackOnSinceLock(offSinceLastUnlock, featuresToEnable)
+                unlockFinished = true
             }
 
             return Result.success()
 
         } catch (e: kotlinx.coroutines.CancellationException) {
-            cancelled = true
             // Work was cancelled (e.g., screen state changed during delay)
             // This is expected behavior, not an error
             logDebug("⚠️ Privacy action cancelled (screen state changed)")
@@ -914,8 +921,23 @@ open class PrivacyActionWorker(
                 }
             }
             // Only what this unlock read, so a feature first recorded after that read waits for the next unlock.
-            if (!isLocking && !cancelled) preferenceManager.removeFeaturesOffSinceUnlock(offSinceLastUnlock)
+            // A lock since this unlock began may have switched a restored feature off again, so then nothing is
+            // cleared; with protection off a lock switches nothing, so it cannot have.
+            val relockedWithProtection = preferenceManager.isGlobalPrivacyEnabled &&
+                isSupersededByFresherOppositeAction(lastLockAtMillis, unlockSeenAtMillis)
+            if (unlockFinished && !relockedWithProtection) {
+                preferenceManager.removeFeaturesOffSinceUnlock(offSinceLastUnlock - notRestored)
+            }
         }
+    }
+
+    // With protection off an unlock only undoes what this app did, never what the user set up by hand.
+    private fun restoredWithProtectionOff(
+        features: List<PrivacyFeature>,
+        offSinceLastUnlock: Set<PrivacyFeature>
+    ): List<PrivacyFeature> = features.filter {
+        if (it in PrivacyFeature.getSystemModeFeatures()) preferenceManager.getFeatureEnabledByApp(it)
+        else it in offSinceLastUnlock
     }
 
     // An unlock recorded since this lock may already have read the record, so an addition now would outlive it.

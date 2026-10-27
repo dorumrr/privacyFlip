@@ -1,6 +1,5 @@
 package io.github.dorumrr.privacyflip.privacy
 
-import android.os.Build
 import io.github.dorumrr.privacyflip.data.*
 import io.github.dorumrr.privacyflip.root.RootManager
 
@@ -13,12 +12,11 @@ open class BatterySaverToggle(rootManager: RootManager) : BasePrivacyToggle(root
     override val disableCommands = commandsFor(0)
 
     // The power command first: on a charger Android refuses it without touching low_power, while a
-    // written low_power=1 stays armed. Before Android 8 the command is a silent no-op, so the key only.
-    private fun commandsFor(mode: Int): List<CommandSet> {
-        val key = CommandSet("settings put global low_power $mode", description = "Settings database")
-        if (Build.VERSION.SDK_INT < 26) return listOf(key)
-        return listOf(CommandSet("cmd power set-mode $mode", description = "Power command"), key)
-    }
+    // written low_power=1 stays armed.
+    private fun commandsFor(mode: Int): List<CommandSet> = listOf(
+        CommandSet("cmd power set-mode $mode", description = "Power command"),
+        CommandSet("settings put global low_power $mode", description = "Settings database")
+    )
 
     // The power service's own state: "Enabled=" under the state machine from Android 9, "mLowPowerModeEnabled=" on 8.
     // The key last, for a backend that may not dump services: an unreadable enable is never claimed, so never undone.

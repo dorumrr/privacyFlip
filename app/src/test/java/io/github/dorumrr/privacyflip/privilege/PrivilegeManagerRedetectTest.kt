@@ -23,7 +23,7 @@ class PrivilegeManagerRedetectTest {
     fun `a working executor is kept, so no new one is built`() {
         assertFalse(
             "re-detecting while the current executor still works is what leaked one per lock cycle",
-            PrivilegeManager.shouldRedetect(hasExecutor = true, currentStillAvailable = true)
+            PrivilegeManager.shouldRedetect(hasExecutor = true, currentStillAvailable = true, holdsDeniedRoot = false)
         )
     }
 
@@ -31,7 +31,7 @@ class PrivilegeManagerRedetectTest {
     fun `an executor that stopped being available is replaced`() {
         assertTrue(
             "root revoked, or the helper stopped: the app has to find that out",
-            PrivilegeManager.shouldRedetect(hasExecutor = true, currentStillAvailable = false)
+            PrivilegeManager.shouldRedetect(hasExecutor = true, currentStillAvailable = false, holdsDeniedRoot = false)
         )
     }
 
@@ -39,7 +39,7 @@ class PrivilegeManagerRedetectTest {
     fun `with no executor at all, detection must run`() {
         assertTrue(
             "first run of the process, or after everything was torn down",
-            PrivilegeManager.shouldRedetect(hasExecutor = false, currentStillAvailable = false)
+            PrivilegeManager.shouldRedetect(hasExecutor = false, currentStillAvailable = false, holdsDeniedRoot = false)
         )
     }
 
@@ -48,7 +48,15 @@ class PrivilegeManagerRedetectTest {
         // Guards the order of the two conditions: with nothing held, what the last reading said
         // cannot matter.
         assertTrue(
-            PrivilegeManager.shouldRedetect(hasExecutor = false, currentStillAvailable = true)
+            PrivilegeManager.shouldRedetect(hasExecutor = false, currentStillAvailable = true, holdsDeniedRoot = false)
+        )
+    }
+
+    @Test
+    fun `a denied root is held only until something better turns up`() {
+        // A denied su is the last resort: a Shizuku started since, or a grant, must still be found.
+        assertTrue(
+            PrivilegeManager.shouldRedetect(hasExecutor = true, currentStillAvailable = true, holdsDeniedRoot = true)
         )
     }
 }

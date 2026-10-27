@@ -25,7 +25,7 @@
     <string name="battery_saver_info_message">Battery Saver reduces background activity and may limit some app features.\n\nIt does not directly disable radios (WiFi, Bluetooth, etc.) but can affect sync, location accuracy, and background processing.\n\nUseful for extending battery life when locked for long periods.</string>
 
     <!-- Protection Mode Options -->
-    <string name="only_if_not_manually_set">Only if not manually set</string>
+    <string name="only_if_not_manually_set">Only if Privacy Flip turned it on</string>
 
     <!-- Debug Logs -->
     <string name="debug_logs">Debug Logs</string>

@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import io.github.dorumrr.privacyflip.util.PreferenceManager
+import io.github.dorumrr.privacyflip.util.isScreenCurrentlyLocked
 
 /**
  * Handles the widget's tap-to-toggle action only.
@@ -29,6 +31,11 @@ class PrivacyFlipWidgetToggleReceiver : BroadcastReceiver() {
         Log.d(TAG, "Widget toggle privacy action received")
 
         try {
+            // A widget host on the lock screen must not let anyone holding the phone turn protection off.
+            if (PreferenceManager.getInstance(context).isGlobalPrivacyEnabled && isScreenCurrentlyLocked(context, TAG)) {
+                Log.w(TAG, "Phone is locked - not turning protection off from the widget")
+                return
+            }
             PrivacyFlipWidget.toggleGlobalPrivacy(context, TAG)
         } catch (e: Exception) {
             Log.e(TAG, "Error toggling privacy from widget", e)

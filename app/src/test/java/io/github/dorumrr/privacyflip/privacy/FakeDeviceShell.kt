@@ -103,7 +103,6 @@ class FakeDeviceShell(
             command.startsWith("am broadcast") || command.startsWith("am start") ->
                 if (asRoot) ok("Broadcast completed: result=0") else fail("Security exception: Permission Denial", 255)
 
-            command.startsWith("cmd power set-mode ") && sdk < 26 -> ok("No shell command implementation.")
             command.startsWith("cmd power set-mode ") -> {
                 val on = command.endsWith("1")
                 if (!(on && charging) && !saverIgnored) { saverOn = on; global["low_power"] = if (on) "1" else "0" }

@@ -2,12 +2,15 @@ package io.github.dorumrr.privacyflip.privilege
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
+import io.github.dorumrr.privacyflip.util.PreferenceManager
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import rikka.shizuku.Shizuku
 import java.util.concurrent.atomic.AtomicInteger
@@ -93,6 +96,30 @@ class ShizukuRecoveryWatcherTest {
         ShizukuRecoveryWatcher.ensureWatching(context)
 
         assertEquals("the retry succeeded, and nothing after it registered again", 1, registrations.get())
+    }
+
+    @Test
+    fun `Shizuku coming back restarts the monitor service even with protection off`() {
+        // With protection off an unlock still restores what the last lock switched off, and only
+        // the running service sees that unlock.
+        val prefs = PreferenceManager.getInstance(context)
+        val savedProtection = prefs.isGlobalPrivacyEnabled
+        prefs.isGlobalPrivacyEnabled = false
+        try {
+            var listener: Shizuku.OnBinderReceivedListener? = null
+            ShizukuRecoveryWatcher.registrar = { listener = it }
+            ShizukuRecoveryWatcher.ensureWatching(context)
+            shadowOf(context).clearStartedServices()
+
+            listener!!.onBinderReceived()
+
+            assertEquals(
+                PrivacyMonitorService::class.java.name,
+                shadowOf(context).nextStartedService?.component?.className
+            )
+        } finally {
+            prefs.isGlobalPrivacyEnabled = savedProtection
+        }
     }
 
     @Test

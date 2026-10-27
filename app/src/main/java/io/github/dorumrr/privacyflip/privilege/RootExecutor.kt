@@ -5,6 +5,7 @@ import com.topjohnwu.superuser.Shell
 import io.github.dorumrr.privacyflip.util.LogManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class RootExecutor : PrivilegeExecutor {
 
@@ -23,6 +24,9 @@ class RootExecutor : PrivilegeExecutor {
         // one, while dropping a working root shell would tear down live work for nothing.
         internal fun shouldDropCachedShell(hasCachedShell: Boolean, cachedIsRoot: Boolean): Boolean =
             hasCachedShell && !cachedIsRoot
+
+        internal fun suOnPath(path: String?, exists: (File) -> Boolean): Boolean =
+            path.orEmpty().split(':').filter { it.isNotEmpty() }.any { exists(File(it, "su")) }
 
         // The flag below is static, so the lock has to be too. Guarding it with the instance lock
         // let two RootExecutors configure the shell at once.
@@ -58,31 +62,11 @@ class RootExecutor : PrivilegeExecutor {
         }
     }
     
+    // Shell.getShell() runs su, which is what shows the Magisk prompt. A denied su still counts as
+    // available: it is the one state "Check Again" (requestPermission) can recover from.
     override suspend fun isAvailable(): Boolean = withContext(Dispatchers.IO) {
-        // Don't cache the result - always check fresh to avoid stale state
-        // This is important because:
-        // 1. User might grant/deny root permission after first check
-        // 2. Magisk might be installed/uninstalled
-        // 3. Device might be rebooted and root state changed
-
         try {
-            // The most reliable way to check if root is available is to actually try to get a root shell
-            // This will trigger the Magisk prompt if needed, which is exactly what we want
-            //
-            // Shell.getShell() behavior:
-            // - Tries to create a root shell (via 'su')
-            // - If su is available and user grants permission: returns root shell (isRoot = true)
-            // - If su is available but user denies permission: returns non-root shell (isRoot = false)
-            // - If su is not available: returns non-root shell (isRoot = false)
-            //
-            // This approach:
-            // - Works on all devices and Android versions (libsu handles compatibility)
-            // - Works on modern Magisk setups (su in any location)
-            // - Works on custom ROMs with non-standard su locations
-            // - Triggers Magisk prompt at the right time (during availability check)
-            // - Most compatible solution recommended by libsu author
-            val shell = Shell.getShell()
-            return@withContext shell.isRoot
+            return@withContext Shell.getShell().isRoot || suOnPath(System.getenv("PATH")) { it.exists() }
         } catch (e: Exception) {
             logManager?.e(TAG, "Error checking root availability: ${e.message}")
             return@withContext false

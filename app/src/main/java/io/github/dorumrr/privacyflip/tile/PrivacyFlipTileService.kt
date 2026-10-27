@@ -12,6 +12,14 @@ class PrivacyFlipTileService : BaseTileService() {
     override val serviceName = "PrivacyFlip Tile Service"
 
     override suspend fun executeAction() {
+        // Quick Settings opens on the lock screen, where turning protection off would undo it for anyone holding the phone.
+        if (preferenceManager.isGlobalPrivacyEnabled && isLocked) {
+            unlockAndRun {
+                PrivacyFlipWidget.toggleGlobalPrivacy(this, tag)
+                updateTileState()
+            }
+            return
+        }
         PrivacyFlipWidget.toggleGlobalPrivacy(this, tag)
     }
 

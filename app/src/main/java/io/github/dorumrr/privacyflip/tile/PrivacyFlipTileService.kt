@@ -27,7 +27,11 @@ class PrivacyFlipTileService : BaseTileService() {
         val tile = qsTile ?: return
         val isEnabled = preferenceManager.isGlobalPrivacyEnabled
 
-        if (isEnabled) {
+        if (isEnabled && preferenceManager.privilegeMissingReason != null) {
+            tile.state = Tile.STATE_UNAVAILABLE
+            tile.label = "Privacy: no access"
+            tile.contentDescription = "Privacy Flip is on but has no privileged access, so it cannot act. Open the app to fix it."
+        } else if (isEnabled) {
             tile.state = Tile.STATE_ACTIVE
             tile.label = "Privacy ON"
             tile.contentDescription = "Privacy Flip is enabled. Tap to disable."

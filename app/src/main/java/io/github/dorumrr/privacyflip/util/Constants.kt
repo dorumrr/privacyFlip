@@ -7,6 +7,11 @@ object Constants {
         const val NOTIFICATION_ID = 1000
     }
 
+    object AccessNotification {
+        const val CHANNEL_ID = "privacy_access"
+        const val NOTIFICATION_ID = 1001
+    }
+
     object DebugNotification {
         const val CHANNEL_ID = "privacy_debug"
         const val NOTIFICATION_ID_BASE = 2000
@@ -28,6 +33,7 @@ object Constants {
     
     object Preferences {
         const val PRIVACY_SWITCH_PREFS = "privacy_switch_prefs"
+        const val PRIVILEGE_STATE_PREFS = "privilege_state"
 
         const val KEY_GLOBAL_PRIVACY_ENABLED = "global_privacy_enabled"
 
@@ -51,6 +57,7 @@ object Constants {
         const val KEY_ACCESSIBILITY_SERVICE_ENABLED = "accessibility_service_enabled"
 
         const val KEY_SENSORS_LEFT_ON_AT_LAST_LOCK = "sensors_left_on_at_last_lock"
+        const val KEY_PRIVILEGE_MISSING = "privilege_missing"
         const val KEY_FEATURES_OFF_SINCE_UNLOCK = "features_off_since_unlock"
 
         fun getFeatureLockKey(featureName: String): String = "${featureName.lowercase()}_disable_on_lock"

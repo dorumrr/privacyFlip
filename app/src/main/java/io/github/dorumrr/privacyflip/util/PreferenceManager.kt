@@ -199,6 +199,16 @@ class PreferenceManager private constructor(private val context: Context) {
     }
 
     /** Runtime state: the sensors the last lock could not switch off because the phone was already locked. */
+    // Kept out of backup: restored onto another phone it would mark that phone's own notice as already shown.
+    private val privilegeStatePrefs: SharedPreferences by lazy {
+        context.getSharedPreferences(Constants.Preferences.PRIVILEGE_STATE_PREFS, Context.MODE_PRIVATE)
+    }
+
+    // Why the last lock or unlock could not run; null while privileged access works.
+    var privilegeMissingReason: String?
+        get() = privilegeStatePrefs.getString(Constants.Preferences.KEY_PRIVILEGE_MISSING, null)
+        set(value) = privilegeStatePrefs.edit().putString(Constants.Preferences.KEY_PRIVILEGE_MISSING, value).apply()
+
     var sensorsLeftOnAtLastLock: Set<PrivacyFeature>
         get() = getFeatureSet(Constants.Preferences.KEY_SENSORS_LEFT_ON_AT_LAST_LOCK)
         set(value) = putFeatureSet(Constants.Preferences.KEY_SENSORS_LEFT_ON_AT_LAST_LOCK, value)

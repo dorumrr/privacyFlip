@@ -159,12 +159,4 @@ class DebugNotificationHelper private constructor(private val context: Context) 
             "Actions skipped - Global privacy is disabled"
         )
     }
-
-    fun notifyNoPrivilege() {
-        notify(
-            "❌ No Permission",
-            "Cannot execute actions - Root/Shizuku permission not granted",
-            autoDismiss = false
-        )
-    }
 }

@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
+import io.github.dorumrr.privacyflip.util.PrivilegeLossNotice
 
 open class PrivacyActionWorker(
     context: Context,
@@ -214,6 +215,10 @@ open class PrivacyActionWorker(
 
     protected open fun privilegeMethod(): PrivilegeMethod = rootManager.getPrivilegeMethod()
 
+    protected open fun reportPrivilegeMissing(reason: String) = PrivilegeLossNotice.report(applicationContext, reason)
+
+    protected open fun reportPrivilegeBack() = PrivilegeLossNotice.clear(applicationContext)
+
     protected open fun backendCanSwitch(feature: PrivacyFeature): Boolean =
         rootManager.unsupportedReason(feature) == null
 
@@ -335,11 +340,12 @@ open class PrivacyActionWorker(
             val hasPrivilege = confirmPrivilege()
 
             if (!hasPrivilege) {
-                logWarning("Could not confirm privileged access after $PRIVILEGE_CHECK_ATTEMPTS checks - skipping this action")
-                logWarning("If access is already granted, this was a temporary failure rather than a refusal")
-                debugNotifier.notifyNoPrivilege()
+                val missing = PrivilegeLossNotice.reasonFor(privilegeMethod())
+                logWarning("No privileged access after $PRIVILEGE_CHECK_ATTEMPTS checks - skipping this action. $missing")
+                reportPrivilegeMissing(missing)
                 return Result.failure()
             }
+            reportPrivilegeBack()
 
             val configManager = FeatureConfigurationManager(
                 preferenceManager,

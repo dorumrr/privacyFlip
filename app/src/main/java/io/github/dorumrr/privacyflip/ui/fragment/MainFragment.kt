@@ -833,7 +833,7 @@ class MainFragment : Fragment() {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI ->
                         "Sui permission required. Please grant permission when prompted."
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE ->
-                        "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
+                        "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features. Start one of them, then tap 'Check Again'."
                 }
 
                 // Every method gets a control. ROOT used to get none, which left a phone that
@@ -846,12 +846,10 @@ class MainFragment : Fragment() {
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.DHIZUKU -> "GRANT DHIZUKU PERMISSION"
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.SUI -> "GRANT SUI PERMISSION"
                     io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.ROOT -> "CHECK AGAIN"
-                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "INSTALL DHIZUKU/SHIZUKU OR ROOT DEVICE"
+                    io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE -> "CHECK AGAIN"
                 }
-
-                // Disable button if no privilege method is available
-                grantRootButton.isEnabled = privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE
-                grantRootButton.alpha = if (privilegeMethod != io.github.dorumrr.privacyflip.privilege.PrivilegeMethod.NONE) 1.0f else 0.5f
+                grantRootButton.isEnabled = true
+                grantRootButton.alpha = 1.0f
 
             } else {
                 // Privilege granted

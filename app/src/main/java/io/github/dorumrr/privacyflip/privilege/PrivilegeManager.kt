@@ -245,6 +245,11 @@ class PrivilegeManager private constructor(private val context: Context) {
 
     suspend fun requestPermission(): Boolean {
         android.util.Log.d(TAG, "PrivilegeManager.requestPermission() - currentMethod: $currentMethod, calling executor...")
+        if (currentExecutor == null) {
+            // A non-root shell libsu cached earlier would make root look absent to this detection too.
+            RootExecutor.dropStaleNonRootShell(logManager)
+            initialize()
+        }
         val granted = currentExecutor?.requestPermission() ?: false
         android.util.Log.d(TAG, "PrivilegeManager.requestPermission() - executor returned: $granted")
         return granted

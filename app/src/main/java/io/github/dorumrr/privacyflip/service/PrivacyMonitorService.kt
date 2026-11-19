@@ -16,6 +16,7 @@ import io.github.dorumrr.privacyflip.MainActivity
 import io.github.dorumrr.privacyflip.R
 import io.github.dorumrr.privacyflip.receiver.ScreenStateReceiver
 import io.github.dorumrr.privacyflip.util.Constants
+import io.github.dorumrr.privacyflip.util.PreferenceManager
 import io.github.dorumrr.privacyflip.util.ScreenStateReceiverManager
 import io.github.dorumrr.privacyflip.worker.PrivacyActionWorker
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
@@ -45,6 +46,33 @@ class PrivacyMonitorService : Service() {
             }
         }
 
+        // Rebuilt in place, never posted while stopped: an ongoing notice with no service behind it would lie.
+        fun refreshNotification(context: Context) {
+            if (!isServiceRunning) return
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(Constants.ServiceNotification.NOTIFICATION_ID, buildNotification(context))
+        }
+
+        private fun buildNotification(context: Context): Notification {
+            val pendingIntent = PendingIntent.getActivity(
+                context, 0, Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val noAccess = PreferenceManager.getInstance(context).privilegeMissingReason != null
+            return NotificationCompat.Builder(context, Constants.ServiceNotification.CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_privacy_shield)
+                .setContentTitle(if (noAccess) "Privacy Flip cannot act" else "Privacy Flip Active")
+                .setContentText(
+                    if (noAccess) "No privileged access - open Privacy Flip to fix it"
+                    else "Monitoring screen state for privacy actions"
+                )
+                .setContentIntent(pendingIntent)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .build()
+        }
+
         fun stop(context: Context) {
             val intent = Intent(context, PrivacyMonitorService::class.java)
             context.stopService(intent)
@@ -62,9 +90,9 @@ class PrivacyMonitorService : Service() {
         try {
             createNotificationChannel()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(Constants.ServiceNotification.NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                startForeground(Constants.ServiceNotification.NOTIFICATION_ID, buildNotification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
-                startForeground(Constants.ServiceNotification.NOTIFICATION_ID, createNotification())
+                startForeground(Constants.ServiceNotification.NOTIFICATION_ID, buildNotification(this))
             }
             registerScreenStateReceiver()
             reblockWatcher = ReblockWatcher(this).also { it.start() }
@@ -110,24 +138,6 @@ class PrivacyMonitorService : Service() {
             description = "Monitors screen state for privacy actions",
             showBadge = false
         )
-    }
-    
-    private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        return NotificationCompat.Builder(this, Constants.ServiceNotification.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_privacy_shield)
-            .setContentTitle("Privacy Flip Active")
-            .setContentText("Monitoring screen state for privacy actions")
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
     }
     
     private fun registerScreenStateReceiver() {

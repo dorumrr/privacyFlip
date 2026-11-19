@@ -93,6 +93,7 @@ class PrivacyActionWorkerDoWorkTest {
         val lockDelay: Int,
         val unlockDelay: Int,
         val exemptApps: Set<String>,
+        val privilegeMissing: String?,
         val perFeature: Map<PrivacyFeature, Flags>
     ) {
         fun restoreInto(prefs: PreferenceManager) {
@@ -105,6 +106,7 @@ class PrivacyActionWorkerDoWorkTest {
             prefs.lockDelaySeconds = lockDelay
             prefs.unlockDelaySeconds = unlockDelay
             prefs.setExemptApps(exemptApps)
+            prefs.privilegeMissingReason = privilegeMissing
             perFeature.forEach { (feature, f) ->
                 prefs.setFeatureDisableOnLock(feature, f.disableOnLock)
                 prefs.setFeatureEnableOnUnlock(feature, f.enableOnUnlock)
@@ -125,6 +127,7 @@ class PrivacyActionWorkerDoWorkTest {
                 lockDelay = prefs.lockDelaySeconds,
                 unlockDelay = prefs.unlockDelaySeconds,
                 exemptApps = prefs.getExemptApps(),
+                privilegeMissing = prefs.privilegeMissingReason,
                 perFeature = PrivacyFeature.values().associateWith {
                     Flags(
                         disableOnLock = prefs.getFeatureDisableOnLock(it),
@@ -283,6 +286,41 @@ class PrivacyActionWorkerDoWorkTest {
         val all = notifications()
         assertTrue("no notification was captured at all, so nothing may be concluded", all.isNotEmpty())
         return all
+    }
+
+    @Test
+    fun `a lock with no privilege names what is missing, and the next run that has it clears that`() {
+        prefs.privilegeMissingReason = null
+        recordLock()
+        val noAccess = worker(isLocking = true).apply { privileged = false; method = PrivilegeMethod.NONE }
+
+        val result = runBlocking { noAccess.doWork() }
+
+        assertTrue(result is ListenableWorker.Result.Failure)
+        val reason = prefs.privilegeMissingReason
+        assertTrue("was: $reason", reason?.contains("No Root, Sui, Dhizuku or Shizuku access was found") == true)
+        assertTrue(
+            "it must not call a lasting loss temporary",
+            ShadowLog.getLogs().none { it.msg?.contains("temporary failure") == true }
+        )
+        assertTrue(ShadowLog.getLogs().any { it.msg?.contains(reason!!) == true })
+
+        recordUnlock()
+        runBlocking { worker(isLocking = false).doWork() }
+
+        assertEquals("access is back, so the warning must go", null, prefs.privilegeMissingReason)
+    }
+
+    @Test
+    fun `a backend that is set up but not granted is named`() {
+        prefs.privilegeMissingReason = null
+        recordLock()
+        val notGranted = worker(isLocking = true).apply { privileged = false; method = PrivilegeMethod.DHIZUKU }
+
+        runBlocking { notGranted.doWork() }
+
+        val reason = prefs.privilegeMissingReason
+        assertTrue("was: $reason", reason?.contains("Dhizuku") == true && reason.contains("permission"))
     }
 
     @Test
@@ -874,6 +912,8 @@ class PrivacyActionWorkerDoWorkTest {
 
     @Test
     fun `without confirmed privilege nothing is touched`() {
+        prefs.privilegeMissingReason = null
+        prefs.debugNotificationsEnabled = false
         prefs.setFeatureDisableOnLock(PrivacyFeature.WIFI, true)
         prefs.setFeatureDisableOnLock(PrivacyFeature.AIRPLANE_MODE, true)
         recordLock()
@@ -890,9 +930,12 @@ class PrivacyActionWorkerDoWorkTest {
         )
         assertTrue("nothing may be switched on a guess", worker.enabled.isEmpty())
         assertTrue("nor switched off", worker.disabled.isEmpty())
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         assertTrue(
-            "and the user must be told, was: ${notifications()}",
-            notifications().any { it.contains("permission not granted") }
+            "and the user must be told, even with debug notifications off",
+            shadowOf(manager).allNotifications.any {
+                it.channelId == io.github.dorumrr.privacyflip.util.Constants.AccessNotification.CHANNEL_ID
+            }
         )
     }
 

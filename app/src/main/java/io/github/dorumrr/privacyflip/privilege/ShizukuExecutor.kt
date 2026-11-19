@@ -7,6 +7,7 @@ import android.os.IBinder
 import io.github.dorumrr.privacyflip.data.PrivacyFeature
 import io.github.dorumrr.privacyflip.service.PrivacyMonitorService
 import io.github.dorumrr.privacyflip.util.LogManager
+import io.github.dorumrr.privacyflip.util.PrivilegeLossNotice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -260,7 +261,8 @@ class ShizukuExecutor : PrivilegeExecutor {
         }
     }
 
-    private fun onBinderDead() {
+    @androidx.annotation.VisibleForTesting
+    internal fun onBinderDead() {
         logManager?.w(TAG, "Shizuku binder died - service stopped")
         permissionGate.forget()
 
@@ -270,6 +272,8 @@ class ShizukuExecutor : PrivilegeExecutor {
                     // Stop the privacy monitor service since Shizuku is no longer available
                     logManager?.i(TAG, "Stopping PrivacyMonitorService due to Shizuku death")
                     PrivacyMonitorService.stop(ctx)
+                    // With the service stopped no lock runs to report it, and onBinderReceived's restart clears it.
+                    PrivilegeLossNotice.report(ctx, PrivilegeLossNotice.SHIZUKU_STOPPED)
 
                     // Broadcast intent to notify UI to refresh
                     val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)

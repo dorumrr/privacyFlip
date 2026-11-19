@@ -19,6 +19,7 @@ import io.github.dorumrr.privacyflip.util.DebugLogHelper
 import io.github.dorumrr.privacyflip.util.DeviceDetector
 import io.github.dorumrr.privacyflip.util.LogManager
 import io.github.dorumrr.privacyflip.util.PreferenceManager
+import io.github.dorumrr.privacyflip.util.PrivilegeLossNotice
 import io.github.dorumrr.privacyflip.widget.PrivacyFlipWidget
 import io.github.dorumrr.privacyflip.worker.ServiceHealthWorker
 import kotlinx.coroutines.CancellationException
@@ -134,6 +135,7 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (isPrivilegeGranted) {
+                    context?.let { PrivilegeLossNotice.clear(it) }
                     loadPrivacyStatus()
                 }
             } catch (e: Exception) {
@@ -302,6 +304,7 @@ class MainViewModel : ViewModel() {
 
                 if (isRootGranted) {
                     logManager.d(TAG, "requestRootPermission() - Permission granted, loading privacy status...")
+                    context?.let { PrivilegeLossNotice.clear(it) }
                     loadPrivacyStatus()
                 } else {
                     logManager.w(TAG, "requestRootPermission() - Permission NOT granted")
@@ -352,6 +355,7 @@ class MainViewModel : ViewModel() {
                 }
 
                 if (isPrivilegeGranted) {
+                    context?.let { PrivilegeLossNotice.clear(it) }
                     loadPrivacyStatus()
                 }
             } catch (e: Exception) {

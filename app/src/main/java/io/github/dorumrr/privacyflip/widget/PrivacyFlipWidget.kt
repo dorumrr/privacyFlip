@@ -97,7 +97,13 @@ class PrivacyFlipWidget : AppWidgetProvider() {
             context, 0, toggleIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        views.setOnClickPendingIntent(R.id.widget_container, togglePendingIntent)
+        val noAccess = isEnabled && preferenceManager.privilegeMissingReason != null
+        // With no access a tap could only turn protection off; the fix is in the app.
+        val openAppForFix = PendingIntent.getActivity(
+            context, 1, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_container, if (noAccess) openAppForFix else togglePendingIntent)
 
         // Set click listener on icon to open app
         val openAppIntent = Intent(context, MainActivity::class.java)
@@ -108,7 +114,10 @@ class PrivacyFlipWidget : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_icon, openAppPendingIntent)
 
         // Update visual state based on privacy enabled status
-        if (isEnabled) {
+        if (noAccess) {
+            views.setInt(R.id.widget_container, "setBackgroundResource", R.drawable.widget_background_inactive)
+            views.setTextViewText(R.id.widget_text, context.getString(R.string.widget_privacy_no_access))
+        } else if (isEnabled) {
             views.setInt(R.id.widget_container, "setBackgroundResource", R.drawable.widget_background_active)
             views.setTextViewText(R.id.widget_text, context.getString(R.string.widget_privacy_on))
         } else {

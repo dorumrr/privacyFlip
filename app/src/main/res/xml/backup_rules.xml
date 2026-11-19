@@ -5,4 +5,5 @@
     
     <!-- Exclude sensitive data -->
     <exclude domain="sharedpref" path="root_status.xml" />
+    <exclude domain="sharedpref" path="privilege_state.xml" />
 </full-backup-content>

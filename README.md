@@ -47,7 +47,7 @@
 - **NFC Auto-Retry** - Opt-in: if a payment or wallet app turns NFC back on right after Privacy Flip turns it off, retry disabling it
 - **Keep Off While Locked** - Opt-in: if Wi-Fi, Bluetooth, mobile data, location or NFC is switched back on before you unlock (for example from Quick Settings), or Airplane Mode or Battery Saver is switched off, Privacy Flip runs its lock actions again, with the same "only if" rules; camera and microphone cannot change while locked. It puts back only what Privacy Flip itself turned off, at most 5 times per lock, and only while the background service runs
 - **Accessibility Service** - Experimental, opt-in: an extra lock and unlock signal from the lock screen window (requires Accessibility permission). It does not make camera and microphone work with an instant power-button lock: Android refuses that once the phone is locked
-- **Quick Settings tile and home screen widget** - Turn protection on and off. Turning it off needs an unlocked phone
+- **Quick Settings tile and home screen widget** - Turn protection on and off. Turning it off needs an unlocked phone. Both show "no access" when Privacy Flip has lost its privileged access
 - **Advanced Detection** - Multi-tier Bluetooth connection detection prevents unwanted headphone disconnects
 
 ### **Customizable Timing**

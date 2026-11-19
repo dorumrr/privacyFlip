@@ -11,10 +11,10 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 
 ### Behavior:
 - App starts and displays UI
-- **System Requirements card shown** (reddish background). This is the only alert surface; the app has no separate alert card:
-  - **Message:** "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features."
+- **System Requirements card shown** (reddish background):
+  - **Message:** "Privacy Flip requires Dhizuku, Shizuku (for non-rooted devices) or root access (via Magisk or similar) to control privacy features. Start one of them, then tap 'Check Again'."
   - **Privileged Access:** "Not Available/Started"
-  - Action button: "INSTALL DHIZUKU/SHIZUKU OR ROOT DEVICE"
+  - Action button: "CHECK AGAIN" (re-detects; drops a cached non-root root shell first)
   - **Battery Optimization:** Shows current status
   - Action button: "OPEN BATTERY SETTINGS" (if optimization enabled)
 - **Privacy Flip status card:** "Protection Inactive" (toggle disabled)
@@ -24,6 +24,10 @@ PrivacyFlip requires privileged access (Dhizuku, Shizuku, or Root) to control sy
 - `isRootAvailable = false`
 - `isRootGranted = false`
 - All toggles non-interactive
+
+### When a lock or unlock is skipped for lack of access (any case):
+- One "Privacy Flip cannot act" notification naming the missing method or permission, whatever the debug settings; posted again only when the reason changes, removed when access returns
+- Quick Settings tile: unavailable, "Privacy: no access"; widget: "NO ACCESS", tap opens the app; service notification: "Privacy Flip cannot act"
 
 ---
 

@@ -6,6 +6,7 @@
         
         <!-- Exclude sensitive data -->
         <exclude domain="sharedpref" path="root_status.xml" />
+        <exclude domain="sharedpref" path="privilege_state.xml" />
     </cloud-backup>
     
     <device-transfer>
@@ -14,5 +15,6 @@
         
         <!-- Exclude sensitive data -->
         <exclude domain="sharedpref" path="root_status.xml" />
+        <exclude domain="sharedpref" path="privilege_state.xml" />
     </device-transfer>
 </data-extraction-rules>

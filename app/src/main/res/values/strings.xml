@@ -10,6 +10,7 @@
     <string name="widget_description">Quick privacy toggle</string>
     <string name="widget_privacy_on">ACTIVE</string>
     <string name="widget_privacy_off">OFF</string>
+    <string name="widget_privacy_no_access">NO ACCESS</string>
 
     <!-- Camera & Microphone Info -->
     <!-- Android 11 and below. The Android 12+ wording, which explains the lock-delay steps, is

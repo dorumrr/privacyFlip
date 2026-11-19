@@ -1,0 +1,7 @@
+- No privileged access now shows a notification, and "no access" on tile, widget and service
+- "Check Again" works when no root, Shizuku, Sui or Dhizuku is found
+- Shizuku or Sui stopping is reported, and clears when it is back
+- The log says why Privacy Flip last stopped, to find missed locks
+- Airplane Mode info: it overrides "Only if not connected"
+- Each protection mode re-checks the lock state before it switches
+- Clearer lock and unlock log lines

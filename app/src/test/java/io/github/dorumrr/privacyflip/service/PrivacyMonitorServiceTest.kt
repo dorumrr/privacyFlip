@@ -1,6 +1,8 @@
 package io.github.dorumrr.privacyflip.service
 
+import android.app.ActivityManager
 import android.app.Application
+import android.app.ApplicationExitInfo
 import android.app.KeyguardManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -18,6 +20,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowActivityManager
+import org.robolectric.shadows.ShadowLog
 
 /**
  * Proves isScreenCurrentlyLocked() must fail CLOSED (assume still locked) when reading real lock
@@ -102,5 +106,45 @@ class PrivacyMonitorServiceTest {
         startBehind(keyguardShowing = true, needsCredential = true)
 
         assertEquals("one catch-up lock job, marked, since Android would refuse", listOf<Any?>(true), catchUpLockFlags())
+    }
+
+    @Test
+    fun `a service start logs why Privacy Flip last stopped, once per exit`() {
+        // A lock missed while the process was gone leaves no line of its own; Android keeps why it ended.
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        shadowOf(activityManager).addApplicationExitInfo(
+            ShadowActivityManager.ApplicationExitInfoBuilder.newBuilder()
+                .setReason(ApplicationExitInfo.REASON_LOW_MEMORY)
+                .setImportance(ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE)
+                .setTimestamp(System.currentTimeMillis())
+                .build()
+        )
+        ShadowLog.clear()
+
+        Robolectric.buildService(PrivacyMonitorService::class.java).create().get()
+        Robolectric.buildService(PrivacyMonitorService::class.java).create().get()
+
+        val lines = ShadowLog.getLogs().mapNotNull { it.msg }.filter { it.startsWith("Last time Privacy Flip stopped") }
+        assertEquals("one line for one exit, was: $lines", 1, lines.size)
+        assertTrue("it names the reason, was: $lines", lines.single().contains("low memory"))
+        assertTrue("and what it was doing, was: $lines", lines.single().contains("foreground service"))
+
+        // A newer exit is a new line, worded for what it was.
+        shadowOf(activityManager).addApplicationExitInfo(
+            ShadowActivityManager.ApplicationExitInfoBuilder.newBuilder()
+                .setReason(ApplicationExitInfo.REASON_FREEZER)
+                .setImportance(ActivityManager.RunningAppProcessInfo.IMPORTANCE_TOP_SLEEPING)
+                .setDescription("frozen too long")
+                .setTimestamp(System.currentTimeMillis() + 1_000)
+                .build()
+        )
+        Robolectric.buildService(PrivacyMonitorService::class.java).create().get()
+
+        val all = ShadowLog.getLogs().mapNotNull { it.msg }.filter { it.startsWith("Last time Privacy Flip stopped") }
+        assertEquals("a second exit is reported too, was: $all", 2, all.size)
+        val newer = all.last()
+        assertTrue("killed, not merely frozen, was: $newer", newer.contains("killed while frozen"))
+        assertTrue("top app asleep is not cached, was: $newer", newer.contains("the top app with the screen off"))
+        assertTrue("the system's own words are kept, was: $newer", newer.contains("\"frozen too long\""))
     }
 }

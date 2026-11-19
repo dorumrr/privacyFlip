@@ -86,6 +86,7 @@ class PrivacyMonitorService : Service() {
         super.onCreate()
         isServiceRunning = true
         Log.i(TAG, "🚀 Privacy Monitor Service created")
+        io.github.dorumrr.privacyflip.util.ProcessExitTrace.logLastExit(this)
 
         try {
             createNotificationChannel()

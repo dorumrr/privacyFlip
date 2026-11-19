@@ -713,6 +713,100 @@ class PrivacyActionWorkerDoWorkTest {
         )
     }
 
+    private fun bothProtectionModes(owned: Boolean) =
+        listOf(PrivacyFeature.AIRPLANE_MODE, PrivacyFeature.BATTERY_SAVER).forEach {
+            prefs.setFeatureDisableOnLock(it, true)
+            prefs.setFeatureEnableOnUnlock(it, true)
+            prefs.setFeatureOnlyIfNotManual(it, true)
+            prefs.setFeatureEnabledByApp(it, owned)
+        }
+
+    @Test
+    fun `an unlock during the first protection mode's switch-on stops the second`() {
+        bothProtectionModes(owned = false)
+        recordLock()
+        val lock = worker(isLocking = true)
+        lock.states[PrivacyFeature.AIRPLANE_MODE] = FeatureState.DISABLED
+        lock.states[PrivacyFeature.BATTERY_SAVER] = FeatureState.DISABLED
+        lock.beforeEnable = { if (PrivacyFeature.AIRPLANE_MODE in it) recordUnlock() }
+        runBlocking { lock.doWork() }
+
+        assertTrue("the first mode was reached, or this proves nothing", lock.enabled.contains(PrivacyFeature.AIRPLANE_MODE))
+        assertFalse("a phone back in the user's hands gets no Battery Saver, was: ${lock.enabled}", lock.enabled.contains(PrivacyFeature.BATTERY_SAVER))
+    }
+
+    @Test
+    fun `a relock during the first protection mode's switch-off stops the second`() {
+        bothProtectionModes(owned = true)
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[PrivacyFeature.AIRPLANE_MODE] = FeatureState.ENABLED
+        unlock.states[PrivacyFeature.BATTERY_SAVER] = FeatureState.ENABLED
+        unlock.beforeDisable = { if (PrivacyFeature.AIRPLANE_MODE in it) recordLock() }
+        runBlocking { unlock.doWork() }
+
+        assertTrue("the first mode was reached, or this proves nothing", unlock.disabled.contains(PrivacyFeature.AIRPLANE_MODE))
+        assertFalse("a phone locked again keeps its Battery Saver, was: ${unlock.disabled}", unlock.disabled.contains(PrivacyFeature.BATTERY_SAVER))
+        assertTrue("and still owns it, so the next unlock turns it off", prefs.getFeatureEnabledByApp(PrivacyFeature.BATTERY_SAVER))
+    }
+
+    @Test
+    fun `a relock while an unlock reads a skipped mode's state still leaves the owned mode on`() {
+        val skipped = PrivacyFeature.AIRPLANE_MODE
+        val owned = PrivacyFeature.BATTERY_SAVER
+        listOf(skipped, owned).forEach {
+            prefs.setFeatureDisableOnLock(it, true)
+            prefs.setFeatureEnableOnUnlock(it, true)
+            prefs.setFeatureOnlyIfNotManual(it, true)
+        }
+        prefs.setFeatureEnabledByApp(skipped, false)
+        prefs.setFeatureEnabledByApp(owned, true)
+
+        recordUnlock()
+        val unlock = worker(isLocking = false)
+        unlock.states[skipped] = FeatureState.ENABLED
+        unlock.states[owned] = FeatureState.ENABLED
+        unlock.onStatusRead = { PrivacyActionWorker.lastLockAtMillis = ++clock }
+        runBlocking { unlock.doWork() }
+
+        val lines = ShadowLog.getLogs().mapNotNull { it.msg }
+        assertTrue("the status read must have run, or this proves nothing", unlock.statusReads > 0)
+        assertFalse("a phone locked again keeps its Battery Saver, was: ${unlock.disabled}", unlock.disabled.contains(owned))
+        assertTrue("and says why, was: $lines", lines.any { it.contains("Locked again while this unlock was still running") })
+    }
+
+    @Test
+    fun `an unlock that finds a protection mode already off says so, not that someone else turned it on`() {
+        val mode = PrivacyFeature.AIRPLANE_MODE
+        prefs.setFeatureDisableOnLock(mode, true)
+        prefs.setFeatureEnableOnUnlock(mode, true)
+        prefs.setFeatureOnlyIfNotManual(mode, true)
+        prefs.setFeatureEnabledByApp(mode, false)
+
+        recordUnlock()
+        val off = worker(isLocking = false)
+        off.states[mode] = FeatureState.DISABLED
+        runBlocking { off.doWork() }
+
+        val offLines = ShadowLog.getLogs().mapNotNull { it.msg }
+        assertTrue("nothing to turn off", off.disabled.isEmpty())
+        assertTrue("it must say it is already off, was: $offLines", offLines.any { it.contains("Airplane Mode is already off") })
+        assertFalse("and not blame a manual setting, was: $offLines", offLines.any { it.contains("not turned on by Privacy Flip") })
+
+        // The other half: on, and not this app's, is still left alone and still said so.
+        ShadowLog.clear()
+        recordUnlock()
+        val on = worker(isLocking = false)
+        on.states[mode] = FeatureState.ENABLED
+        runBlocking { on.doWork() }
+
+        assertTrue("a setting this app never claimed is not its to undo", on.disabled.isEmpty())
+        assertTrue(
+            "and it must say so, was: ${notifications()}",
+            notificationsSeen().any { it.contains("not turned on by Privacy Flip") }
+        )
+    }
+
     @Test
     fun `Only if unused keeps a feature that is in use, and the switch off ignores it`() {
         // The user-facing "Only if unused" switch. With it OFF the feature goes down regardless,

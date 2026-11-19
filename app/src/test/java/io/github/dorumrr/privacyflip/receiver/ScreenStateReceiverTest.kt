@@ -12,12 +12,15 @@ import io.github.dorumrr.privacyflip.initWorkManagerWithoutRealWork
 import io.github.dorumrr.privacyflip.util.Constants
 import io.github.dorumrr.privacyflip.util.PrivacyActionWork
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 
 /**
  * Checks whether ACTION_SCREEN_ON's "not locked" branch enqueues the unlock-side re-enable, the
@@ -104,5 +107,19 @@ class ScreenStateReceiverTest {
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals("one lock job, marked, since Android would refuse", listOf<Any?>(true), lockJobFlags())
+    }
+
+    @Test
+    fun `screen off behind a PIN claims nothing about camera and microphone`() {
+        // Only the lock job knows whether they are set, already off, or switchable (Dhizuku is).
+        ShadowLog.clear()
+        lockScreen(keyguardShowing = true, needsCredential = true)
+
+        ScreenStateReceiver().onReceive(context, Intent(Intent.ACTION_SCREEN_OFF))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val lines = ShadowLog.getLogs().mapNotNull { it.msg }
+        assertTrue("the already-locked branch must log, was: $lines", lines.any { it.contains("already locked", ignoreCase = true) })
+        assertFalse("but not a sensor claim, was: $lines", lines.any { it.contains("camera/mic") })
     }
 }

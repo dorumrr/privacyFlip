@@ -641,17 +641,14 @@ open class PrivacyActionWorker(
                             val hotspotActiveForAirplaneMode = PrivacyFeature.AIRPLANE_MODE in protectionModes &&
                                 isHotspotActive()
 
-                            // Read fresh, immediately before switching a radio kill-switch ON. The
-                            // regular-features step above can take real time, and an unlock during
-                            // it would otherwise put the phone into Airplane Mode while it is back
-                            // in the user's hands.
-                            if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
-                                logWarning("🛡️ Unlocked while this lock was still running - not enabling protection modes")
-                                debugNotifier.notifyActionCancelled("Unlocked during the lock action - protection modes not enabled")
-                                return Result.success()
-                            }
-
                             for (mode in protectionModes) {
+                                // Read fresh before each kill-switch goes ON: the steps above, and the previous mode's
+                                // own switch, take real time, and an unlock during them leaves the phone in the user's hands.
+                                if (isSupersededByFresherOppositeAction(lastUnlockAtMillis, lastLockAtMillis)) {
+                                    logWarning("🛡️ Unlocked while this lock was still running - not enabling protection modes")
+                                    debugNotifier.notifyActionCancelled("Unlocked during the lock action - protection modes not enabled")
+                                    return Result.success()
+                                }
                                 // Airplane Mode is a full radio kill switch - unlike WiFi/Mobile
                                 // Data it has no per-feature "only if unused" setting to check, so
                                 // this hotspot re-check is the only thing standing between it and
@@ -863,21 +860,26 @@ open class PrivacyActionWorker(
                         if (protectionModes.isNotEmpty()) {
                             logDebug("🛡️ Disabling protection modes on unlock: ${protectionModes.map { it.displayName }}")
 
-                            // The mirror of the lock-side guard. Read fresh, immediately before
-                            // switching a radio kill-switch OFF: the enable step above makes real
-                            // shell calls, and a re-lock during it would otherwise let this stale
-                            // unlock undo protection on a phone that is locked right now.
-                            if (isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
-                                logWarning("🛡️ Locked again while this unlock was still running - leaving protection modes alone")
-                                debugNotifier.notifyActionCancelled("Locked during the unlock action - protection modes left on")
-                                return Result.success()
-                            }
+                            // Read before the guard below, so no shell call sits between it and a disable.
+                            val skippedModeStatus = if (protectionModes.any {
+                                    preferenceManager.getFeatureOnlyIfNotManual(it) && !preferenceManager.getFeatureEnabledByApp(it)
+                                }) stateBeforeForDebugOutput().orEmpty() else emptyMap()
 
                             for (mode in protectionModes) {
+                                // The lock-side guard's mirror, before each kill-switch goes OFF: a re-lock during the
+                                // steps above, or the previous mode's switch, must not undo protection on a locked phone.
+                                if (isSupersededByFresherOppositeAction(lastLockAtMillis, lastUnlockAtMillis)) {
+                                    logWarning("🛡️ Locked again while this unlock was still running - leaving protection modes alone")
+                                    debugNotifier.notifyActionCancelled("Locked during the unlock action - protection modes left on")
+                                    return Result.success()
+                                }
                                 val onlyIfNotManual = preferenceManager.getFeatureOnlyIfNotManual(mode)
                                 val wasEnabledByApp = preferenceManager.getFeatureEnabledByApp(mode)
+                                val skipped = onlyIfNotManual && !wasEnabledByApp
 
-                                if (onlyIfNotManual && !wasEnabledByApp) {
+                                if (skipped && skippedModeStatus[mode] == FeatureState.DISABLED) {
+                                    logDebug("🛡️ ${mode.displayName} is already off - nothing to turn off")
+                                } else if (skipped) {
                                     // Unowned is not proof the user set it: a lock that could not read the state never claims it.
                                     logDebug("🛡️ ${mode.displayName} was not turned on by Privacy Flip - skipping disable (onlyIfNotManual=true)")
                                     debugNotifier.notifyFeatureSkipped(mode.displayName, "not turned on by Privacy Flip")
@@ -972,7 +974,7 @@ open class PrivacyActionWorker(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            logWarning("Could not read states for the lock report: ${e.message}")
+            logWarning("Could not read states for the debug report: ${e.message}")
             null
         }
     }

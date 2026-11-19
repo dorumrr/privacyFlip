@@ -38,7 +38,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     logDebug(context, "✅ Screen OFF but device NOT locked yet - triggering privacy actions")
                     triggerPrivacyAction(context, isLocking = true, isDeviceLocked = false, reason = "Screen Off (Unlocked)")
                 } else {
-                    logWarning(context, "⚠️ Screen OFF and device ALREADY locked - Android refuses camera/mic sensor privacy changes now")
+                    logDebug(context, "🔒 Screen OFF and device already locked - triggering privacy actions")
                     triggerPrivacyAction(context, isLocking = true, isDeviceLocked = true, reason = "Screen Off (Locked)")
                 }
             }

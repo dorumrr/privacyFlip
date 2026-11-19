@@ -18,6 +18,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Shizuku dying stops the monitor service, so no lock is left to report the loss: the death must. */
 @RunWith(RobolectricTestRunner::class)
@@ -39,7 +41,7 @@ class ShizukuDeathNoticeTest {
 
     @Test
     fun `Shizuku dying tells the user, though the service it stops runs no more locks`() {
-        val executor = ShizukuExecutor()
+        val executor = ShizukuExecutor().apply { binderAlive = { false } }
         try {
             runBlocking { executor.initialize(context) }
             assertNull("nothing may be stored before the death", prefs.privilegeMissingReason)
@@ -53,6 +55,24 @@ class ShizukuDeathNoticeTest {
             while (!shown() && System.currentTimeMillis() < end) Thread.sleep(20)
             assertEquals(PrivilegeLossNotice.SHIZUKU_STOPPED, prefs.privilegeMissingReason)
             assertTrue("and it is shown, not only stored", shown())
+        } finally {
+            executor.cleanup()
+        }
+    }
+
+    @Test
+    fun `a death handled after Shizuku is already back changes nothing`() {
+        val checked = CountDownLatch(1)
+        val executor = ShizukuExecutor().apply { binderAlive = { checked.countDown(); true } }
+        try {
+            runBlocking { executor.initialize(context) }
+
+            executor.onBinderDead()
+
+            assertTrue("the death handler must have run and looked", checked.await(3, TimeUnit.SECONDS))
+            Thread.sleep(200)
+
+            assertNull("Shizuku is back, so nothing may say it stopped", prefs.privilegeMissingReason)
         } finally {
             executor.cleanup()
         }

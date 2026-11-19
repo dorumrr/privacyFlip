@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
@@ -33,6 +35,12 @@ class ShizukuExecutor : PrivilegeExecutor {
 
     // Use a dedicated coroutine scope instead of GlobalScope
     private val executorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @androidx.annotation.VisibleForTesting
+    internal var binderAlive: () -> Boolean = { Shizuku.pingBinder() }
+
+    // A fast restart fires dead then received; unordered, a late death stopped the service Shizuku had just got back.
+    private val lifecycleLock = Mutex()
 
     // A test stands in a fake here: the real service is only reachable through a live Shizuku.
     internal var nfcService: suspend () -> Any? = { reachNfcService() }
@@ -240,22 +248,24 @@ class ShizukuExecutor : PrivilegeExecutor {
 
         context?.let { ctx ->
             executorScope.launch {
-                try {
-                    // Re-request permission (should be auto-granted if previously granted)
-                    val granted = requestPermission()
-                    logManager?.d(TAG, "Shizuku auto-restoration: permission granted = $granted")
+                lifecycleLock.withLock {
+                    try {
+                        // Re-request permission (should be auto-granted if previously granted)
+                        val granted = requestPermission()
+                        logManager?.d(TAG, "Shizuku auto-restoration: permission granted = $granted")
 
-                    if (granted) {
-                        logManager?.i(TAG, "Shizuku auto-restoration: restarting the monitor service")
-                        PrivacyMonitorService.start(ctx)
+                        if (granted) {
+                            logManager?.i(TAG, "Shizuku auto-restoration: restarting the monitor service")
+                            PrivacyMonitorService.start(ctx)
+                        }
+
+                        // Broadcast to UI to refresh (permission status may have changed)
+                        val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
+                        ctx.sendBroadcast(intent)
+                        logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku restart")
+                    } catch (e: Exception) {
+                        logManager?.e(TAG, "Error during Shizuku auto-restoration: ${e.message}")
                     }
-
-                    // Broadcast to UI to refresh (permission status may have changed)
-                    val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
-                    ctx.sendBroadcast(intent)
-                    logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku restart")
-                } catch (e: Exception) {
-                    logManager?.e(TAG, "Error during Shizuku auto-restoration: ${e.message}")
                 }
             }
         }
@@ -268,19 +278,25 @@ class ShizukuExecutor : PrivilegeExecutor {
 
         context?.let { ctx ->
             executorScope.launch {
-                try {
-                    // Stop the privacy monitor service since Shizuku is no longer available
-                    logManager?.i(TAG, "Stopping PrivacyMonitorService due to Shizuku death")
-                    PrivacyMonitorService.stop(ctx)
-                    // With the service stopped no lock runs to report it, and onBinderReceived's restart clears it.
-                    PrivilegeLossNotice.report(ctx, PrivilegeLossNotice.SHIZUKU_STOPPED)
+                lifecycleLock.withLock {
+                    if (binderAlive()) {
+                        logManager?.i(TAG, "Shizuku is already back - ignoring the earlier death")
+                        return@withLock
+                    }
+                    try {
+                        // Stop the privacy monitor service since Shizuku is no longer available
+                        logManager?.i(TAG, "Stopping PrivacyMonitorService due to Shizuku death")
+                        PrivacyMonitorService.stop(ctx)
+                        // With the service stopped no lock runs to report it, and onBinderReceived's restart clears it.
+                        PrivilegeLossNotice.report(ctx, PrivilegeLossNotice.SHIZUKU_STOPPED)
 
-                    // Broadcast intent to notify UI to refresh
-                    val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
-                    ctx.sendBroadcast(intent)
-                    logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku death")
-                } catch (e: Exception) {
-                    logManager?.e(TAG, "Error handling Shizuku death: ${e.message}")
+                        // Broadcast intent to notify UI to refresh
+                        val intent = android.content.Intent(ShizukuRecoveryWatcher.STATUS_CHANGED_ACTION)
+                        ctx.sendBroadcast(intent)
+                        logManager?.i(TAG, "Broadcast sent to notify UI of Shizuku death")
+                    } catch (e: Exception) {
+                        logManager?.e(TAG, "Error handling Shizuku death: ${e.message}")
+                    }
                 }
             }
         }
